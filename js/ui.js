@@ -1,0 +1,2099 @@
+/********************************************************************
+ * LAYER 4: MOBILE-FIRST 5-ZONE UI, SYNCHRONIZED VFX & MULTIPLAYER LOBBY (js/ui.js)
+ ********************************************************************/
+
+window.lastFlippedDeptKey = null;
+let animSpeedMultiplier = 1; // 1 = 1x, 2 = 2x
+
+// Returns the exact DOM selector for any player relative to the local player's perspective:
+// - Local Player (mySeatId): anchored at Bottom (#myHeroStatusBar)
+// - Opponents: anchored at Top ([data-seat-tab="pX"])
+function getPlayerAnchorSelector(playerId) {
+  return playerId === getLocalPlayerId() ? '#myHeroStatusBar' : `[data-seat-tab="${playerId}"]`;
+}
+
+function spawnTargetingArrowVFX(fromSelector, toSelector, colorHex = '#f43f5e', actionLabel = '⚔️攻擊') {
+  const root = document.getElementById('vfxOverlayRoot');
+  if (!root) return;
+  const fromEl = typeof fromSelector === 'string' ? document.querySelector(fromSelector) : fromSelector;
+  const toEl = typeof toSelector === 'string' ? document.querySelector(toSelector) : toSelector;
+  if (!fromEl || !toEl) return;
+
+  const r1 = fromEl.getBoundingClientRect();
+  const r2 = toEl.getBoundingClientRect();
+  if (r1.width === 0 || r2.width === 0) return;
+
+  const x1 = r1.left + r1.width / 2;
+  const y1 = r1.top + r1.height / 2;
+  const x2 = r2.left + r2.width / 2;
+  const y2 = r2.top + r2.height / 2;
+
+  const mx = (x1 + x2) / 2;
+  const my = (y1 + y2) / 2;
+  const dx = x2 - x1;
+  const dy = y2 - y1;
+  const cx = mx + (Math.abs(dy) > Math.abs(dx) ? (dx >= 0 ? 38 : -38) : 0);
+  const cy = my - (Math.abs(dx) >= Math.abs(dy) ? 42 : 0);
+
+  const svgNS = 'http://www.w3.org/2000/svg';
+  const svg = document.createElementNS(svgNS, 'svg');
+  svg.setAttribute('width', '100%');
+  svg.setAttribute('height', '100%');
+  svg.style.position = 'fixed';
+  svg.style.inset = '0';
+  svg.style.pointerEvents = 'none';
+  svg.style.zIndex = '9991';
+
+  const markerId = 'arrow_' + Math.random().toString(36).slice(2, 8);
+  svg.innerHTML = `
+    <defs>
+      <marker id="${markerId}" viewBox="0 0 10 10" refX="7" refY="5" markerWidth="7" markerHeight="7" orient="auto-start-reverse">
+        <path d="M 0 1 L 10 5 L 0 9 z" fill="${colorHex}" />
+      </marker>
+    </defs>
+    <path d="M ${x1} ${y1} Q ${cx} ${cy} ${x2} ${y2}" fill="none" stroke="${colorHex}" stroke-width="8" stroke-opacity="0.28" stroke-linecap="round" />
+    <path d="M ${x1} ${y1} Q ${cx} ${cy} ${x2} ${y2}" fill="none" stroke="${colorHex}" stroke-width="3.5" stroke-linecap="round" class="vfx-laser-path" marker-end="url(#${markerId})" />
+  `;
+  root.appendChild(svg);
+
+  const startTag = document.createElement('div');
+  startTag.className = 'vfx-endpoint-tag bg-amber-400 text-slate-950 border border-white';
+  startTag.style.left = `${x1}px`;
+  startTag.style.top = `${y1}px`;
+  startTag.textContent = actionLabel;
+  root.appendChild(startTag);
+
+  const endTag = document.createElement('div');
+  endTag.className = 'vfx-endpoint-tag bg-rose-600 text-white border-2 border-white';
+  endTag.style.left = `${x2}px`;
+  endTag.style.top = `${y2}px`;
+  endTag.textContent = '🎯目標';
+  root.appendChild(endTag);
+
+  const duration = animSpeedMultiplier === 2 ? 1400 : 2600;
+  setTimeout(() => {
+    svg.remove();
+    startTag.remove();
+    endTag.remove();
+  }, duration);
+}
+
+function showVsDuelBanner(attackerName, cardIcon, cardTitle, defenderName, effectDesc, isSelfBuff = false, actorId = null, defenderId = null) {
+  const root = document.getElementById('vfxOverlayRoot');
+  if (!root) return;
+  root.querySelectorAll('.vfx-vs-duel-banner, .vfx-cutin-banner').forEach(el => el.remove());
+
+  const myId = getLocalPlayerId();
+  const duration = animSpeedMultiplier === 2 ? 1400 : 2600;
+  const banner = document.createElement('div');
+  banner.className = 'vfx-vs-duel-banner border-2 ' + (isSelfBuff ? 'border-emerald-400' : 'border-rose-400');
+  banner.style.setProperty('--duel-banner-dur', `${duration}ms`);
+
+  const isAtkMe = (actorId && actorId === myId) || (!actorId && attackerName && attackerName.includes('你'));
+  const isDefMe = (defenderId && defenderId === myId) || (!defenderId && defenderName && defenderName.includes('你'));
+
+  const shortAtk = isAtkMe ? '👑 我方主帥' : ('😈 ' + getShortPlayerName(attackerName));
+  const shortDef = defenderName ? (isDefMe ? '👑 我方主帥' : ('😈 ' + getShortPlayerName(defenderName))) : '';
+
+  if (isSelfBuff) {
+    banner.style.background = 'linear-gradient(135deg, rgba(6, 78, 59, 0.99) 0%, rgba(15, 23, 42, 0.99) 100%)';
+    banner.style.boxShadow = '0 22px 50px rgba(0,0,0,0.95), 0 0 32px rgba(16, 185, 129, 0.75)';
+    banner.innerHTML = `
+      <div class="flex items-center justify-between gap-2.5">
+        <div class="px-3 py-2 rounded-xl bg-slate-950/95 border-2 border-emerald-400 text-center shrink-0 shadow-lg">
+          <div class="text-[10px] text-emerald-300 font-extrabold">⚡ 施法者</div>
+          <div class="text-sm sm:text-base font-black text-white mt-0.5">${shortAtk}</div>
+        </div>
+        <div class="text-amber-400 font-black text-base shrink-0">━━►</div>
+        <div class="flex-1 flex items-center gap-2.5 bg-slate-950/90 rounded-xl px-3 py-2 border border-emerald-500/40 min-w-0 shadow-lg">
+          <span class="text-3xl leading-none shrink-0">${cardIcon}</span>
+          <div class="min-w-0 flex-1">
+            <div class="text-sm sm:text-base font-black text-emerald-300 truncate">${cardTitle}</div>
+            <div class="text-xs font-bold text-white truncate mt-0.5">${effectDesc}</div>
+          </div>
+        </div>
+      </div>
+    `;
+  } else {
+    banner.innerHTML = `
+      <div class="flex flex-col gap-1.5">
+        <div class="flex items-center justify-between px-1">
+          <span class="px-2 py-0.5 rounded-full bg-rose-600 text-white text-[10px] font-black">⚔️ 戰術交鋒快訊</span>
+          <span class="text-[10px] font-bold text-amber-300">請留意紅線箭頭指向</span>
+        </div>
+        <div class="grid grid-cols-3 items-stretch gap-2 text-center">
+          <div class="rounded-xl bg-slate-950/95 border-2 border-amber-400 px-2 py-2 flex flex-col justify-center min-w-0 shadow-lg">
+            <div class="text-[10px] font-extrabold text-amber-300">⚔️ 攻擊方</div>
+            <div class="text-sm sm:text-base font-black text-white truncate mt-0.5">${shortAtk}</div>
+          </div>
+          <div class="rounded-xl bg-rose-950/95 border-2 border-rose-400 px-1.5 py-2 flex flex-col items-center justify-center min-w-0 shadow-lg">
+            <div class="text-xl leading-none">${cardIcon}</div>
+            <div class="text-xs sm:text-sm font-black text-amber-300 truncate w-full mt-0.5">${cardTitle}</div>
+            <div class="text-[11px] font-extrabold text-white bg-rose-600/90 px-1.5 py-0.5 rounded mt-1 truncate w-full">${effectDesc}</div>
+          </div>
+          <div class="rounded-xl bg-slate-950/95 border-2 border-rose-400 px-2 py-2 flex flex-col justify-center min-w-0 shadow-lg">
+            <div class="text-[10px] font-extrabold text-rose-300">🎯 受擊目標</div>
+            <div class="text-sm sm:text-base font-black text-white truncate mt-0.5">${shortDef}</div>
+          </div>
+        </div>
+      </div>
+    `;
+  }
+  root.appendChild(banner);
+  setTimeout(() => banner.remove(), duration);
+}
+
+function showTurnHandoverBanner(player, roundNumber) {
+  if (!player) return;
+  const root = document.getElementById('vfxOverlayRoot');
+  if (!root) return;
+  root.querySelectorAll('.vfx-turn-handover-backdrop, .vfx-turn-handover').forEach(el => el.remove());
+
+  const duration = animSpeedMultiplier === 2 ? 1250 : 2300;
+  const isMe = player.id === getLocalPlayerId();
+  const burn = getPlayerBurnRate(player);
+  const crisisReq = getCrisisTotalEngineerReq(player);
+
+  let repEmp = null;
+  ['RED', 'YELLOW', 'BLUE', 'GREEN'].forEach(d => {
+    const topUid = player.departments[d][0];
+    if (topUid) {
+      const cand = CARDS_BY_ID[topUid];
+      if (!repEmp || (cand.isVP && !repEmp.isVP) || (cand.skill || 0) > (repEmp.skill || 0)) {
+        repEmp = cand;
+      }
+    }
+  });
+  const avatarSrc = repEmp ? GPT_MINI_AVATAR[repEmp.tplId] : null;
+  const avatarHTML = avatarSrc
+    ? `<img src="${avatarSrc}" class="w-16 h-16 rounded-full object-cover border-2 ${isMe ? 'border-emerald-300' : 'border-amber-300'} shadow-2xl mx-auto" style="width:64px;height:64px;object-position:center 18%;" />`
+    : `<div class="w-16 h-16 rounded-full bg-slate-950 border-2 ${isMe ? 'border-emerald-300' : 'border-amber-300'} flex items-center justify-center text-3xl mx-auto shadow-2xl" style="width:64px;height:64px;">${isMe ? '👑' : '😈'}</div>`;
+
+  const backdrop = document.createElement('div');
+  backdrop.className = 'vfx-turn-handover-backdrop';
+  backdrop.style.setProperty('--turn-banner-dur', `${duration}ms`);
+
+  backdrop.innerHTML = `
+    <div class="vfx-turn-handover border-2 ${isMe ? 'border-emerald-400' : 'border-amber-400'}" style="--turn-banner-dur: ${duration}ms;">
+      <div class="inline-flex items-center gap-1 px-3 py-0.5 rounded-full ${isMe ? 'bg-emerald-950 border border-emerald-400 text-emerald-300' : 'bg-amber-950/90 border border-amber-400 text-amber-300'} text-xs font-black mb-2">
+        ⏳ 第 ${roundNumber} 回合・回合交接
+      </div>
+      ${avatarHTML}
+      <div class="text-xl sm:text-2xl font-black text-white mt-2 leading-tight">
+        ${isMe ? `👑 輪到【${player.name}】行動！` : `😈 輪到【${player.name}】行動！`}
+      </div>
+      <div class="grid grid-cols-3 gap-1.5 mt-3 bg-slate-950/90 p-2 rounded-xl border border-slate-700">
+        <div class="flex flex-col items-center">
+          <span class="text-[10px] text-slate-400 font-bold">魔晶儲備</span>
+          <span class="text-sm font-black text-emerald-400 mt-0.5">💎 ${player.crystals}</span>
+        </div>
+        <div class="flex flex-col items-center border-x border-slate-800">
+          <span class="text-[10px] text-slate-400 font-bold">每回燒魔</span>
+          <span class="text-sm font-black text-rose-400 mt-0.5">🔥 -${burn}/回</span>
+        </div>
+        <div class="flex flex-col items-center">
+          <span class="text-[10px] text-slate-400 font-bold">討伐危機</span>
+          <span class="text-sm font-black text-amber-300 mt-0.5">⚠️ ${player.crises.length} (需${crisisReq})</span>
+        </div>
+      </div>
+      <div class="text-xs font-bold ${isMe ? 'text-emerald-200' : 'text-amber-200'} mt-2.5">
+        ${isMe ? '✨ 請從下方手牌點選施放或棄牌（最多 4 張額度）' : '⚡ 對手正在施展法術，請留意頂部席位與攻擊指向！'}
+      </div>
+    </div>
+  `;
+  root.appendChild(backdrop);
+  setTimeout(() => backdrop.remove(), duration);
+}
+
+function spawnShockwaveVFX(x, y, colorHex = '#fbbf24') {
+  const root = document.getElementById('vfxOverlayRoot');
+  if (!root) return;
+  const ring = document.createElement('div');
+  ring.className = 'vfx-shockwave-ring';
+  ring.style.left = `${x}px`;
+  ring.style.top = `${y}px`;
+  ring.style.borderColor = colorHex;
+  ring.style.boxShadow = `0 0 18px ${colorHex}`;
+  root.appendChild(ring);
+  setTimeout(() => ring.remove(), 600);
+}
+
+function spawnFloatingNumberVFX(targetSelectorOrEl, text, bgClass = 'bg-emerald-600 text-white border-2 border-emerald-300') {
+  const root = document.getElementById('vfxOverlayRoot');
+  if (!root) return;
+  const el = typeof targetSelectorOrEl === 'string' ? document.querySelector(targetSelectorOrEl) : targetSelectorOrEl;
+  let x = window.innerWidth / 2;
+  let y = window.innerHeight * 0.28;
+  if (el) {
+    const rect = el.getBoundingClientRect();
+    if (rect.width > 0) {
+      x = rect.left + rect.width / 2;
+      y = rect.top + rect.height / 2;
+    }
+  }
+  const duration = animSpeedMultiplier === 2 ? 1200 : 2200;
+  const badge = document.createElement('div');
+  badge.className = `vfx-floating-number ${bgClass}`;
+  badge.style.setProperty('--float-num-dur', `${duration}ms`);
+  badge.style.left = `${x}px`;
+  badge.style.top = `${y}px`;
+  badge.textContent = text;
+  root.appendChild(badge);
+  setTimeout(() => badge.remove(), duration);
+}
+
+function spawnFlyingCardVFX(fromSelector, toSelector, labelText, iconEmoji, borderColorHex = '#38bdf8') {
+  const root = document.getElementById('vfxOverlayRoot');
+  if (!root) return;
+  const fromEl = typeof fromSelector === 'string' ? document.querySelector(fromSelector) : fromSelector;
+  const toEl = typeof toSelector === 'string' ? document.querySelector(toSelector) : toSelector;
+
+  let startX = window.innerWidth * 0.5;
+  let startY = window.innerHeight * 0.82;
+  let endX = window.innerWidth * 0.5;
+  let endY = window.innerHeight * 0.35;
+
+  if (fromEl) {
+    const r1 = fromEl.getBoundingClientRect();
+    if (r1.width > 0) { startX = r1.left + r1.width / 2; startY = r1.top + r1.height / 2; }
+  }
+  if (toEl) {
+    const r2 = toEl.getBoundingClientRect();
+    if (r2.width > 0) { endX = r2.left + r2.width / 2; endY = r2.top + r2.height / 2; }
+  }
+
+  const flyer = document.createElement('div');
+  flyer.style.position = 'fixed';
+  flyer.style.left = `${startX - 42}px`;
+  flyer.style.top = `${startY - 58}px`;
+  flyer.style.width = '84px';
+  flyer.style.height = '116px';
+  flyer.style.borderRadius = '0.65rem';
+  flyer.style.background = '#0f172a';
+  flyer.style.border = `2px solid ${borderColorHex}`;
+  flyer.style.boxShadow = `0 12px 28px rgba(0,0,0,0.85), 0 0 18px ${borderColorHex}`;
+  flyer.style.zIndex = '9992';
+  flyer.style.display = 'flex';
+  flyer.style.flexDirection = 'column';
+  flyer.style.alignItems = 'center';
+  flyer.style.justifyContent = 'center';
+  flyer.style.padding = '4px';
+  flyer.style.transition = 'transform 0.48s cubic-bezier(0.22, 1, 0.36, 1), opacity 0.48s ease';
+  flyer.innerHTML = `<div class="text-2xl">${iconEmoji}</div><div class="text-[10px] font-black text-white text-center mt-1 leading-tight">${labelText}</div>`;
+  root.appendChild(flyer);
+
+  requestAnimationFrame(() => {
+    const dx = endX - startX;
+    const dy = endY - startY;
+    flyer.style.transform = `translate(${dx}px, ${dy}px) rotate(8deg) scale(0.85)`;
+  });
+
+  setTimeout(() => {
+    spawnShockwaveVFX(endX, endY, borderColorHex);
+    flyer.style.opacity = '0';
+    setTimeout(() => flyer.remove(), 180);
+  }, 460);
+}
+
+function triggerHitShakeOnPlayer(playerId) {
+  const targetEl = document.querySelector(getPlayerAnchorSelector(playerId));
+  if (targetEl) {
+    targetEl.classList.remove('anim-hit-shake');
+    void targetEl.offsetWidth;
+    targetEl.classList.add('anim-hit-shake');
+  }
+  if (viewedPlayerId === playerId) {
+    const stage = document.getElementById('companyStageSection');
+    if (stage) {
+      stage.classList.remove('anim-hit-shake');
+      void stage.offsetWidth;
+      stage.classList.add('anim-hit-shake');
+    }
+  }
+}
+
+// === Synchronized Network VFX Player (Runs on Host & Clients) ===
+function playSynchronizedVfxEvent(ev) {
+  if (!ev) return;
+  const myId = getLocalPlayerId();
+  if (ev.flippedDeptKey) {
+    window.lastFlippedDeptKey = ev.flippedDeptKey;
+  }
+
+  if (ev.vfxType === 'DRAFT_PICK') {
+    playSfx('card');
+    return;
+  }
+
+  if (ev.vfxType === 'DISCARD') {
+    playSfx('card');
+    return;
+  }
+
+  if (ev.vfxType === 'SETTLE_BURN') {
+    playSfx('burn');
+    const actorAnchor = getPlayerAnchorSelector(ev.actorId);
+    spawnFloatingNumberVFX(actorAnchor, `🔥供品 -${ev.burnAmount} 💎`, 'bg-rose-700 text-white border-2 border-amber-300');
+    showVsDuelBanner(
+      ev.actorName,
+      '🔥',
+      `回合末供品結算 -${ev.burnAmount} 💎`,
+      null,
+      `${ev.wasDouble ? '雙倍暴動×2！' : ''}結算後剩餘 💎 ${ev.remainingCrystals}`,
+      true,
+      ev.actorId,
+      null
+    );
+    return;
+  }
+
+  if (ev.vfxType === 'TURN_HANDOVER') {
+    if (gameState && gameState.players) {
+      const nextPl = gameState.players.find(p => p.id === ev.nextPlayerId);
+      if (nextPl) {
+        showTurnHandoverBanner(nextPl, ev.roundNumber);
+      }
+    }
+    return;
+  }
+
+  if (ev.vfxType !== 'PLAY_CARD') return;
+
+  const actorAnchor = ev.actorId === myId ? '#localHandContainer' : getPlayerAnchorSelector(ev.actorId);
+  const actorSelfAnchor = getPlayerAnchorSelector(ev.actorId);
+  const oppAnchor = ev.targetPlayerId ? getPlayerAnchorSelector(ev.targetPlayerId) : null;
+
+  if (ev.effect === 'GAIN_FUNDS') {
+    playSfx('coin');
+    spawnFlyingCardVFX(actorAnchor, actorSelfAnchor, ev.cardTitle, '💎', '#34d399');
+    showVsDuelBanner(ev.actorName, '💎', ev.cardTitle, null, `金庫入帳 +${ev.val} 💎 (現有 ${ev.crystals})`, true, ev.actorId, null);
+    spawnFloatingNumberVFX(actorSelfAnchor, `+${ev.val} 💎`, 'bg-emerald-600 text-white border-2 border-emerald-300');
+  } else if (ev.effect === 'RELEASE_CRISIS') {
+    playSfx('card');
+    spawnFlyingCardVFX(actorAnchor, actorSelfAnchor, '鎮壓危機', '🍾', '#38bdf8');
+    showVsDuelBanner(ev.actorName, '🍾', '鎮壓危機', null, `成功解除「${ev.crisisTitle}」(省苦工×${ev.crisisVal})`, true, ev.actorId, null);
+    spawnFloatingNumberVFX(actorSelfAnchor, `🍾危機 -1`, 'bg-sky-600 text-white border-2 border-sky-300');
+  } else if (ev.effect === 'HIRE_BANK') {
+    playSfx('card');
+    spawnTargetingArrowVFX(`[data-open-bank-dept="${ev.dept}"]`, actorSelfAnchor, '#38bdf8', '🏛️人才池');
+    spawnFlyingCardVFX(`[data-open-bank-dept="${ev.dept}"]`, actorSelfAnchor, ev.empTitle, '🤝', '#38bdf8');
+    showVsDuelBanner(ev.actorName, '🤝', `契約召喚：${ev.empTitle}`, null, `自人才池加入【${DEPT_META[ev.dept].short}】`, true, ev.actorId, null);
+    spawnFloatingNumberVFX(actorSelfAnchor, `🤝+${ev.empTitle}`, 'bg-indigo-600 text-white border-2 border-sky-300');
+  } else if (ev.effect === 'FIRE_OWN') {
+    playSfx('attack');
+    spawnFlyingCardVFX(actorSelfAnchor, `[data-open-bank-dept="${ev.dept}"]`, ev.empTitle, '🚪', '#f59e0b');
+    showVsDuelBanner(ev.actorName, '🚪', `${ev.isVP ? '雙卡' : ''}獻祭遣散`, null, `遣散【${ev.empTitle}】(省💎-${ev.empSalary}/回)`, true, ev.actorId, null);
+    spawnFloatingNumberVFX(actorSelfAnchor, `🚪遣散 ${ev.empTitle}`, 'bg-amber-600 text-white border-2 border-amber-300');
+  } else if (ev.effect === 'BAD_IDEA') {
+    playSfx('attack');
+    spawnTargetingArrowVFX(actorSelfAnchor, oppAnchor, '#f43f5e', `⚔️${ev.actorId === myId ? '我方' : getShortPlayerName(ev.actorName)}攻`);
+    spawnFlyingCardVFX(actorAnchor, oppAnchor, ev.cardTitle, '⚔️', '#f43f5e');
+    showVsDuelBanner(ev.actorName, '⚔️', ev.cardTitle, ev.targetName, `需苦工 ⚒×${ev.val}`, false, ev.actorId, ev.targetPlayerId);
+    setTimeout(() => {
+      triggerHitShakeOnPlayer(ev.targetPlayerId);
+      spawnFloatingNumberVFX(oppAnchor, `⚠️危機 ×${ev.val}`, 'bg-rose-600 text-white border-2 border-white');
+    }, 280);
+  } else if (ev.effect === 'FORCE_HIRE') {
+    playSfx('attack');
+    spawnTargetingArrowVFX(actorSelfAnchor, oppAnchor, '#f43f5e', `🪤強塞魔物`);
+    spawnFlyingCardVFX(`[data-open-bank-dept="${ev.dept}"]`, oppAnchor, ev.empTitle, '🪤', '#f43f5e');
+    showVsDuelBanner(ev.actorName, '🪤', `強塞：${ev.empTitle}`, ev.targetName, `強制塞入${DEPT_META[ev.dept].short}(扣💎-${ev.empSalary})`, false, ev.actorId, ev.targetPlayerId);
+    setTimeout(() => {
+      triggerHitShakeOnPlayer(ev.targetPlayerId);
+      spawnFloatingNumberVFX(oppAnchor, `🪤強塞 ${ev.empTitle}`, 'bg-rose-600 text-white border-2 border-amber-300');
+    }, 280);
+  } else if (ev.effect === 'POACH_ENEMY') {
+    playSfx('attack');
+    spawnTargetingArrowVFX(actorSelfAnchor, oppAnchor, '#c084fc', `🕸️魅惑挖角`);
+    spawnFlyingCardVFX(oppAnchor, actorSelfAnchor, ev.empTitle, '🕸️', '#c084fc');
+    showVsDuelBanner(ev.actorName, '🕸️', `挖角：${ev.empTitle}`, ev.targetName, `奪取【${ev.empTitle}】！`, false, ev.actorId, ev.targetPlayerId);
+    setTimeout(() => {
+      triggerHitShakeOnPlayer(ev.targetPlayerId);
+      spawnFloatingNumberVFX(oppAnchor, `💔被挖 ${ev.empTitle}`, 'bg-purple-800 text-white border-2 border-rose-300');
+    }, 260);
+  } else if (ev.effect === 'VP_KICK_ENEMY') {
+    playSfx('attack');
+    spawnTargetingArrowVFX(actorSelfAnchor, oppAnchor, '#c084fc', `⚡皇室放逐`);
+    spawnFlyingCardVFX(actorAnchor, oppAnchor, ev.cardTitle, '⚡', '#c084fc');
+    showVsDuelBanner(ev.actorName, '⚡', ev.cardTitle, ev.targetName, `放逐皇室【${ev.empTitle}】`, false, ev.actorId, ev.targetPlayerId);
+    setTimeout(() => {
+      triggerHitShakeOnPlayer(ev.targetPlayerId);
+      spawnFloatingNumberVFX(oppAnchor, `⚡放逐 ${ev.empTitle}`, 'bg-purple-700 text-white border-2 border-amber-300');
+    }, 280);
+  } else if (ev.effect === 'VP_DOUBLE_PAY') {
+    playSfx('burn');
+    spawnTargetingArrowVFX(actorSelfAnchor, oppAnchor, '#f43f5e', `🔥雙倍供品`);
+    spawnFlyingCardVFX(actorAnchor, oppAnchor, ev.cardTitle, '🔥', '#f43f5e');
+    showVsDuelBanner(ev.actorName, '🔥', '魔界工會暴動', ev.targetName, `下回總供品翻倍(×2)！`, false, ev.actorId, ev.targetPlayerId);
+    setTimeout(() => {
+      triggerHitShakeOnPlayer(ev.targetPlayerId);
+      spawnFloatingNumberVFX(oppAnchor, `🔥供品 ×2 詛咒!`, 'bg-rose-700 text-amber-300 border-2 border-amber-300');
+    }, 280);
+  } else if (ev.effect === 'VP_MASS_LAYOFF') {
+    playSfx('burn');
+    showVsDuelBanner(ev.actorName, '🩸', '血祭大掃除', null, `一口氣遣散 ${ev.layoffCount} 名部下`, true, ev.actorId, null);
+    spawnFloatingNumberVFX(actorSelfAnchor, `🩸裁員 ${ev.layoffCount}人`, 'bg-purple-700 text-white border-2 border-amber-300');
+  }
+}
+
+function attach3DTiltListeners() {
+  document.querySelectorAll('.tilt-card-3d').forEach(cardEl => {
+    const handleMove = (clientX, clientY) => {
+      const rect = cardEl.getBoundingClientRect();
+      if (rect.width === 0) return;
+      const x = (clientX - rect.left) / rect.width - 0.5;
+      const y = (clientY - rect.top) / rect.height - 0.5;
+      const rotY = (x * 12).toFixed(1);
+      const rotX = (-y * 12).toFixed(1);
+      cardEl.style.transform = `perspective(700px) rotateX(${rotX}deg) rotateY(${rotY}deg) scale(1.02)`;
+    };
+    const resetTilt = () => {
+      cardEl.style.transform = '';
+    };
+    cardEl.addEventListener('mousemove', e => handleMove(e.clientX, e.clientY));
+    cardEl.addEventListener('mouseleave', resetTilt);
+  });
+}
+
+function renderEmployeeCardHTML(empUid, extraClasses = '', badgeLabel = '') {
+  const c = CARDS_BY_ID[empUid];
+  if (!c) return '';
+  const meta = DEPT_META[c.dept] || DEPT_META.RED;
+  const fullCardSrc = GPT_FULLCARD_ART[c.tplId] || '';
+
+  if (fullCardSrc) {
+    return `
+      <div data-emp-uid="${c.uid}" class="relative rounded-xl bg-slate-950 border-2 ${meta.border} ${c.isVP ? 'vp-card-frame' : ''} overflow-hidden shadow-xl transition min-w-0 ${extraClasses}">
+        ${getCardImgTag(c.tplId, c.title, "full-gpt-card-img")}
+        ${badgeLabel ? `<span class="absolute top-1 right-1 px-1.5 py-0.5 rounded bg-sky-500 text-slate-950 text-[10px] font-black shadow-lg">${badgeLabel}</span>` : ''}
+      </div>
+    `;
+  }
+
+  const skillBadge = c.role === 'ENGINEER'
+    ? `<span class="px-1.5 py-0.5 rounded bg-slate-800 text-amber-300 text-[10px] font-bold">⚒苦工</span>`
+    : `<span class="w-5 h-5 rounded-full bg-slate-950 border ${c.isVP ? 'border-amber-300 text-amber-300' : 'border-white text-white'} flex items-center justify-center text-[11px] font-black">${c.skill}</span>`;
+
+  return `
+    <div data-emp-uid="${c.uid}" class="relative rounded-xl bg-slate-900 border ${meta.border} ${c.isVP ? 'vp-card-frame' : ''} overflow-hidden flex flex-col justify-between text-left shadow-lg transition min-w-0 ${extraClasses}">
+      <div class="${meta.color} px-2 py-1 flex items-center justify-between gap-1 min-w-0">
+        <span class="text-[10px] font-extrabold text-white truncate">${meta.icon}${meta.short}</span>
+        <div class="flex items-center gap-1 shrink-0">
+          ${c.isVP ? `<span class="text-[9px] font-black bg-amber-400 text-slate-950 px-1 rounded whitespace-nowrap">👑皇室</span>` : `<span class="text-[9px] text-white/80">統領</span>`}
+          ${badgeLabel ? `<span class="text-[9px] px-1 rounded bg-sky-400 text-slate-950 font-black whitespace-nowrap">${badgeLabel}</span>` : ''}
+        </div>
+      </div>
+      <div class="flex-1 flex flex-col items-center justify-center py-2 px-1.5 relative min-w-0">
+        <div class="absolute top-1 left-1">${skillBadge}</div>
+        <div class="text-xl leading-none">${c.svg}</div>
+        <div class="text-xs font-black text-white mt-1 text-center leading-tight truncate w-full">${c.title}</div>
+        <div class="text-[10px] text-slate-400 truncate w-full text-center">${c.origTitle}</div>
+      </div>
+      <div class="bg-slate-950/90 border-t border-slate-800 px-2 py-1 flex items-center justify-between text-[10px]">
+        <span class="font-black text-rose-400 whitespace-nowrap">💎-${c.salary}/回</span>
+        <span class="font-bold text-slate-300 whitespace-nowrap">${c.role === 'ENGINEER' ? '抵1危機' : `技能 ${c.skill}`}</span>
+      </div>
+    </div>
+  `;
+}
+
+function renderActionCardHTML(actUid, extraClasses = '', playStatus = null, isSelected = false, isDiscardChecked = false) {
+  const c = CARDS_BY_ID[actUid];
+  if (!c) return '';
+  const meta = DEPT_META[c.dept] || DEPT_META.PURPLE;
+  const isAttack = c.category === 'ATTACK' || c.category === 'CRISIS' || c.category === 'VP_ATTACK';
+
+  let reqBarHTML = '';
+  if (c.dept === 'PURPLE') {
+    reqBarHTML = `<div class="text-[9px] font-black text-amber-300 bg-purple-950/90 px-1.5 py-0.5 rounded-full border border-amber-400 whitespace-nowrap">👑皇室 ≥ ${c.reqVPs || 2}</div>`;
+  } else {
+    const pills = [0, 1, 2, 3].map(num => {
+      const active = c.reqSkills.includes(num);
+      return active
+        ? `<span class="w-4 h-4 rounded-full bg-slate-950 border border-white text-white text-[10px] font-black flex items-center justify-center shadow">${num}</span>`
+        : `<span class="w-4 h-4 rounded-full bg-black/30 text-white/40 text-[9px] flex items-center justify-center">${num}</span>`;
+    }).join('');
+    reqBarHTML = `<div class="flex items-center justify-center gap-0.5">${pills}</div>`;
+  }
+
+  const valueBadge = c.effect === 'GAIN_FUNDS'
+    ? `<span class="px-1.5 py-0.5 rounded bg-emerald-950 border border-emerald-400 text-[11px] font-black text-emerald-300 mt-0.5">+${c.val} 💎</span>`
+    : c.effect === 'BAD_IDEA'
+    ? `<span class="text-[9px] font-black text-amber-300 bg-rose-950/90 px-1.5 py-0.5 rounded border border-rose-500/50 mt-0.5">需苦工 ⚒×${c.val}</span>`
+    : '';
+
+  const lockFooterHTML = (playStatus && !playStatus.playable && uiSelection.mode !== 'DISCARD_SELECT')
+    ? `<div class="bg-rose-950/90 border-t border-rose-500/50 px-1 py-1 text-center min-w-0">
+         <span class="text-[10px] font-extrabold text-rose-200 block truncate">🔒 ${playStatus.shortReason}</span>
+       </div>`
+    : `<div class="bg-slate-950/90 border-t border-slate-800 px-1.5 py-1 min-w-0">
+         <p class="text-[10px] text-slate-300 leading-tight text-center">${c.desc}</p>
+       </div>`;
+
+  return `
+    <div data-act-uid="${c.uid}" class="w-[116px] sm:w-[148px] h-[166px] sm:h-[190px] rounded-xl ${isAttack ? 'spell-card-sigil-atk' : 'spell-card-sigil'} border-2 ${meta.border} ${c.dept === 'PURPLE' ? 'vp-card-frame' : ''} ${(playStatus && playStatus.playable && uiSelection.mode !== 'DISCARD_SELECT') ? 'playable-card-glow' : ''} overflow-hidden flex flex-col justify-between text-left shadow-xl cursor-pointer relative shrink-0 snap-start ${extraClasses} ${isSelected ? 'selected-card' : ''}">
+      <div class="${meta.color} px-1.5 py-1 flex flex-col items-center gap-0.5 relative min-w-0">
+        <div class="w-full flex items-center justify-between text-[10px] font-extrabold text-white gap-0.5 min-w-0">
+          <span class="truncate">${meta.icon}${meta.short}</span>
+          <span class="px-1 rounded text-[9px] whitespace-nowrap shrink-0 ${isAttack ? 'bg-rose-950 text-rose-200' : 'bg-slate-950/80 text-emerald-200'}">${isAttack ? '▲攻' : '🛡️防'}</span>
+        </div>
+        ${reqBarHTML}
+      </div>
+
+      <div class="flex-1 px-1 py-1 flex flex-col items-center justify-center relative min-w-0">
+        <div class="text-xl leading-none">${c.svg}</div>
+        <div class="text-xs font-black ${isAttack ? 'text-rose-300' : 'text-white'} mt-0.5 text-center leading-tight truncate w-full">${c.title}</div>
+        ${valueBadge || `<div class="text-[9px] text-slate-400 truncate w-full text-center mt-0.5">${c.origTitle}</div>`}
+      </div>
+
+      ${lockFooterHTML}
+
+      ${isDiscardChecked ? `<div class="absolute inset-0 bg-orange-950/80 flex items-center justify-center border-2 border-orange-400"><span class="px-2 py-1 rounded bg-orange-600 text-white text-xs font-black">🗑️ 已勾選</span></div>` : ''}
+    </div>
+  `;
+}
+
+function resetSelectionState() {
+  uiSelection.mode = 'IDLE';
+  uiSelection.sourceCardUid = null;
+  uiSelection.step2OpponentId = null;
+  uiSelection.discardSet.clear();
+  uiSelection.layoffSet.clear();
+  const drawer = document.getElementById('modeDTargetDrawer');
+  if (drawer) drawer.classList.add('hidden');
+}
+
+/********************************************************************
+ * FULL RENDERING PIPELINE (Mobile Portrait First A + D + B + V13 MP)
+ ********************************************************************/
+function renderAll() {
+  const state = gameState;
+  if (!state) return;
+
+  const myId = getLocalPlayerId();
+  const localPlayer = getLocalPlayer(state);
+  const activePlayer = state.players[state.turn.activePlayerIndex];
+  const viewedPlayer = state.players.find(p => p.id === viewedPlayerId) || localPlayer;
+  const isMyTurnNow = isLocalPlayerTurn(state);
+
+  // 1. Top Header Status & Connection Badge
+  document.getElementById('phaseBadge').textContent =
+    state.phase === 'INITIAL_DRAFT' ? `首輪輪抽 (${state.draft.totalPicked}/${state.draft.targetTotal})` :
+    state.phase === 'GAME_OVER' ? '對局結束' : `第${state.turn.roundNumber}回・步驟一`;
+
+  document.getElementById('activePlayerBadge').textContent =
+    state.phase === 'INITIAL_DRAFT'
+      ? `挑選：${state.players[state.draft.pickerIndex].name}`
+      : `行動：${activePlayer.name}`;
+
+  const netTag = gameSession.mode === 'SOLO'
+    ? '單機AI'
+    : `🌐房號:${gameSession.roomCode}(${myId.toUpperCase()})`;
+  document.getElementById('modeIndicatorTag').textContent =
+    `${netTag} · ${state.config.playDiscardMode === 'STRICT_EITHER' ? '標準二選一' : '共用4額度'}`;
+
+  // Optional Hot-Seat / Multi-Perspective Bar when multiple human seats exist on Host
+  const perspectiveBar = document.getElementById('hotSeatSwitcherBar');
+  if (perspectiveBar) {
+    const humanPlayers = state.players.filter(p => !p.isAI);
+    if (gameSession.mode !== 'CLIENT' && humanPlayers.length > 1) {
+      perspectiveBar.classList.remove('hidden');
+      perspectiveBar.innerHTML = `
+        <div class="flex items-center justify-between gap-1.5 w-full">
+          <span class="text-[10px] font-black text-amber-300 truncate">🎮 多人同機／測試視角切換（當前底牌視角：<b class="text-emerald-300">${localPlayer.name}</b>）：</span>
+          <div class="flex items-center gap-1 shrink-0">
+            ${state.players.map(p => `
+              <button data-switch-seat="${p.id}" class="px-2 py-0.5 rounded text-[10px] font-black border ${p.id === myId ? 'bg-emerald-500 text-slate-950 border-white shadow' : 'bg-slate-900 text-slate-300 border-slate-700'}">
+                ${p.id.toUpperCase()} ${p.isAI ? '🤖' : '👤'}${getShortPlayerName(p.name)}
+              </button>
+            `).join('')}
+          </div>
+        </div>
+      `;
+    } else {
+      perspectiveBar.classList.add('hidden');
+    }
+  }
+
+  const tickerEl = document.getElementById('latestLogTicker');
+  if (tickerEl) {
+    const line1 = formatLogItemToTickerHTML(state.logs[0] || '', true);
+    const line2 = state.logs[1] ? formatLogItemToTickerHTML(state.logs[1], false) : '';
+    const line3 = state.logs[2] ? formatLogItemToTickerHTML(state.logs[2], false) : '';
+    tickerEl.innerHTML = line1 + line2 + line3;
+  }
+
+  // 2. ZONE 1 (TOP): Render ONLY Opponents in Clockwise Order relative to Local Player!
+  const seatTabsBar = document.getElementById('seatTabsBar');
+  const opponents = getClockwiseOpponents(state);
+  const oppCount = opponents.length;
+  seatTabsBar.className = `w-full grid ${oppCount === 1 ? 'grid-cols-1' : oppCount === 3 ? 'grid-cols-3' : 'grid-cols-2'} gap-1.5 min-w-0`;
+
+  seatTabsBar.innerHTML = opponents.map((pl) => {
+    const idx = state.players.findIndex(p => p.id === pl.id);
+    const burn = getPlayerBurnRate(pl);
+    const isViewed = pl.id === viewedPlayer.id;
+    const isTurn = (state.phase === 'INITIAL_DRAFT' ? state.draft.pickerIndex === idx : state.turn.activePlayerIndex === idx);
+    const isNearBankrupt = !pl.isEliminated && burn > 0 && pl.crystals < burn * 2;
+    const shortName = getShortPlayerName(pl.name);
+    const totalCrisisReq = getCrisisTotalEngineerReq(pl);
+    const handCnt = typeof pl.handCount === 'number' ? pl.handCount : pl.hand.length;
+
+    const skillDots = ['RED', 'YELLOW', 'BLUE', 'GREEN'].map(d => {
+      const meta = DEPT_META[d];
+      const sk = getEffectiveSkill(pl, d);
+      const vp = hasVPInDept(pl, d);
+      return `<span class="rounded ${meta.badgeBg} border ${meta.border} text-[9px] font-black text-white text-center py-0.5 whitespace-nowrap">${meta.icon}${sk}${vp ? '👑' : ''}</span>`;
+    }).join('');
+
+    let modeDSeatState = null;
+    if (uiSelection.mode === 'MODE_D_SELECT' && uiSelection.sourceCardUid && !pl.isEliminated) {
+      const selCard = CARDS_BY_ID[uiSelection.sourceCardUid];
+      const selStatus = evaluateCardPlayability(state, localPlayer, selCard.uid);
+      if (selStatus.playable && (selCard.effect === 'BAD_IDEA' || selCard.effect === 'VP_DOUBLE_PAY' || (selCard.effect === 'FORCE_HIRE' && !uiSelection.step2OpponentId))) {
+        modeDSeatState = (selStatus.validOpponents && selStatus.validOpponents.includes(pl.id)) ? 'VALID_TARGET' : 'IMMUNE_TARGET';
+      }
+    }
+
+    const turnBadge = pl.isEliminated
+      ? `<span class="px-1.5 py-0.5 rounded bg-slate-800 text-slate-400 text-[9px] font-bold">💀破產</span>`
+      : modeDSeatState === 'VALID_TARGET'
+      ? `<span class="px-1.5 py-0.5 rounded bg-rose-600 text-white border border-white text-[9px] font-black shadow">🎯點此直擊</span>`
+      : modeDSeatState === 'IMMUNE_TARGET'
+      ? `<span class="px-1.5 py-0.5 rounded bg-slate-800 text-sky-300 border border-sky-500/50 text-[9px] font-bold">🛡️部門免疫</span>`
+      : isTurn
+      ? `<span class="px-1.5 py-0.5 rounded bg-amber-400 text-slate-950 text-[9px] font-black shadow">⚡行動中 (${state.phase === 'INITIAL_DRAFT' ? '選牌' : `${state.turn.actionsUsed}/4`})</span>`
+      : isViewed
+      ? `<span class="px-1.5 py-0.5 rounded bg-sky-500 text-slate-950 text-[9px] font-black">👁️偵察中</span>`
+      : `<span class="px-1 py-0.5 rounded bg-slate-800 text-slate-400 text-[9px] font-bold">🔍手牌${handCnt}</span>`;
+
+    const activeTurnNotMe = !isMyTurnNow && !isTurn && state.phase !== 'INITIAL_DRAFT';
+    const roleIcon = pl.isAI ? '😈' : '👤';
+
+    return `
+      <button data-seat-tab="${pl.id}" data-mode-d-seat="${modeDSeatState || ''}" class="rounded-xl px-2 py-1 text-left transition flex flex-col justify-between border ${pl.isEliminated ? 'bg-slate-950/80 border-slate-800 opacity-40' : modeDSeatState === 'VALID_TARGET' ? 'bg-rose-950/90 border-2 border-rose-400 targetable-seat-glow' : modeDSeatState === 'IMMUNE_TARGET' ? 'bg-slate-950/80 border-slate-700 opacity-60' : isTurn ? 'bg-indigo-950/90 border-2 border-amber-400 active-turn-seat' : isViewed ? 'bg-slate-900 border-2 border-sky-400 recon-viewed-seat' : 'bg-slate-900/90 border-slate-700'} ${activeTurnNotMe ? 'opacity-75' : ''} ${isNearBankrupt ? 'danger-pulse' : ''} min-w-0">
+        <div class="flex items-center justify-between w-full gap-1 min-w-0">
+          <span class="text-xs font-black ${isTurn ? 'text-amber-300' : isViewed ? 'text-sky-300' : 'text-white'} truncate">${roleIcon} ${shortName}</span>
+          ${turnBadge}
+        </div>
+        <div class="flex items-center justify-between w-full text-[10px] mt-0.5 gap-1 min-w-0">
+          <span class="font-black whitespace-nowrap"><b class="text-emerald-400">💎${pl.crystals}</b> <b class="text-rose-400">🔥-${burn}</b></span>
+          <span class="text-[9px] text-slate-300 whitespace-nowrap">⚒${pl.engineers.length} ⚠️${pl.crises.length}(需${totalCrisisReq}) 👹${pl.outsourcedCount}</span>
+        </div>
+        <div class="grid grid-cols-4 gap-0.5 mt-1 w-full min-w-0">
+          ${skillDots}
+        </div>
+      </button>
+    `;
+  }).join('');
+
+  // 2B. ZONE 2A: Prominent Full-Width Public Turn Banner + Speed Toggle
+  const turnActor = state.phase === 'INITIAL_DRAFT' ? state.players[state.draft.pickerIndex] : activePlayer;
+  const publicTurnBanner = document.getElementById('publicTurnBanner');
+  if (publicTurnBanner) {
+    publicTurnBanner.className = `w-full rounded-lg px-2 py-1 flex items-center justify-between gap-1.5 border transition min-w-0 ${isMyTurnNow ? 'bg-emerald-950/80 border-emerald-400 shadow' : 'bg-rose-950/90 border-amber-400 shadow-lg'}`;
+    publicTurnBanner.innerHTML = `
+      <div class="flex items-center gap-1.5 min-w-0 flex-1">
+        <span class="px-1.5 py-0.5 rounded text-[10px] font-black whitespace-nowrap shrink-0 ${isMyTurnNow ? 'bg-emerald-400 text-slate-950' : 'bg-amber-400 text-slate-950'}">
+          ${isMyTurnNow ? '👑 我方回合' : '⚡ 對手回合'}
+        </span>
+        <span class="text-xs font-black ${isMyTurnNow ? 'text-white' : 'text-amber-300'} truncate">
+          ${state.phase === 'INITIAL_DRAFT'
+            ? (isMyTurnNow ? '請從下方點選 1 張部門頂牌招募部下！' : `等待【${turnActor.name}】挑選部下 (${state.draft.totalPicked}/${state.draft.targetTotal})...`)
+            : (isMyTurnNow ? `請出牌或棄牌 (已用 ${state.turn.actionsUsed}/4 額度)` : `【${turnActor.name}】正在施法行動中 (${state.turn.actionsUsed}/4)...`)}
+        </span>
+      </div>
+      <div class="flex items-center gap-1 shrink-0">
+        ${(gameSession.mode === 'HOST' && turnActor && turnActor.id !== 'p1' && !turnActor.isAI)
+          ? `<button id="btnHostTakeoverAI" data-takeover-seat="${turnActor.id}" class="px-1.5 py-0.5 rounded bg-purple-900 border border-purple-400 text-[10px] font-black text-purple-200 whitespace-nowrap" title="切換AI代打">🤖AI代打</button>`
+          : ''}
+        <button id="btnToggleAnimSpeed" class="px-1.5 py-0.5 rounded bg-slate-950 border border-slate-600 text-[10px] font-black text-sky-300 whitespace-nowrap shrink-0">
+          ${animSpeedMultiplier === 1 ? '▶ 1x速度' : '⏩ 2x快轉'}
+        </button>
+      </div>
+    `;
+  }
+
+  // 3. ZONE 2B: Top 4-Column All-Visible Job Bank Mini-Grid
+  const condensedStrip = document.getElementById('condensedJobBankPills');
+  condensedStrip.innerHTML = ['RED', 'YELLOW', 'BLUE', 'GREEN'].map(d => {
+    const meta = DEPT_META[d];
+    const deck = state.jobBank[d];
+    const topUid = deck[0];
+    if (!topUid) {
+      return `
+        <div class="rounded-lg bg-slate-950 border border-slate-800 px-1.5 py-1 text-center min-w-0">
+          <div class="text-[10px] font-bold text-slate-500 truncate">${meta.icon}${meta.short}(0)</div>
+          <div class="text-[10px] text-slate-500">已抽乾</div>
+        </div>
+      `;
+    }
+    const topCard = CARDS_BY_ID[topUid];
+    const avSrc = GPT_MINI_AVATAR[topCard.tplId] || '';
+    const skillTag = topCard.role === 'ENGINEER' ? '⚒$1' : `${topCard.isVP ? '👑' : ''}${topCard.skill}級$${topCard.salary}`;
+    return `
+      <button data-open-bank-dept="${d}" class="rounded-lg ${meta.panelBg} border ${meta.border} p-1 text-left flex items-center gap-1 transition shadow min-w-0">
+        ${avSrc ? `<img src="${avSrc}" alt="${topCard.title}" class="art-mini-avatar shrink-0" />` : `<span class="text-xs shrink-0">${meta.icon}</span>`}
+        <div class="flex flex-col justify-between min-w-0 flex-1">
+          <div class="flex items-center justify-between w-full gap-0.5 min-w-0">
+            <span class="text-[9px] font-extrabold ${meta.text} whitespace-nowrap">${meta.short}</span>
+            <span class="text-[9px] px-1 rounded bg-slate-950 text-amber-300 font-black whitespace-nowrap">${skillTag}</span>
+          </div>
+          <div class="text-[10px] font-black text-white truncate w-full">${topCard.title}</div>
+        </div>
+      </button>
+    `;
+  }).join('');
+
+  // 4. Handle Initial Draft Stage
+  const draftStage = document.getElementById('draftStageSection');
+  const companyStage = document.getElementById('companyStageSection');
+  if (state.phase === 'INITIAL_DRAFT') {
+    draftStage.classList.remove('hidden');
+    companyStage.classList.add('hidden');
+    document.getElementById('draftProgressSub').textContent =
+      `進度：第 ${state.draft.round}/4 輪（輪到【${state.players[state.draft.pickerIndex].name}】挑選）`;
+
+    document.getElementById('draftBankCardsGrid').innerHTML = ['RED', 'YELLOW', 'BLUE', 'GREEN'].map(d => {
+      const topUid = state.jobBank[d][0];
+      const meta = DEPT_META[d];
+      if (!topUid) return `<div class="w-[162px] shrink-0 p-4 text-center text-slate-500">已抽乾</div>`;
+      const emp = CARDS_BY_ID[topUid];
+      const canPick = isMyTurnNow && !(emp.isVP && hasVPInDept(localPlayer, d));
+      return `
+        <div data-draft-dept="${d}" class="w-[162px] sm:w-[210px] lg:flex-1 shrink-0 snap-start flex flex-col gap-1 min-w-0">
+          <div class="flex items-center justify-between text-[11px] px-1">
+            <span class="font-black ${meta.text} truncate">${meta.icon}${meta.short}</span>
+            <span class="text-slate-400 whitespace-nowrap">剩${state.jobBank[d].length}張</span>
+          </div>
+          ${renderEmployeeCardHTML(topUid, canPick ? 'cursor-pointer' : 'opacity-60', canPick ? '點擊招募' : '')}
+        </div>
+      `;
+    }).join('');
+  } else {
+    draftStage.classList.add('hidden');
+    companyStage.classList.remove('hidden');
+  }
+
+  // 5. ZONE 3 (CENTER): Render Viewed Company Stage
+  recalcPlayerStats(viewedPlayer);
+  const isViewingSelf = viewedPlayer.id === myId;
+  document.getElementById('btnReturnToSelfView').classList.add('hidden');
+
+  companyStage.className = `${state.phase === 'INITIAL_DRAFT' ? 'hidden ' : ''}relative flex-1 stage-25d-container rounded-2xl p-2 flex flex-col justify-between gap-1 min-w-0 transition overflow-hidden ${isViewingSelf ? 'self-castle-stage' : 'enemy-recon-stage'}`;
+
+  const viewedCrisisReq = getCrisisTotalEngineerReq(viewedPlayer);
+  const viewedCrisisCnt = viewedPlayer.crises.length;
+
+  document.getElementById('companyTopOverviewBar').innerHTML = isViewingSelf
+    ? ''
+    : `
+    <div class="flex flex-col gap-1 min-w-0">
+      <div class="flex items-center justify-between gap-1.5 px-2 py-1 rounded-xl bg-rose-950/90 border border-rose-400 min-w-0">
+        <div class="flex items-center gap-1.5 min-w-0 flex-1">
+          <span class="px-1.5 py-0.5 rounded bg-rose-600 text-white text-[10px] font-black whitespace-nowrap shrink-0">👁️ 敵情偵察</span>
+          <h2 class="text-xs font-black text-rose-200 truncate">${viewedPlayer.name}</h2>
+          <span class="px-1.5 py-0.5 rounded bg-purple-950 border border-purple-400 text-[10px] font-black text-purple-200 whitespace-nowrap shrink-0">👑${getTotalVPCount(viewedPlayer)}</span>
+        </div>
+        <button id="btnQuickBackSelf" class="px-2.5 py-0.5 rounded-lg bg-amber-400 text-[11px] font-black text-slate-950 whitespace-nowrap shadow">↩ 返回我方主城</button>
+      </div>
+      <div class="grid grid-cols-3 gap-1 w-full min-w-0">
+        <button data-inspect-eng="${viewedPlayer.id}" class="rounded-lg bg-red-950/60 border border-red-500/40 px-1.5 py-0.5 text-left flex items-center justify-between min-w-0">
+          <span class="text-[10px] font-bold text-red-200 truncate">⚒苦工:${viewedPlayer.engineers.length}</span>
+          <span class="text-[10px] font-black text-rose-300 whitespace-nowrap">💎-${viewedPlayer.engineers.length} 🔍</span>
+        </button>
+        <button data-inspect-crises="${viewedPlayer.id}" class="rounded-lg ${viewedCrisisCnt > 0 ? 'bg-amber-950/80 border border-amber-400' : 'bg-slate-900 border border-slate-700'} px-1.5 py-0.5 text-left flex items-center justify-between min-w-0">
+          <span class="text-[10px] font-bold ${viewedCrisisCnt > 0 ? 'text-amber-200' : 'text-slate-400'} whitespace-nowrap">⚠️危機:${viewedCrisisCnt}</span>
+          <span class="text-[10px] font-black ${viewedCrisisCnt > 0 ? 'text-amber-300' : 'text-slate-500'} whitespace-nowrap">需${viewedCrisisReq} 🔍</span>
+        </button>
+        <button data-inspect-outsourced="${viewedPlayer.id}" class="rounded-lg ${viewedPlayer.outsourcedCount > 0 ? 'bg-rose-950/90 border border-rose-400' : 'bg-slate-900 border border-slate-700'} px-1.5 py-0.5 text-left flex items-center justify-between min-w-0">
+          <span class="text-[10px] font-bold ${viewedPlayer.outsourcedCount > 0 ? 'text-rose-200' : 'text-slate-400'} truncate">👹外包:${viewedPlayer.outsourcedCount}</span>
+          <span class="text-[10px] font-black ${viewedPlayer.outsourcedCount > 0 ? 'text-rose-300' : 'text-slate-500'} whitespace-nowrap">💎-${viewedPlayer.outsourcedCount * 3} 🔍</span>
+        </button>
+      </div>
+    </div>
+  `;
+
+  document.getElementById('deptQuickJumpBar').innerHTML = ['RED', 'YELLOW', 'BLUE', 'GREEN'].map((d, idx) => {
+    const meta = DEPT_META[d];
+    const sk = getEffectiveSkill(viewedPlayer, d);
+    const vp = hasVPInDept(viewedPlayer, d);
+    return `
+      <button data-jump-dept-idx="${idx}" class="rounded-lg ${meta.panelBg} border ${meta.border} px-1.5 py-0.5 flex items-center justify-between text-[10px] font-black text-white min-w-0">
+        <span class="whitespace-nowrap">${meta.icon}${meta.short}</span>
+        <span class="text-amber-300 whitespace-nowrap shrink-0">${sk}級${vp ? '👑' : ''}</span>
+      </button>
+    `;
+  }).join('');
+
+  // 5A-2. ZONE 4 (LOWER-MIDDLE): Render My Permanent Hero Status Bar (#myHeroStatusBar) — ALWAYS shows Local Player (myId)!
+  recalcPlayerStats(localPlayer);
+  const myBurn = getPlayerBurnRate(localPlayer);
+  const myCrisisReq = getCrisisTotalEngineerReq(localPlayer);
+  const myCrisisCnt = localPlayer.crises.length;
+  const myHeroBar = document.getElementById('myHeroStatusBar');
+  if (myHeroBar) {
+    myHeroBar.className = `w-full rounded-xl bg-slate-950/95 border-2 ${isMyTurnNow ? 'border-amber-400 shadow-lg' : 'border-slate-700'} px-2 py-1 flex flex-col gap-1 transition min-w-0`;
+    myHeroBar.innerHTML = `
+      <div class="flex items-center justify-between gap-1.5 min-w-0">
+        <div class="flex items-center gap-1.5 min-w-0 flex-1">
+          <span class="px-1.5 py-0.5 rounded text-[10px] font-black whitespace-nowrap shrink-0 ${isMyTurnNow ? 'bg-amber-400 text-slate-950' : 'bg-slate-800 text-amber-300'}">👑 我方主帥 (${myId.toUpperCase()})</span>
+          <span class="text-xs font-black text-white truncate">${localPlayer.name}</span>
+          <span class="px-1.5 py-0.5 rounded bg-purple-950 border border-purple-400 text-[10px] font-black text-purple-200 whitespace-nowrap shrink-0">👑皇室:${getTotalVPCount(localPlayer)}</span>
+        </div>
+        <div class="flex items-center gap-1 shrink-0">
+          <span class="px-2 py-0.5 rounded-lg bg-emerald-950/80 border border-emerald-500/40 text-xs font-black text-emerald-400 whitespace-nowrap">💎${localPlayer.crystals}</span>
+          <span class="px-2 py-0.5 rounded-lg bg-rose-950/70 border border-rose-500/50 text-xs font-black text-rose-400 whitespace-nowrap">🔥-${myBurn}/回</span>
+        </div>
+      </div>
+      <div class="grid grid-cols-3 gap-1 w-full min-w-0">
+        <button data-inspect-eng="${myId}" class="rounded-lg bg-red-950/60 border border-red-500/40 px-1.5 py-0.5 text-left flex items-center justify-between min-w-0">
+          <span class="text-[10px] font-bold text-red-200 truncate">⚒苦工:${localPlayer.engineers.length}人</span>
+          <span class="text-[10px] font-black text-rose-300 whitespace-nowrap shrink-0">💎-${localPlayer.engineers.length} 🔍</span>
+        </button>
+        <button data-inspect-crises="${myId}" class="rounded-lg ${myCrisisCnt > 0 ? 'bg-amber-950/80 border border-amber-400' : 'bg-slate-900 border border-slate-700'} px-1.5 py-0.5 text-left flex items-center justify-between min-w-0">
+          <span class="text-[10px] font-bold ${myCrisisCnt > 0 ? 'text-amber-200' : 'text-slate-400'} whitespace-nowrap">⚠️危機:${myCrisisCnt}</span>
+          <span class="text-[10px] font-black ${myCrisisCnt > 0 ? 'text-amber-300' : 'text-slate-500'} whitespace-nowrap shrink-0">需${myCrisisReq}人 🔍</span>
+        </button>
+        <button data-inspect-outsourced="${myId}" class="rounded-lg ${localPlayer.outsourcedCount > 0 ? 'bg-rose-950/90 border border-rose-400' : 'bg-slate-900 border border-slate-700'} px-1.5 py-0.5 text-left flex items-center justify-between min-w-0">
+          <span class="text-[10px] font-bold ${localPlayer.outsourcedCount > 0 ? 'text-rose-200' : 'text-slate-400'} truncate">👹外包:${localPlayer.outsourcedCount}人</span>
+          <span class="text-[10px] font-black ${localPlayer.outsourcedCount > 0 ? 'text-rose-300' : 'text-slate-500'} whitespace-nowrap shrink-0">💎-${localPlayer.outsourcedCount * 3} 🔍</span>
+        </button>
+      </div>
+    `;
+  }
+
+  // 5B. Render 4-Department Columns
+  const deptGrid = document.getElementById('companyDepartmentsGrid');
+  const isGrid2x2 = deptLayoutMode === 'GRID2X2';
+  deptGrid.className = isGrid2x2
+    ? 'w-full flex-1 grid grid-cols-2 lg:grid-cols-4 gap-1.5 min-w-0'
+    : 'w-full flex-1 flex items-center gap-2.5 overflow-x-auto no-scrollbar snap-x pb-0.5 min-w-0';
+  const colWidthCls = isGrid2x2 ? 'w-full' : 'w-[176px] sm:w-[210px] lg:flex-1 shrink-0 snap-start';
+  deptGrid.innerHTML = ['RED', 'YELLOW', 'BLUE', 'GREEN'].map(d => {
+    const meta = DEPT_META[d];
+    const deptArr = viewedPlayer.departments[d];
+
+    if (deptArr.length === 0) {
+      return `
+        <div data-empty-dept="${d}" class="${colWidthCls} aspect-card-2-3 empty-rune-slot rounded-xl border-2 border-dashed ${meta.border} overflow-hidden flex flex-col justify-between p-2 min-w-0 relative cursor-pointer transition">
+          <div class="flex items-center justify-between w-full gap-1">
+            <span class="w-6 h-6 rounded-full bg-slate-950 border border-slate-600 text-slate-400 flex items-center justify-center text-xs font-black shadow">0</span>
+            <span class="text-[11px] font-black ${meta.text} truncate">${meta.icon}${meta.name}</span>
+            <span class="px-1.5 py-0.5 rounded bg-slate-900 border border-slate-700 text-[9px] font-bold text-slate-400">空城</span>
+          </div>
+          <div class="flex flex-col items-center justify-center text-center my-auto px-2">
+            <div class="w-14 h-14 rounded-full ${meta.panelBg} border ${meta.border} flex items-center justify-center text-2xl opacity-60 shadow-lg">${meta.icon}</div>
+            <span class="text-xs font-black text-slate-300 mt-2">缺工空城 (0級)</span>
+            <span class="text-[10px] text-slate-400 mt-0.5 leading-tight">無主管駐守，檢定視為 0 級</span>
+          </div>
+          <div class="bg-slate-950/90 border border-slate-800 rounded-lg py-1 px-2 flex items-center justify-between text-[10px] text-slate-400">
+            <span>💎 0 魔晶</span>
+            <span class="text-sky-300 font-bold">點人才池招募 ▸</span>
+          </div>
+        </div>
+      `;
+    }
+
+    const headUid = deptArr[0];
+    const hCard = CARDS_BY_ID[headUid];
+    const ownerShort = isViewingSelf ? '👑我方' : `🎯${getShortPlayerName(viewedPlayer.name)}`;
+    const subordinates = deptArr.slice(1);
+    const isNewlyFlipped = window.lastFlippedDeptKey === `${viewedPlayer.id}_${d}`;
+
+    return `
+      <div data-inspect-dept="${d}" data-inspect-player="${viewedPlayer.id}" class="${colWidthCls} aspect-card-2-3 tilt-card-3d ${isNewlyFlipped ? 'anim-flip-in' : ''} rounded-xl bg-slate-950 border-2 ${meta.border} ${hCard.isVP ? 'vp-card-frame' : ''} overflow-hidden cursor-pointer shadow-xl min-w-0 relative">
+        ${getCardImgTag(hCard.tplId, hCard.title, 'w-full h-full object-cover block')}
+        <div class="holo-sheen-layer"></div>
+        <span class="absolute bottom-2 left-1/2 -translate-x-1/2 px-2 py-0.5 rounded-full text-[9px] font-black shadow-lg whitespace-nowrap z-20 ${isViewingSelf ? 'bg-slate-950/90 border border-amber-400 text-amber-300' : 'bg-rose-700 border border-white text-white'}">${ownerShort}${subordinates.length > 0 ? ` · ➕${subordinates.length}下屬(點此展開)` : ''}</span>
+      </div>
+    `;
+  }).join('');
+
+  // 6. Render Mode D Tactical Targeting Drawer
+  renderModeDDrawer();
+
+  // 7. Render Local Player Hand & Controls
+  const isHumanStep1 = state.phase === 'STEP1_PLAY_OR_DISCARD' && isMyTurnNow;
+  document.getElementById('quotaCounterText').textContent = `額度: ${state.turn.actionsUsed}/${state.turn.maxActions}`;
+  document.getElementById('actionDeckCountText').textContent = state.actionDeck.length;
+  document.getElementById('discardPileCountText').textContent = state.discardPile.length;
+
+  const handContainer = document.getElementById('localHandContainer');
+  const playableBadge = document.getElementById('playableCountBadge');
+  if (localPlayer.hand.length === 0) {
+    if (playableBadge) playableBadge.textContent = '無手牌';
+    handContainer.innerHTML = `<div class="text-xs text-slate-400 py-4 mx-auto text-center">${state.phase === 'INITIAL_DRAFT' ? '🎲 請先在上方完成「首輪召喚」（挑選 4 名部下），結束後將發放 6 張手牌！' : '目前無手牌'}</div>`;
+  } else {
+    const evaluatedHand = localPlayer.hand.map(hUid => {
+      const status = isHumanStep1 ? evaluateCardPlayability(state, localPlayer, hUid) : { playable: false, shortReason: '等待回合', reason: '非我方出牌階段' };
+      return { hUid, status };
+    });
+    const playableCount = evaluatedHand.filter(item => item.status.playable).length;
+    if (playableBadge) {
+      playableBadge.textContent = isHumanStep1 ? `✨可出 ${playableCount} 張` : '等待對手';
+      playableBadge.className = isHumanStep1 && playableCount > 0
+        ? 'px-1.5 py-0.5 rounded bg-emerald-950/80 border border-emerald-400 text-[10px] font-black text-emerald-300 whitespace-nowrap shrink-0'
+        : 'px-1.5 py-0.5 rounded bg-slate-800 border border-slate-600 text-[10px] font-bold text-slate-400 whitespace-nowrap shrink-0';
+    }
+    evaluatedHand.sort((a, b) => (b.status.playable ? 1 : 0) - (a.status.playable ? 1 : 0));
+
+    handContainer.innerHTML = evaluatedHand.map(({ hUid, status }) => {
+      const isSelected = uiSelection.sourceCardUid === hUid;
+      const isDiscardChecked = uiSelection.discardSet.has(hUid);
+      const extraCls = uiSelection.mode === 'DISCARD_SELECT'
+        ? 'hand-card'
+        : status.playable
+        ? 'hand-card'
+        : 'hand-card unplayable-card';
+      return renderActionCardHTML(hUid, extraCls, status, isSelected, isDiscardChecked);
+    }).join('');
+  }
+
+  const btnDiscardMode = document.getElementById('btnToggleDiscardMode');
+  const btnConfirmDiscard = document.getElementById('btnConfirmDiscard');
+  const btnEndTurn = document.getElementById('btnEndTurn');
+
+  const canEnterDiscard = isHumanStep1 &&
+    (state.turn.actionsUsed < state.turn.maxActions) &&
+    (state.config.playDiscardMode === 'SHARED_QUOTA_4' || !state.turn.hasPlayedCard);
+
+  btnDiscardMode.disabled = !canEnterDiscard;
+  btnDiscardMode.classList.toggle('opacity-40', !canEnterDiscard);
+  btnDiscardMode.textContent = uiSelection.mode === 'DISCARD_SELECT' ? '↩ 返回出牌' : '🗑️ 棄牌濾牌';
+
+  if (uiSelection.mode === 'DISCARD_SELECT') {
+    btnConfirmDiscard.classList.remove('hidden');
+    btnConfirmDiscard.textContent = `✔ 確認棄置 (${uiSelection.discardSet.size})`;
+  } else {
+    btnConfirmDiscard.classList.add('hidden');
+  }
+
+  btnEndTurn.disabled = !isHumanStep1;
+  btnEndTurn.classList.toggle('opacity-50', !isHumanStep1);
+  btnEndTurn.textContent = isHumanStep1 ? '⏭️ 結束出牌 ➔ 發薪' : `⏳ ${getShortPlayerName(turnActor.name)} 行動中...`;
+  const handDock = document.getElementById('myHandDockSection');
+  if (handDock) {
+    handDock.className = `bg-slate-950/90 border-t-2 ${isHumanStep1 ? 'border-amber-400' : 'border-slate-800 opacity-85'} rounded-xl px-1.5 py-1.5 flex flex-col gap-1 shadow-2xl transition min-w-0`;
+  }
+
+  attachDynamicBoardListeners();
+}
+
+function renderModeDDrawer() {
+  const drawer = document.getElementById('modeDTargetDrawer');
+  const container = document.getElementById('modeDTargetsContainer');
+  const titleEl = document.getElementById('modeDTitle');
+  const pillEl = document.getElementById('modeDPillTag');
+
+  if (uiSelection.mode !== 'MODE_D_SELECT' || !uiSelection.sourceCardUid) {
+    drawer.classList.add('hidden');
+    return;
+  }
+
+  const state = gameState;
+  const localPlayer = getLocalPlayer(state);
+  const card = CARDS_BY_ID[uiSelection.sourceCardUid];
+  const status = evaluateCardPlayability(state, localPlayer, card.uid);
+  if (!status.playable) {
+    resetSelectionState();
+    return;
+  }
+
+  drawer.classList.remove('hidden');
+  const aliveOpponents = getClockwiseOpponents(state).filter(p => !p.isEliminated);
+
+  const getPortraitHTML = (empCard) => {
+    if (!empCard) {
+      return `<div class="portrait-target-avatar bg-slate-950 border border-dashed border-slate-600 flex items-center justify-center text-sm">🏰</div>`;
+    }
+    const avSrc = GPT_MINI_AVATAR[empCard.tplId];
+    return avSrc
+      ? `<img src="${avSrc}" alt="${empCard.title}" class="portrait-target-avatar" />`
+      : `<div class="portrait-target-avatar bg-slate-950 flex items-center justify-center text-base">${empCard.svg}</div>`;
+  };
+
+  if (card.effect === 'GAIN_FUNDS') {
+    if (pillEl) {
+      pillEl.textContent = '💎 徵收魔晶';
+      pillEl.className = 'px-1.5 py-0.5 rounded bg-emerald-400 text-slate-950 font-black text-[10px] whitespace-nowrap shrink-0';
+    }
+    titleEl.textContent = `「${card.title}」— 點擊入帳（或再點一次手牌秒出）`;
+    const gHeadUid = localPlayer.departments.GREEN[0];
+    const gHeadCard = gHeadUid ? CARDS_BY_ID[gHeadUid] : null;
+    const gSkill = getEffectiveSkill(localPlayer, 'GREEN');
+    const nextCrystals = localPlayer.crystals + card.val;
+
+    container.className = 'w-full min-w-0';
+    container.innerHTML = `
+      <button data-d-action="CONFIRM_FUNDS" class="w-full rounded-xl bg-emerald-950/80 border-2 border-emerald-400 p-2.5 text-left shadow-xl flex items-center justify-between gap-2.5 min-w-0">
+        <div class="flex items-center gap-2 min-w-0 flex-1">
+          ${getPortraitHTML(gHeadCard)}
+          <div class="min-w-0 flex-1">
+            <div class="flex items-center gap-1">
+              <span class="px-1.5 py-0.5 rounded bg-emerald-700 text-white text-[9px] font-black">💎金庫 ${gSkill}級認證</span>
+              <span class="text-[10px] text-emerald-200 truncate">${gHeadCard ? gHeadCard.title : '缺工空城 (0級)'}</span>
+            </div>
+            <div class="text-sm font-black text-white mt-0.5 truncate">⚡ 立即施放：${card.title}</div>
+            <div class="text-[11px] font-extrabold text-amber-300 mt-0.5">
+              金庫儲備：💎 ${localPlayer.crystals} ➔ <b class="text-emerald-300 text-xs">💎 ${nextCrystals}</b>
+            </div>
+          </div>
+        </div>
+        <div class="px-3 py-2 rounded-xl bg-emerald-600 border border-white text-center shrink-0 shadow-lg">
+          <div class="text-sm font-black text-white">+${card.val} 💎</div>
+          <div class="text-[9px] font-bold text-emerald-100">點擊入帳</div>
+        </div>
+      </button>
+    `;
+  } else if (card.effect === 'RELEASE_CRISIS') {
+    if (pillEl) {
+      pillEl.textContent = '🍾 鎮壓危機';
+      pillEl.className = 'px-1.5 py-0.5 rounded bg-amber-400 text-slate-950 font-black text-[10px] whitespace-nowrap shrink-0';
+    }
+    titleEl.textContent = `「${card.title}」— 點選要解除的討伐危機：`;
+    container.className = `grid ${status.validCrises.length > 1 ? 'grid-cols-2' : 'grid-cols-1'} gap-1.5 w-full min-w-0`;
+    container.innerHTML = status.validCrises.map(cUid => {
+      const c = CARDS_BY_ID[cUid];
+      return `
+        <button data-d-action="CONFIRM_RELEASE" data-crisis-uid="${cUid}" class="rounded-xl bg-amber-950/80 border-2 border-amber-400 p-2 text-left shadow-lg flex items-center justify-between gap-2 min-w-0">
+          <div class="min-w-0 flex-1">
+            <div class="text-xs font-black text-white truncate">${c.svg} ${c.title}</div>
+            <div class="text-[10px] text-amber-200 truncate mt-0.5">${c.desc}</div>
+            <div class="text-[10px] font-black text-emerald-300 mt-0.5">✨ 解除後省苦工 ×${c.val}</div>
+          </div>
+          <span class="px-2 py-1 rounded-lg bg-amber-500 text-slate-950 text-[11px] font-black shrink-0 shadow">🍾解除</span>
+        </button>
+      `;
+    }).join('');
+  } else if (card.effect === 'HIRE_BANK') {
+    if (pillEl) {
+      pillEl.textContent = '🤝 契約召喚';
+      pillEl.className = 'px-1.5 py-0.5 rounded bg-sky-400 text-slate-950 font-black text-[10px] whitespace-nowrap shrink-0';
+    }
+    titleEl.textContent = `「契約召喚」— 點選人才池部下加入主城：`;
+    container.className = 'grid grid-cols-2 gap-1.5 w-full min-w-0';
+    container.innerHTML = ['RED', 'YELLOW', 'BLUE', 'GREEN'].map(d => {
+      const topUid = state.jobBank[d][0];
+      const meta = DEPT_META[d];
+      if (!topUid) return '';
+      const emp = CARDS_BY_ID[topUid];
+      const isValid = status.validBankDepts.includes(d);
+      const curSkill = getEffectiveSkill(localPlayer, d);
+
+      let impactHint = '';
+      if (emp.role === 'ENGINEER') {
+        impactHint = localPlayer.outsourcedCount > 0 ? '🔥 抵1外包(省2💎/回)!' : '⚒ 苦工儲備 +1';
+      } else if (emp.isVP) {
+        impactHint = `👑 空降主管(${emp.skill}級)`;
+      } else if (!hasVPInDept(localPlayer, d) && emp.skill > curSkill) {
+        impactHint = `✨ ${meta.short}升至 ${emp.skill}級!`;
+      } else {
+        impactHint = `➕ 納入${meta.short}下屬`;
+      }
+
+      if (!isValid) {
+        return `
+          <div class="rounded-xl bg-slate-900/75 border border-slate-700 p-1.5 opacity-50 flex items-center gap-1.5 min-w-0">
+            ${getPortraitHTML(emp)}
+            <div class="min-w-0 flex-1">
+              <div class="text-[11px] font-bold text-slate-400 truncate">🔒 ${emp.title}</div>
+              <div class="text-[9px] text-rose-300">同部門已有皇室</div>
+            </div>
+          </div>
+        `;
+      }
+      return `
+        <button data-d-action="CONFIRM_HIRE" data-dept="${d}" class="rounded-xl ${meta.panelBg} border-2 ${meta.border} p-1.5 text-left shadow-lg flex flex-col justify-between gap-1 min-w-0">
+          <div class="flex items-center gap-1.5 min-w-0">
+            ${getPortraitHTML(emp)}
+            <div class="min-w-0 flex-1">
+              <div class="flex items-center justify-between gap-0.5">
+                <span class="text-[9px] font-extrabold ${meta.text}">${meta.icon}${meta.short}</span>
+                <span class="px-1 rounded bg-slate-950 text-amber-300 text-[9px] font-black">${emp.role === 'ENGINEER' ? '⚒苦工' : `${emp.isVP ? '👑' : ''}${emp.skill}級`}</span>
+              </div>
+              <div class="text-[11px] font-black text-white truncate mt-0.5">${emp.title}</div>
+              <div class="text-[9px] font-bold text-rose-300">💎-${emp.salary}/回</div>
+            </div>
+          </div>
+          <div class="w-full flex items-center justify-between bg-slate-950/90 rounded-lg px-1.5 py-0.5 border border-slate-800">
+            <span class="text-[9px] font-bold text-emerald-300 truncate">${impactHint}</span>
+            <span class="px-1.5 py-0.5 rounded bg-emerald-600 text-white text-[9px] font-black shrink-0">⚡召喚</span>
+          </div>
+        </button>
+      `;
+    }).join('');
+  } else if (card.effect === 'FIRE_OWN') {
+    if (pillEl) {
+      pillEl.textContent = '🚪 獻祭遣散';
+      pillEl.className = 'px-1.5 py-0.5 rounded bg-amber-400 text-slate-950 font-black text-[10px] whitespace-nowrap shrink-0';
+    }
+    titleEl.textContent = `「獻祭遣散」— 點選要遣散的自家部下：`;
+    container.className = 'grid grid-cols-2 gap-1.5 w-full min-w-0';
+    container.innerHTML = status.validOwnEmployees.map(eUid => {
+      const emp = CARDS_BY_ID[eUid];
+      const meta = DEPT_META[emp.dept];
+      return `
+        <button data-d-action="CONFIRM_FIRE" data-emp-uid="${eUid}" class="rounded-xl bg-slate-900 border-2 ${meta.border} p-1.5 text-left shadow-lg flex items-center gap-1.5 min-w-0">
+          ${getPortraitHTML(emp)}
+          <div class="min-w-0 flex-1">
+            <div class="text-[11px] font-black text-white truncate">${emp.title}</div>
+            <div class="text-[9px] text-slate-300">${emp.role === 'ENGINEER' ? '⚒苦工' : `${meta.short}·技能${emp.skill}`}｜省💎-${emp.salary}</div>
+            <div class="mt-0.5">
+              <span class="px-1.5 py-0.5 rounded bg-rose-600 text-white text-[9px] font-black">${emp.isVP ? '👑耗2張遣散' : '🚪遣散'}</span>
+            </div>
+          </div>
+        </button>
+      `;
+    }).join('');
+  } else if (card.effect === 'BAD_IDEA') {
+    if (pillEl) {
+      pillEl.textContent = '⚔️ 討伐危機';
+      pillEl.className = 'px-1.5 py-0.5 rounded bg-rose-500 text-white font-black text-[10px] whitespace-nowrap shrink-0';
+    }
+    titleEl.textContent = `「${card.title} (需對手黑魔 ${card.reqSkills.join('/')} 級)」— 點選對手或頂部席位：`;
+    container.className = `grid ${aliveOpponents.length > 1 ? 'grid-cols-2' : 'grid-cols-1'} gap-1.5 w-full min-w-0`;
+    container.innerHTML = aliveOpponents.map(opp => {
+      const oppSkill = getEffectiveSkill(opp, 'YELLOW');
+      const headUid = opp.departments.YELLOW[0];
+      const headCard = headUid ? CARDS_BY_ID[headUid] : null;
+      const isValid = status.validOpponents.includes(opp.id);
+      const curBurn = getPlayerBurnRate(opp);
+      const curReq = getCrisisTotalEngineerReq(opp);
+      const newReq = curReq + card.val;
+      const newOutsourced = Math.max(0, newReq - opp.engineers.length);
+      const addedOutsourced = newOutsourced - opp.outsourcedCount;
+      const projBurn = curBurn + addedOutsourced * (opp.doubleBurnFlag ? 6 : 3);
+      const shortOpp = getShortPlayerName(opp.name);
+
+      if (!isValid) {
+        return `
+          <div class="rounded-xl bg-slate-900/75 border border-slate-700 p-2 opacity-60 flex flex-col justify-between gap-1 min-w-0">
+            <div class="flex items-center justify-between gap-1">
+              <span class="text-xs font-black text-slate-300 truncate">😈 ${shortOpp}</span>
+              <span class="px-1.5 py-0.5 rounded bg-slate-800 text-sky-300 text-[9px] font-bold shrink-0">🛡️黑魔${oppSkill}級免疫</span>
+            </div>
+            <div class="flex items-center gap-1.5 bg-slate-950/80 rounded-lg p-1 border border-slate-800">
+              ${getPortraitHTML(headCard)}
+              <div class="min-w-0 flex-1">
+                <div class="text-[9px] text-slate-400">黑魔法部主管</div>
+                <div class="text-[10px] font-bold text-slate-300 truncate">${headCard ? headCard.title : '缺工空城(0級)'}</div>
+                <div class="text-[9px] text-sky-300">等級不符 [${card.reqSkills.join(',')}]</div>
+              </div>
+            </div>
+          </div>
+        `;
+      }
+
+      return `
+        <button data-d-action="CONFIRM_BAD_IDEA" data-opp-id="${opp.id}" class="rounded-xl bg-rose-950/90 border-2 border-rose-400 p-2 text-left shadow-xl flex flex-col justify-between gap-1.5 min-w-0">
+          <div class="flex items-center justify-between gap-1 w-full">
+            <span class="text-xs font-black text-white truncate">🎯 ${shortOpp}</span>
+            <span class="px-1.5 py-0.5 rounded bg-rose-600 text-white text-[9px] font-black shrink-0">黑魔 ${oppSkill}級可攻</span>
+          </div>
+          <div class="flex items-center gap-1.5 bg-slate-950/80 rounded-lg p-1 border border-rose-500/50">
+            ${getPortraitHTML(headCard)}
+            <div class="min-w-0 flex-1">
+              <div class="text-[9px] text-amber-300 font-bold">黑魔主管：${headCard ? headCard.title : '空城(0級)'}</div>
+              <div class="text-[10px] font-extrabold text-white mt-0.5">💎${opp.crystals} ｜ ⚒苦工:${opp.engineers.length}</div>
+              <div class="text-[10px] font-black text-rose-300">🔥-${curBurn} ➔ <b class="text-amber-300">🔥-${projBurn}/回</b></div>
+            </div>
+          </div>
+          <div class="w-full py-1 rounded-lg bg-rose-600 text-center text-[11px] font-black text-white shadow">
+            ⚔️ 施放討伐危機 ×${card.val}
+          </div>
+        </button>
+      `;
+    }).join('');
+  } else if (card.effect === 'FORCE_HIRE') {
+    if (pillEl) {
+      pillEl.textContent = '🪤 強塞魔物';
+      pillEl.className = 'px-1.5 py-0.5 rounded bg-rose-500 text-white font-black text-[10px] whitespace-nowrap shrink-0';
+    }
+    if (!uiSelection.step2OpponentId) {
+      titleEl.textContent = `步驟1/2：「強塞魔物 (需對手召喚 ${card.reqSkills.join('/')} 級)」— 先選對手：`;
+      container.className = `grid ${aliveOpponents.length > 1 ? 'grid-cols-2' : 'grid-cols-1'} gap-1.5 w-full min-w-0`;
+      container.innerHTML = aliveOpponents.map(opp => {
+        const oppSkill = getEffectiveSkill(opp, 'BLUE');
+        const bHeadUid = opp.departments.BLUE[0];
+        const bHeadCard = bHeadUid ? CARDS_BY_ID[bHeadUid] : null;
+        const isValid = status.validOpponents.includes(opp.id);
+        const shortOpp = getShortPlayerName(opp.name);
+        if (!isValid) {
+          return `
+            <div class="rounded-xl bg-slate-900/75 border border-slate-700 p-2 opacity-60 flex items-center gap-1.5 min-w-0">
+              ${getPortraitHTML(bHeadCard)}
+              <div class="min-w-0 flex-1">
+                <div class="text-xs font-bold text-slate-300 truncate">🛡️ ${shortOpp} (免疫)</div>
+                <div class="text-[10px] text-sky-300">召喚祭壇 ${oppSkill}級不符</div>
+              </div>
+            </div>
+          `;
+        }
+        return `
+          <button data-d-action="STEP2_FORCE_HIRE_OPP" data-opp-id="${opp.id}" class="rounded-xl bg-rose-950/90 border-2 border-rose-400 p-2 text-left shadow-lg flex flex-col justify-between gap-1.5 min-w-0">
+            <div class="flex items-center gap-1.5 min-w-0">
+              ${getPortraitHTML(bHeadCard)}
+              <div class="min-w-0 flex-1">
+                <div class="text-xs font-black text-white truncate">🎯 ${shortOpp}</div>
+                <div class="text-[10px] text-amber-200">召喚祭壇：${oppSkill}級 (可強塞)</div>
+                <div class="text-[10px] text-rose-300 font-bold">💎${opp.crystals} ｜ 🔥-${getPlayerBurnRate(opp)}/回</div>
+              </div>
+            </div>
+            <div class="w-full py-1 rounded-lg bg-rose-600 text-center text-[11px] font-black text-white shadow">下一步：選人才池魔物 ➔</div>
+          </button>
+        `;
+      }).join('');
+    } else {
+      const opp = state.players.find(p => p.id === uiSelection.step2OpponentId);
+      const allowedDepts = status.validBankByOpponent[opp.id] || [];
+      titleEl.textContent = `步驟2/2：點選要強塞給【${getShortPlayerName(opp.name)}】的魔物：`;
+      container.className = 'grid grid-cols-2 gap-1.5 w-full min-w-0';
+      container.innerHTML = allowedDepts.map(d => {
+        const emp = CARDS_BY_ID[state.jobBank[d][0]];
+        const meta = DEPT_META[d];
+        const oppCurSkill = getEffectiveSkill(opp, d);
+        const isSabotageVP = emp.isVP && emp.skill < oppCurSkill;
+        return `
+          <button data-d-action="CONFIRM_FORCE_HIRE" data-opp-id="${opp.id}" data-dept="${d}" class="rounded-xl ${meta.panelBg} border-2 ${meta.border} p-1.5 text-left shadow-lg flex flex-col justify-between gap-1 min-w-0">
+            <div class="flex items-center gap-1.5 min-w-0">
+              ${getPortraitHTML(emp)}
+              <div class="min-w-0 flex-1">
+                <div class="text-[9px] font-bold ${meta.text}">${meta.icon}${meta.short}</div>
+                <div class="text-[11px] font-black text-white truncate">${emp.title} ${emp.isVP ? '👑' : ''}</div>
+                <div class="text-[9px] text-amber-200">${emp.role === 'ENGINEER' ? '⚒苦工' : `技能 ${emp.skill}`}｜害他💎-${emp.salary}/回</div>
+              </div>
+            </div>
+            <div class="w-full flex items-center justify-between bg-slate-950/90 rounded-lg px-1.5 py-0.5">
+              <span class="text-[9px] font-bold text-rose-300 truncate">${isSabotageVP ? `😈壓低他至${emp.skill}級!` : `🔥燒魔+${emp.salary}`}</span>
+              <span class="px-1.5 py-0.5 rounded bg-rose-600 text-white text-[9px] font-black">🪤強塞</span>
+            </div>
+          </button>
+        `;
+      }).join('');
+    }
+  } else if (card.effect === 'POACH_ENEMY') {
+    if (pillEl) {
+      pillEl.textContent = '🕸️ 魅惑挖角';
+      pillEl.className = 'px-1.5 py-0.5 rounded bg-purple-500 text-white font-black text-[10px] whitespace-nowrap shrink-0';
+    }
+    titleEl.textContent = `「魅惑挖角 (對手召喚 ${card.reqSkills.join('/')} 級)」— 點選要奪取的部下：`;
+    container.className = 'grid grid-cols-2 gap-1.5 w-full min-w-0';
+    const buttons = [];
+    aliveOpponents.forEach(opp => {
+      const emps = status.targetableByOpponent[opp.id];
+      const shortOpp = getShortPlayerName(opp.name);
+      if (!emps || emps.length === 0) return;
+      emps.forEach(eUid => {
+        const emp = CARDS_BY_ID[eUid];
+        const meta = DEPT_META[emp.dept];
+        buttons.push(`
+          <button data-d-action="CONFIRM_POACH" data-opp-id="${opp.id}" data-emp-uid="${eUid}" class="rounded-xl bg-slate-900 border-2 ${meta.border} p-1.5 text-left shadow-lg flex items-center gap-1.5 min-w-0">
+            ${getPortraitHTML(emp)}
+            <div class="min-w-0 flex-1">
+              <div class="text-[9px] font-bold text-rose-300 truncate">🎯奪自：${shortOpp}</div>
+              <div class="text-[11px] font-black text-white truncate">${emp.title}</div>
+              <div class="flex items-center justify-between mt-0.5">
+                <span class="text-[9px] text-amber-300 font-bold">${emp.role === 'ENGINEER' ? '⚒苦工' : `${emp.skill}級`}</span>
+                <span class="px-1.5 py-0.5 rounded bg-sky-600 text-white text-[9px] font-black">${emp.isVP ? '👑耗2張' : '🕸️挖角'}</span>
+              </div>
+            </div>
+          </button>
+        `);
+      });
+    });
+    container.innerHTML = buttons.join('');
+  } else if (card.effect === 'VP_KICK_ENEMY') {
+    if (pillEl) {
+      pillEl.textContent = '⚡ 皇室放逐';
+      pillEl.className = 'px-1.5 py-0.5 rounded bg-purple-500 text-white font-black text-[10px] whitespace-nowrap shrink-0';
+    }
+    titleEl.textContent = `皇室大招「${card.title}」— 點選要放逐的對手皇室：`;
+    container.className = 'grid grid-cols-2 gap-1.5 w-full min-w-0';
+    container.innerHTML = status.targetVPs.map(t => {
+      const opp = state.players.find(p => p.id === t.opponentId);
+      const emp = CARDS_BY_ID[t.empUid];
+      const meta = DEPT_META[emp.dept];
+      const shortOpp = getShortPlayerName(opp.name);
+      return `
+        <button data-d-action="CONFIRM_VP_KICK" data-opp-id="${opp.id}" data-emp-uid="${emp.uid}" class="rounded-xl bg-purple-950/90 border-2 border-purple-400 p-1.5 text-left shadow-lg flex items-center gap-1.5 min-w-0">
+          ${getPortraitHTML(emp)}
+          <div class="min-w-0 flex-1">
+            <div class="text-[9px] font-bold text-amber-300 truncate">🎯 ${shortOpp} · ${meta.short}</div>
+            <div class="text-[11px] font-black text-white truncate">👑 ${emp.title}</div>
+            <div class="mt-0.5 flex items-center justify-between">
+              <span class="text-[9px] text-purple-200">${emp.skill}級/💎-${emp.salary}</span>
+              <span class="px-1.5 py-0.5 rounded bg-rose-600 text-white text-[9px] font-black">⚡放逐</span>
+            </div>
+          </div>
+        </button>
+      `;
+    }).join('');
+  } else if (card.effect === 'VP_DOUBLE_PAY') {
+    if (pillEl) {
+      pillEl.textContent = '🔥 工會暴動';
+      pillEl.className = 'px-1.5 py-0.5 rounded bg-rose-500 text-white font-black text-[10px] whitespace-nowrap shrink-0';
+    }
+    titleEl.textContent = `「魔界工會暴動」— 點選下回雙倍供品 (×2) 的對手：`;
+    container.className = `grid ${aliveOpponents.length > 1 ? 'grid-cols-2' : 'grid-cols-1'} gap-1.5 w-full min-w-0`;
+    container.innerHTML = aliveOpponents.map(opp => {
+      const burn = getPlayerBurnRate(opp);
+      const shortOpp = getShortPlayerName(opp.name);
+      return `
+        <button data-d-action="CONFIRM_DOUBLE_PAY" data-opp-id="${opp.id}" class="rounded-xl bg-rose-950/90 border-2 border-rose-400 p-2 text-left shadow-lg flex flex-col justify-between gap-1.5 min-w-0">
+          <div class="flex items-center justify-between">
+            <span class="text-xs font-black text-white">🔥 ${shortOpp}</span>
+            <span class="text-[10px] font-black text-emerald-300">💎${opp.crystals}</span>
+          </div>
+          <div class="text-[11px] text-amber-200 font-bold">原燒魔 🔥-${burn} ➔ <b class="text-rose-300">翻倍扣 🔥-${burn * 2}！</b></div>
+          <div class="w-full py-1 rounded-lg bg-rose-600 text-center text-[11px] font-black text-white shadow">🔥 施放雙倍暴動 ×2</div>
+        </button>
+      `;
+    }).join('');
+  }
+
+  container.querySelectorAll('[data-d-action]').forEach(btn => {
+    btn.addEventListener('click', (e) => {
+      e.stopPropagation();
+      const actType = btn.getAttribute('data-d-action');
+      if (actType === 'CONFIRM_FUNDS') {
+        executePlayCard({ cardUid: card.uid });
+      } else if (actType === 'CONFIRM_RELEASE') {
+        executePlayCard({ cardUid: card.uid, targetCrisisUid: btn.getAttribute('data-crisis-uid') });
+      } else if (actType === 'CONFIRM_HIRE') {
+        executePlayCard({ cardUid: card.uid, targetDept: btn.getAttribute('data-dept') });
+      } else if (actType === 'CONFIRM_FIRE') {
+        const empUid = btn.getAttribute('data-emp-uid');
+        const emp = CARDS_BY_ID[empUid];
+        executePlayCard({
+          cardUid: card.uid,
+          targetEmpUid: empUid,
+          secondaryCardUid: emp.isVP ? status.companionFireUids[0] : null
+        });
+      } else if (actType === 'CONFIRM_BAD_IDEA') {
+        executePlayCard({ cardUid: card.uid, targetPlayerId: btn.getAttribute('data-opp-id') });
+      } else if (actType === 'STEP2_FORCE_HIRE_OPP') {
+        uiSelection.step2OpponentId = btn.getAttribute('data-opp-id');
+        renderAll();
+      } else if (actType === 'CONFIRM_FORCE_HIRE') {
+        executePlayCard({
+          cardUid: card.uid,
+          targetPlayerId: btn.getAttribute('data-opp-id'),
+          targetDept: btn.getAttribute('data-dept')
+        });
+      } else if (actType === 'CONFIRM_POACH') {
+        const oppId = btn.getAttribute('data-opp-id');
+        const empUid = btn.getAttribute('data-emp-uid');
+        const emp = CARDS_BY_ID[empUid];
+        const companions = status.companionsByOpponent[oppId] || [];
+        executePlayCard({
+          cardUid: card.uid,
+          targetPlayerId: oppId,
+          targetEmpUid: empUid,
+          secondaryCardUid: emp.isVP ? companions[0] : null
+        });
+      } else if (actType === 'CONFIRM_VP_KICK') {
+        executePlayCard({
+          cardUid: card.uid,
+          targetPlayerId: btn.getAttribute('data-opp-id'),
+          targetEmpUid: btn.getAttribute('data-emp-uid')
+        });
+      } else if (actType === 'CONFIRM_DOUBLE_PAY') {
+        executePlayCard({ cardUid: card.uid, targetPlayerId: btn.getAttribute('data-opp-id') });
+      }
+    });
+  });
+}
+
+function attachDynamicBoardListeners() {
+  const state = gameState;
+  const myId = getLocalPlayerId();
+  const localPlayer = getLocalPlayer(state);
+  const isMyTurnNow = isLocalPlayerTurn(state);
+
+  document.querySelectorAll('[data-switch-seat]').forEach(btn => {
+    btn.addEventListener('click', () => {
+      switchLocalSeatPerspective(btn.getAttribute('data-switch-seat'));
+    });
+  });
+
+  const btnTakeover = document.getElementById('btnHostTakeoverAI');
+  if (btnTakeover) {
+    btnTakeover.addEventListener('click', () => {
+      toggleMidGameAITakeover(btnTakeover.getAttribute('data-takeover-seat'));
+    });
+  }
+
+  document.querySelectorAll('[data-seat-tab]').forEach(btn => {
+    btn.addEventListener('click', () => {
+      const clickedId = btn.getAttribute('data-seat-tab');
+      const modeDSeat = btn.getAttribute('data-mode-d-seat');
+      if (modeDSeat === 'VALID_TARGET' && uiSelection.mode === 'MODE_D_SELECT' && uiSelection.sourceCardUid) {
+        const selCard = CARDS_BY_ID[uiSelection.sourceCardUid];
+        if (selCard.effect === 'BAD_IDEA' || selCard.effect === 'VP_DOUBLE_PAY') {
+          executePlayCard({ cardUid: selCard.uid, targetPlayerId: clickedId });
+          return;
+        } else if (selCard.effect === 'FORCE_HIRE' && !uiSelection.step2OpponentId) {
+          uiSelection.step2OpponentId = clickedId;
+          renderAll();
+          return;
+        }
+      }
+      viewedPlayerId = (viewedPlayerId === clickedId) ? myId : clickedId;
+      playSfx('card');
+      renderAll();
+    });
+  });
+
+  const modeDBackdrop = document.getElementById('modeDTargetDrawer');
+  if (modeDBackdrop) {
+    modeDBackdrop.onclick = (e) => {
+      if (e.target === modeDBackdrop) {
+        resetSelectionState();
+        renderAll();
+      }
+    };
+  }
+
+  const btnSpeed = document.getElementById('btnToggleAnimSpeed');
+  if (btnSpeed) {
+    btnSpeed.addEventListener('click', () => {
+      animSpeedMultiplier = animSpeedMultiplier === 1 ? 2 : 1;
+      renderAll();
+    });
+  }
+
+  const btnQuickBack = document.getElementById('btnQuickBackSelf');
+  if (btnQuickBack) {
+    btnQuickBack.addEventListener('click', () => {
+      viewedPlayerId = myId;
+      renderAll();
+    });
+  }
+
+  document.querySelectorAll('[data-open-bank-dept]').forEach(btn => {
+    btn.addEventListener('click', () => {
+      const dept = btn.getAttribute('data-open-bank-dept');
+      if (state.phase === 'INITIAL_DRAFT' && isMyTurnNow) {
+        handleDraftPickDepartment(dept);
+      } else {
+        openJobBankModal();
+      }
+    });
+  });
+
+  document.querySelectorAll('[data-draft-dept]').forEach(el => {
+    el.addEventListener('click', () => {
+      if (state.phase === 'INITIAL_DRAFT' && isMyTurnNow) {
+        handleDraftPickDepartment(el.getAttribute('data-draft-dept'));
+      }
+    });
+  });
+
+  document.querySelectorAll('#localHandContainer [data-act-uid]').forEach(el => {
+    el.addEventListener('click', () => {
+      const actUid = el.getAttribute('data-act-uid');
+      if (state.phase !== 'STEP1_PLAY_OR_DISCARD' || !isMyTurnNow) return;
+
+      if (uiSelection.mode === 'DISCARD_SELECT') {
+        const maxAllowed = state.turn.maxActions - state.turn.actionsUsed;
+        if (uiSelection.discardSet.has(actUid)) {
+          uiSelection.discardSet.delete(actUid);
+        } else if (uiSelection.discardSet.size < maxAllowed) {
+          uiSelection.discardSet.add(actUid);
+        }
+        renderAll();
+        return;
+      }
+
+      const status = evaluateCardPlayability(state, localPlayer, actUid);
+      const card = CARDS_BY_ID[actUid];
+      if (!status.playable) {
+        playSfx('burn');
+        const tickerEl = document.getElementById('latestLogTicker');
+        if (tickerEl) {
+          tickerEl.innerHTML = `<div class='text-[11px] text-rose-300 font-bold truncate'>🔒 <b class='text-amber-300'>「${card.title}」</b>不可出：${status.reason}</div>`;
+        }
+        return;
+      }
+
+      if (uiSelection.mode === 'MODE_D_SELECT' && uiSelection.sourceCardUid === actUid) {
+        if (card.effect === 'GAIN_FUNDS') {
+          executePlayCard({ cardUid: card.uid });
+        } else {
+          resetSelectionState();
+          renderAll();
+        }
+        return;
+      }
+
+      if (card.effect === 'VP_MASS_LAYOFF') {
+        openMassLayoffModal(actUid);
+        return;
+      }
+
+      uiSelection.mode = 'MODE_D_SELECT';
+      uiSelection.sourceCardUid = actUid;
+      uiSelection.step2OpponentId = null;
+      playSfx('card');
+      renderAll();
+    });
+  });
+
+  attach3DTiltListeners();
+  document.querySelectorAll('[data-empty-dept]').forEach(el => {
+    el.addEventListener('click', () => openJobBankModal());
+  });
+  document.querySelectorAll('[data-inspect-dept]').forEach(el => {
+    el.addEventListener('click', () => {
+      openDepartmentInspectorModal(el.getAttribute('data-inspect-player'), el.getAttribute('data-inspect-dept'));
+    });
+  });
+  document.querySelectorAll('[data-inspect-eng]').forEach(el => {
+    el.addEventListener('click', () => {
+      openEngineersInspectorModal(el.getAttribute('data-inspect-eng'));
+    });
+  });
+  document.querySelectorAll('[data-inspect-crises]').forEach(el => {
+    el.addEventListener('click', () => {
+      openCrisesInspectorModal(el.getAttribute('data-inspect-crises'));
+    });
+  });
+  document.querySelectorAll('[data-inspect-outsourced]').forEach(el => {
+    el.addEventListener('click', () => {
+      openOutsourcedInspectorModal(el.getAttribute('data-inspect-outsourced'));
+    });
+  });
+  document.querySelectorAll('[data-jump-dept-idx]').forEach(btn => {
+    btn.addEventListener('click', () => {
+      const idx = parseInt(btn.getAttribute('data-jump-dept-idx'), 10) || 0;
+      const track = document.getElementById('companyDepartmentsGrid');
+      const targetCol = track.children[idx];
+      if (targetCol) {
+        targetCol.scrollIntoView({ behavior: 'smooth', block: 'nearest', inline: 'start' });
+      }
+    });
+  });
+}
+
+function openJobBankModal() {
+  const grid = document.getElementById('jobBankModalGrid');
+  grid.innerHTML = ['RED', 'YELLOW', 'BLUE', 'GREEN'].map(d => {
+    const meta = DEPT_META[d];
+    const deck = gameState.jobBank[d];
+    const topUid = deck[0];
+    if (!topUid) {
+      return `<div class="rounded-xl bg-slate-950 border border-slate-800 p-4 text-center text-slate-500">${meta.name} 已抽乾</div>`;
+    }
+    return `
+      <div class="flex flex-col gap-1 min-w-0">
+        <div class="flex items-center justify-between text-xs px-1">
+          <span class="font-black ${meta.text} truncate">${meta.icon}${meta.short}</span>
+          <span class="text-slate-400">剩${deck.length}張</span>
+        </div>
+        ${renderEmployeeCardHTML(topUid, '', '頂牌')}
+      </div>
+    `;
+  }).join('');
+  document.getElementById('jobBankModal').classList.remove('hidden');
+}
+
+function openOutsourcedInspectorModal(playerId) {
+  const player = gameState.players.find(p => p.id === playerId);
+  if (!player) return;
+  const isSelf = player.id === getLocalPlayerId();
+  document.getElementById('inspectorModalTitle').textContent = `${isSelf ? '👑【我方主城】' : `🎯【敵方：${player.name}】`}— 高價外援：深淵惡魔高利貸傭兵 (${player.outsourcedCount}人)`;
+  document.getElementById('inspectorModalSubtitle').textContent = '當場上「討伐危機」所需苦工總數大於在職哥布林苦工時，差額將自動雇傭深淵惡魔高利貸傭兵（每名每回合索取 3 魔晶，不可被遣散，僅能透過招募苦工或鎮壓危機退回）。';
+  document.getElementById('inspectorModalFooter').classList.add('hidden');
+  const count = Math.max(1, player.outsourcedCount);
+  document.getElementById('inspectorCardsGrid').innerHTML = Array.from({ length: count }).map((_, i) => `
+    <div class="relative rounded-xl bg-slate-950 border-2 border-slate-500 overflow-hidden shadow-xl">
+      ${getCardImgTag("OUTSOURCED", "深淵惡魔高利貸傭兵", "full-gpt-card-img")}
+      <span class="absolute top-1 right-1 px-1.5 py-0.5 rounded bg-rose-600 text-white text-[10px] font-black shadow-lg">${player.outsourcedCount > 0 ? `外包 #${i+1} (💎-3)` : '外包卡預覽'}</span>
+    </div>
+  `).join('');
+  document.getElementById('inspectorModal').classList.remove('hidden');
+}
+
+function openDepartmentInspectorModal(playerId, dept) {
+  const player = gameState.players.find(p => p.id === playerId);
+  if (!player) return;
+  const meta = DEPT_META[dept];
+  const arr = player.departments[dept];
+  const isSelf = player.id === getLocalPlayerId();
+
+  document.getElementById('inspectorModalTitle').textContent = `${isSelf ? '👑【我方主城】' : `🎯【敵方偵察：${player.name}】`}— ${meta.icon}${meta.name} (${arr.length}人)`;
+  document.getElementById('inspectorModalSubtitle').textContent =
+    arr.length === 0
+      ? '此部門目前缺工（空城），有效技能等級視為 0。'
+      : `置頂第 1 張為現任主管（有效技能 ${getEffectiveSkill(player, dept)} 級），其餘為下屬。`;
+  document.getElementById('inspectorModalFooter').classList.add('hidden');
+
+  const grid = document.getElementById('inspectorCardsGrid');
+  grid.innerHTML = arr.map((uid, idx) => renderEmployeeCardHTML(uid, '', idx === 0 ? '👑主管' : `下屬#${idx}`)).join('');
+  document.getElementById('inspectorModal').classList.remove('hidden');
+}
+
+function openCrisesInspectorModal(playerId) {
+  const player = gameState.players.find(p => p.id === playerId);
+  if (!player) return;
+  document.getElementById('inspectorModalTitle').textContent = `⚠️ 【${player.name}】— 場上討伐危機 (${player.crises.length}張，共需苦工 ${getCrisisTotalEngineerReq(player)} 人)`;
+  document.getElementById('inspectorModalSubtitle').textContent = '每張討伐危機自身維護費為 0，但若在職哥布林苦工不足，差額將自動補入每回合消耗 3 魔晶的「深淵傭兵（外包）」。可打出紅部門「鎮壓危機（解放）」將其移除。';
+  document.getElementById('inspectorModalFooter').classList.add('hidden');
+  document.getElementById('inspectorCardsGrid').innerHTML =
+    player.crises.length === 0
+      ? `<div class="text-xs text-slate-400 py-4">目前場上沒有任何討伐危機！</div>`
+      : player.crises.map(uid => renderActionCardHTML(uid)).join('');
+  document.getElementById('inspectorModal').classList.remove('hidden');
+}
+
+function openEngineersInspectorModal(playerId) {
+  const player = gameState.players.find(p => p.id === playerId);
+  if (!player) return;
+  document.getElementById('inspectorModalTitle').textContent = `⚒ 【${player.name}】— 在職哥布林苦工 (${player.engineers.length}人)`;
+  document.getElementById('inspectorModalSubtitle').textContent = '每位苦工每回消耗 1 魔晶，可抵銷 1 點「討伐危機」人力需求。';
+  document.getElementById('inspectorModalFooter').classList.add('hidden');
+  document.getElementById('inspectorCardsGrid').innerHTML =
+    player.engineers.length === 0
+      ? `<div class="text-xs text-slate-400 py-4">目前無在職苦工</div>`
+      : player.engineers.map((uid, i) => renderEmployeeCardHTML(uid, '', `苦工#${i+1}`)).join('');
+  document.getElementById('inspectorModal').classList.remove('hidden');
+}
+
+function openMassLayoffModal(cardUid) {
+  const localPlayer = getLocalPlayer(gameState);
+  uiSelection.layoffSet.clear();
+  const allEmps = getAllPlayerEmployeeUids(localPlayer);
+  const totalVPs = getTotalVPCount(localPlayer);
+
+  document.getElementById('inspectorModalTitle').textContent = '🩸 血祭大掃除（裁員）：請勾選要遣散的部下';
+  document.getElementById('inspectorModalSubtitle').textContent = `須保留至少 2 名在職皇室（目前你有 ${totalVPs} 名皇室）。`;
+  document.getElementById('inspectorModalFooter').classList.remove('hidden');
+
+  function renderLayoffGrid() {
+    const selectedVPs = [...uiSelection.layoffSet].filter(id => CARDS_BY_ID[id].isVP).length;
+    const canSelectMoreVP = (totalVPs - selectedVPs) > 2;
+    document.getElementById('inspectorFooterHint').textContent = `已選 ${uiSelection.layoffSet.size} 人（保留皇室：${totalVPs - selectedVPs} 名）`;
+
+    const grid = document.getElementById('inspectorCardsGrid');
+    grid.innerHTML = allEmps.map(eUid => {
+      const emp = CARDS_BY_ID[eUid];
+      const checked = uiSelection.layoffSet.has(eUid);
+      const lockedVP = emp.isVP && !checked && !canSelectMoreVP;
+      return `
+        <div data-layoff-uid="${eUid}" class="relative ${lockedVP ? 'opacity-40' : 'cursor-pointer'}">
+          ${renderEmployeeCardHTML(eUid, checked ? 'ring-4 ring-rose-500' : '', checked ? '✔已勾選' : lockedVP ? '🔒保留' : '點擊勾選')}
+        </div>
+      `;
+    }).join('');
+
+    grid.querySelectorAll('[data-layoff-uid]').forEach(el => {
+      el.addEventListener('click', () => {
+        const eUid = el.getAttribute('data-layoff-uid');
+        const emp = CARDS_BY_ID[eUid];
+        if (uiSelection.layoffSet.has(eUid)) {
+          uiSelection.layoffSet.delete(eUid);
+        } else {
+          if (emp.isVP && !canSelectMoreVP) return;
+          uiSelection.layoffSet.add(eUid);
+        }
+        renderLayoffGrid();
+      });
+    });
+  }
+
+  renderLayoffGrid();
+  document.getElementById('btnConfirmMassLayoff').onclick = () => {
+    if (uiSelection.layoffSet.size === 0) return;
+    document.getElementById('inspectorModal').classList.add('hidden');
+    executePlayCard({ cardUid, layoffUids: [...uiSelection.layoffSet] });
+  };
+  document.getElementById('inspectorModal').classList.remove('hidden');
+}
+
+function showGameOverModal(winner) {
+  const isMe = winner.id === getLocalPlayerId();
+  document.getElementById('gameOverTitle').textContent = isMe ? '🏆 恭喜！你的深淵魔王城稱霸魔界！' : `💀 【${winner.name}】獲得最終勝利！`;
+  document.getElementById('gameOverDesc').textContent = `在經歷 ${gameState.turn.roundNumber} 回合的激烈燒魔競爭後，【${winner.name}】以剩餘 ${winner.crystals} 顆魔晶石成為最後屹立不搖的魔王城！`;
+  document.getElementById('gameOverModal').classList.remove('hidden');
+}
+
+function renderGallery(filter = 'ALL') {
+  const grid = document.getElementById('galleryGrid');
+  const items = [];
+
+  if (filter === 'ALL' || filter === 'EMP') {
+    EMPLOYEE_RECIPES.forEach(r => {
+      const sampleUid = Object.keys(CARDS_BY_ID).find(k => CARDS_BY_ID[k].tplId === r.tplId);
+      if (sampleUid) {
+        items.push(`
+          <div class="flex flex-col items-center min-w-0">
+            ${renderEmployeeCardHTML(sampleUid, 'w-full', `共${r.count}張`)}
+          </div>
+        `);
+      }
+    });
+    if (GPT_FULLCARD_ART['OUTSOURCED']) {
+      items.push(`
+        <div class="flex flex-col items-center min-w-0">
+          <div class="relative rounded-xl bg-slate-950 border-2 border-slate-500 overflow-hidden shadow-xl w-full">
+            ${getCardImgTag("OUTSOURCED", "深淵惡魔高利貸傭兵", "full-gpt-card-img")}
+            <span class="absolute top-1 right-1 px-1.5 py-0.5 rounded bg-rose-600 text-white text-[10px] font-black shadow-lg">外包無限</span>
+          </div>
+        </div>
+      `);
+    }
+  }
+
+  ACTION_RECIPES.forEach(r => {
+    if (filter === 'EMP') return;
+    if (filter === 'DEF' && r.category !== 'DEFENSE') return;
+    if (filter === 'ATK' && r.category !== 'ATTACK' && r.category !== 'CRISIS') return;
+    if (filter === 'VP' && r.dept !== 'PURPLE') return;
+
+    const sampleUid = Object.keys(CARDS_BY_ID).find(k => CARDS_BY_ID[k].tplId === r.tplId);
+    if (sampleUid) {
+      items.push(`
+        <div class="flex flex-col items-center min-w-0">
+          ${renderActionCardHTML(sampleUid)}
+          <span class="text-[11px] font-bold text-amber-300 mt-1">共 ${r.count} 張</span>
+        </div>
+      `);
+    }
+  });
+
+  grid.innerHTML = items.join('');
+}
+
+/********************************************************************
+ * V13 MULTIPLAYER LOBBY UI RENDERER & HANDLERS
+ ********************************************************************/
+let activeLobbyTab = 'SOLO'; // 'SOLO' | 'HOST' | 'CLIENT'
+
+function copyTextSafe(text, successMsg) {
+  try {
+    if (navigator.clipboard && navigator.clipboard.writeText) {
+      navigator.clipboard.writeText(text).then(() => showToast(successMsg)).catch(() => fallbackCopy(text, successMsg));
+      return;
+    }
+  } catch (e) {}
+  fallbackCopy(text, successMsg);
+}
+
+function fallbackCopy(text, successMsg) {
+  try {
+    const ta = document.createElement('textarea');
+    ta.value = text;
+    ta.style.position = 'fixed';
+    ta.style.opacity = '0';
+    document.body.appendChild(ta);
+    ta.select();
+    document.execCommand('copy');
+    ta.remove();
+    showToast(successMsg);
+  } catch (e) {
+    showToast(`請手動複製：${text}`);
+  }
+}
+
+function renderLobbyUI() {
+  // Update mode tab buttons
+  document.querySelectorAll('[data-lobby-tab]').forEach(btn => {
+    const tab = btn.getAttribute('data-lobby-tab');
+    if (tab === activeLobbyTab) {
+      btn.className = 'flex-1 py-2 px-2 rounded-xl font-black text-xs border mp-mode-tab-active transition';
+    } else {
+      btn.className = 'flex-1 py-2 px-2 rounded-xl font-bold text-xs border border-slate-700 bg-slate-950 text-slate-300 transition';
+    }
+  });
+
+  const hostPanel = document.getElementById('lobbyHostPanel');
+  const clientPanel = document.getElementById('lobbyClientPanel');
+  const hostStartControls = document.getElementById('lobbyHostStartControls');
+
+  if (activeLobbyTab === 'SOLO') {
+    hostPanel?.classList.add('hidden');
+    clientPanel?.classList.add('hidden');
+    hostStartControls?.classList.remove('hidden');
+  } else if (activeLobbyTab === 'HOST') {
+    hostPanel?.classList.remove('hidden');
+    clientPanel?.classList.add('hidden');
+    hostStartControls?.classList.remove('hidden');
+
+    const codeDisplay = document.getElementById('hostRoomCodeText');
+    if (codeDisplay) codeDisplay.textContent = gameSession.roomCode || '----';
+
+    const statusBadge = document.getElementById('hostNetStatusBadge');
+    if (statusBadge) {
+      const st = gameSession.peerStatus;
+      statusBadge.innerHTML = st === 'ONLINE'
+        ? `<span class="online-dot-pulse mr-1"></span>PeerJS 跨網 ＋ 跨分頁雙軌就緒`
+        : `<span class="online-dot-pulse mr-1"></span>跨分頁即時通道就緒 (PeerJS ${st === 'CONNECTING' ? '連線中' : '待機'})`;
+    }
+
+    const pCount = parseInt(document.getElementById('selectPlayerCount')?.value, 10) || gameSession.lobbyState.playerCount || 3;
+    gameSession.lobbyState.playerCount = pCount;
+    const rosterEl = document.getElementById('hostSeatsRosterGrid');
+    if (rosterEl) {
+      const visibleSeats = gameSession.lobbyState.seats.slice(0, pCount);
+      rosterEl.innerHTML = visibleSeats.map(s => {
+        if (s.id === 'p1') {
+          return `
+            <div class="rounded-xl p-2 seat-card-human flex items-center justify-between gap-2">
+              <div class="min-w-0">
+                <div class="text-[10px] font-black text-emerald-300">👑 座位 P1 (房主本人)</div>
+                <div class="text-xs font-black text-white truncate">${gameSession.playerName}</div>
+              </div>
+              <span class="px-2 py-0.5 rounded bg-emerald-500 text-slate-950 text-[10px] font-black shrink-0">✔ 已就緒</span>
+            </div>
+          `;
+        }
+        const isHumanJoined = s.role === 'HUMAN' && s.connected;
+        const isAI = s.role === 'AI';
+        const cardCls = isHumanJoined ? 'seat-card-human' : isAI ? 'seat-card-ai' : 'seat-card-waiting';
+        const badgeText = isHumanJoined ? '👤 真人已連線' : isAI ? '🤖 智慧 AI 補位' : '⏳ 等待真人加入';
+
+        return `
+          <div class="rounded-xl p-2 ${cardCls} flex items-center justify-between gap-2">
+            <div class="min-w-0 flex-1">
+              <div class="text-[10px] font-black ${isHumanJoined ? 'text-emerald-300' : isAI ? 'text-indigo-300' : 'text-amber-300'}">座位 ${s.id.toUpperCase()} · ${badgeText}</div>
+              <div class="text-xs font-bold text-white truncate">${s.name}</div>
+            </div>
+            <button data-toggle-seat-role="${s.id}" class="px-2 py-1 rounded-lg bg-slate-950 border border-slate-600 text-[10px] font-black text-amber-300 shrink-0">
+              ${isAI ? '改為等待真人' : '改由 AI 補位'}
+            </button>
+          </div>
+        `;
+      }).join('');
+
+      rosterEl.querySelectorAll('[data-toggle-seat-role]').forEach(btn => {
+        btn.addEventListener('click', () => {
+          toggleHostLobbySeatRole(btn.getAttribute('data-toggle-seat-role'));
+        });
+      });
+    }
+  } else if (activeLobbyTab === 'CLIENT') {
+    hostPanel?.classList.add('hidden');
+    clientPanel?.classList.remove('hidden');
+    hostStartControls?.classList.add('hidden');
+
+    const statusBox = document.getElementById('clientJoinStatusBox');
+    if (statusBox) {
+      if (gameSession.mode === 'CLIENT' && gameSession.roomCode) {
+        const mySeat = gameSession.lobbyState.seats.find(s => s.id === gameSession.localSeatId);
+        const isAccepted = mySeat && mySeat.clientToken === gameSession.clientToken;
+        statusBox.innerHTML = isAccepted
+          ? `<div class="rounded-xl p-2.5 seat-card-human text-xs space-y-1">
+               <div class="font-black text-emerald-300">✅ 已成功連入房間【${gameSession.roomCode}】！</div>
+               <div class="text-white">分配座位：<b class="text-amber-300">${gameSession.localSeatId.toUpperCase()} (${mySeat.name})</b></div>
+               <div class="text-[11px] text-slate-300">⏳ 正在等待房主點擊「開始對局」，房主開局後畫面將自動載入牌桌！</div>
+             </div>`
+          : `<div class="rounded-xl p-2.5 seat-card-waiting text-xs text-amber-200 font-bold">
+               🔄 正在呼叫房間【${gameSession.roomCode}】房主回應中...（若為同瀏覽器測試，請確認另一分頁已開啟建立房間）
+             </div>`;
+      } else {
+        statusBox.innerHTML = `<div class="text-[11px] text-slate-400">輸入房主提供的 4 碼房間碼即可跨裝置或跨分頁連線入座。</div>`;
+      }
+    }
+  }
+}
+
+function initAppOnLoad() {
+  if (window.__dbrV13Initialized) return;
+  window.__dbrV13Initialized = true;
+  // Check URL query parameters for ?room=XXXX auto-join
+  const params = new URLSearchParams(window.location.search);
+  const urlRoom = params.get('room');
+  const nicknameInput = document.getElementById('inputPlayerNickname');
+  if (nicknameInput) {
+    nicknameInput.value = gameSession.playerName;
+  }
+
+  gameState = createInitialGameState(3, 'STRICT_EITHER', true);
+  gameSession.hostMasterState = gameState;
+  renderAll();
+
+  if (urlRoom) {
+    activeLobbyTab = 'CLIENT';
+    const joinInput = document.getElementById('inputJoinRoomCode');
+    if (joinInput) joinInput.value = urlRoom.toUpperCase();
+    document.getElementById('lobbyModal')?.classList.remove('hidden');
+    renderLobbyUI();
+    joinOnlineRoomAsClient(urlRoom, gameSession.playerName);
+  }
+
+  document.getElementById('btnCancelModeD').addEventListener('click', () => {
+    resetSelectionState();
+    renderAll();
+  });
+
+  const btnToggleLayout = document.getElementById('btnToggleDeptLayout');
+  if (btnToggleLayout) {
+    btnToggleLayout.addEventListener('click', () => {
+      deptLayoutMode = deptLayoutMode === 'SCROLL' ? 'GRID2X2' : 'SCROLL';
+      btnToggleLayout.textContent = deptLayoutMode === 'SCROLL' ? '田四宮格' : '↔大卡滑動';
+      renderAll();
+    });
+  }
+
+  document.getElementById('btnReturnToSelfView').addEventListener('click', () => {
+    viewedPlayerId = getLocalPlayerId();
+    renderAll();
+  });
+
+  window.addEventListener('keydown', (e) => {
+    if (e.key === 'Escape') {
+      resetSelectionState();
+      document.getElementById('jobBankModal').classList.add('hidden');
+      document.getElementById('inspectorModal').classList.add('hidden');
+      document.getElementById('galleryModal').classList.add('hidden');
+      document.getElementById('logModal').classList.add('hidden');
+      renderAll();
+    }
+  });
+
+  document.getElementById('btnExpandJobBankModal').addEventListener('click', () => openJobBankModal());
+  document.getElementById('btnCloseJobBankModal').addEventListener('click', () => {
+    document.getElementById('jobBankModal').classList.add('hidden');
+  });
+
+  const openLogFn = () => {
+    document.getElementById('battleLogModalList').innerHTML = gameState.logs
+      .map((l, i) => `<div class="${i === 0 ? 'text-amber-300 font-bold' : 'text-slate-300'} border-b border-slate-800 pb-1">${l}</div>`)
+      .join('');
+    document.getElementById('logModal').classList.remove('hidden');
+  };
+  document.getElementById('btnOpenLogModal').addEventListener('click', openLogFn);
+  document.getElementById('liveTickerBanner').addEventListener('click', openLogFn);
+  document.getElementById('btnCloseLogModal').addEventListener('click', () => {
+    document.getElementById('logModal').classList.add('hidden');
+  });
+
+  document.getElementById('btnToggleDiscardMode').addEventListener('click', () => {
+    if (uiSelection.mode === 'DISCARD_SELECT') {
+      resetSelectionState();
+    } else {
+      resetSelectionState();
+      uiSelection.mode = 'DISCARD_SELECT';
+    }
+    renderAll();
+  });
+
+  document.getElementById('btnConfirmDiscard').addEventListener('click', () => {
+    if (uiSelection.discardSet.size === 0) return;
+    const cardUids = [...uiSelection.discardSet];
+    resetSelectionState();
+    dispatchPlayerAction({ type: 'DISCARD_CARDS', cardUids });
+  });
+
+  document.getElementById('btnEndTurn').addEventListener('click', () => {
+    if (gameState.phase === 'STEP1_PLAY_OR_DISCARD' && isLocalPlayerTurn(gameState)) {
+      endPlayPhaseAndSettleTurn();
+    }
+  });
+
+  document.getElementById('btnOpenGallery').addEventListener('click', () => {
+    renderGallery('ALL');
+    document.getElementById('galleryModal').classList.remove('hidden');
+  });
+  document.getElementById('btnCloseGallery').addEventListener('click', () => {
+    document.getElementById('galleryModal').classList.add('hidden');
+  });
+  document.querySelectorAll('.gallery-tab').forEach(btn => {
+    btn.addEventListener('click', () => {
+      document.querySelectorAll('.gallery-tab').forEach(b => {
+        b.classList.remove('bg-indigo-600', 'text-white');
+        b.classList.add('bg-slate-800', 'text-slate-300');
+      });
+      btn.classList.remove('bg-slate-800', 'text-slate-300');
+      btn.classList.add('bg-indigo-600', 'text-white');
+      renderGallery(btn.getAttribute('data-gallery-filter'));
+    });
+  });
+
+  document.getElementById('btnOpenRules').addEventListener('click', () => {
+    document.getElementById('rulesModal').classList.remove('hidden');
+  });
+  document.getElementById('btnCloseRules').addEventListener('click', () => {
+    document.getElementById('rulesModal').classList.add('hidden');
+  });
+
+  document.getElementById('btnToggleMute').addEventListener('click', (e) => {
+    isMuted = !isMuted;
+    e.currentTarget.textContent = isMuted ? '🔇' : '🔊';
+  });
+
+  document.getElementById('btnOpenLobby').addEventListener('click', () => {
+    renderLobbyUI();
+    document.getElementById('lobbyModal').classList.remove('hidden');
+  });
+  document.getElementById('btnCloseLobby').addEventListener('click', () => {
+    document.getElementById('lobbyModal').classList.add('hidden');
+  });
+
+  // Lobby Mode Tabs
+  document.querySelectorAll('[data-lobby-tab]').forEach(btn => {
+    btn.addEventListener('click', () => {
+      const tab = btn.getAttribute('data-lobby-tab');
+      activeLobbyTab = tab;
+      if (tab === 'HOST' && (gameSession.mode !== 'HOST' || !gameSession.roomCode)) {
+        createOnlineHostRoom();
+      } else if (tab === 'SOLO') {
+        gameSession.mode = 'SOLO';
+      }
+      renderLobbyUI();
+    });
+  });
+
+  document.getElementById('selectPlayerCount')?.addEventListener('change', () => {
+    if (gameSession.mode === 'HOST') {
+      gameSession.lobbyState.playerCount = parseInt(document.getElementById('selectPlayerCount').value, 10) || 3;
+      renderLobbyUI();
+    }
+  });
+
+  document.getElementById('btnCopyRoomCode')?.addEventListener('click', () => {
+    if (!gameSession.roomCode) return;
+    copyTextSafe(gameSession.roomCode, `📋 已複製房間碼【${gameSession.roomCode}】！`);
+  });
+
+  document.getElementById('btnCopyInviteLink')?.addEventListener('click', () => {
+    if (!gameSession.roomCode) return;
+    const baseUrl = window.location.href.split('?')[0];
+    const inviteUrl = `${baseUrl}?room=${gameSession.roomCode}`;
+    copyTextSafe(inviteUrl, `🔗 已複製邀請連結！傳給朋友打開即可自動入房。`);
+  });
+
+  document.getElementById('btnAddSimulatedHuman')?.addEventListener('click', () => {
+    addSimulatedHumanSeatInRoom();
+  });
+
+  document.getElementById('btnConnectJoinRoom')?.addEventListener('click', () => {
+    const code = document.getElementById('inputJoinRoomCode')?.value || '';
+    const nick = document.getElementById('inputPlayerNickname')?.value || gameSession.playerName;
+    joinOnlineRoomAsClient(code, nick);
+  });
+
+  document.getElementById('btnStartWithDraft').addEventListener('click', () => startMatchFromLobby(false));
+  document.getElementById('btnStartQuickMatch').addEventListener('click', () => startMatchFromLobby(true));
+  document.getElementById('btnPlayAgain').addEventListener('click', () => {
+    document.getElementById('gameOverModal').classList.add('hidden');
+    renderLobbyUI();
+    document.getElementById('lobbyModal').classList.remove('hidden');
+  });
+
+  document.getElementById('btnCloseInspector').addEventListener('click', () => {
+    document.getElementById('inspectorModal').classList.add('hidden');
+  });
+}
+if (document.readyState === 'loading') {
+  window.addEventListener('DOMContentLoaded', initAppOnLoad);
+} else {
+  initAppOnLoad();
+}
+
+window.playSynchronizedVfxEvent = playSynchronizedVfxEvent;
+window.renderAll = renderAll;
+window.renderLobbyUI = renderLobbyUI;
+window.resetSelectionState = resetSelectionState;
+window.showGameOverModal = showGameOverModal;
