@@ -844,3 +844,17 @@
       .sm\:w-\[196px\] { width: 196px; }
       .sm\:h-\[184px\] { height: 184px; }
     }
+
+    /* === V13.2 Compact Hand Cards, Tight Stage & Settings Menu Utilities === */
+    .w-\[92px\] { width: 92px; }
+    .w-\[152px\] { width: 152px; }
+    .h-\[118px\] { height: 118px; }
+    .w-3\.5 { width: 0.875rem; }
+    .h-3\.5 { height: 0.875rem; }
+    .max-w-sm { max-width: 24rem; }
+    @media (min-width: 640px) {
+      .sm\:inline-flex { display: inline-flex; }
+      .sm\:w-\[128px\] { width: 128px; }
+      .sm\:w-\[200px\] { width: 200px; }
+      .sm\:h-\[164px\] { height: 164px; }
+    }
