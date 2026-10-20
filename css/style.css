@@ -337,14 +337,17 @@
     .vfx-floating-number {
       position: fixed;
       z-index: 9999;
-      pointer-events: none;
+      pointer-events: none !important;
       font-weight: 900;
-      font-size: 1.25rem;
-      padding: 0.28rem 0.75rem;
+      font-size: 0.75rem;
+      padding: 0.18rem 0.55rem;
+      max-width: 82vw;
+      overflow: hidden;
+      text-overflow: ellipsis;
       border-radius: 9999px;
       white-space: nowrap;
-      box-shadow: 0 10px 26px rgba(0,0,0,0.92);
-      animation: floatUpFade var(--float-num-dur, 2.2s) cubic-bezier(0.16, 1, 0.3, 1) forwards;
+      box-shadow: 0 6px 18px rgba(0,0,0,0.9);
+      animation: floatUpFade var(--float-num-dur, 1.35s) cubic-bezier(0.16, 1, 0.3, 1) forwards;
     }
 
     /* 6. Shockwave Ring on Target Impact */
@@ -484,31 +487,31 @@
     }
     .vfx-vs-duel-banner {
       position: fixed;
-      top: 24%;
+      top: 18%;
       left: 50%;
       z-index: 9995;
       pointer-events: none !important;
-      width: 96%;
-      max-width: 384px;
-      border-radius: 1.15rem;
-      padding: 0.85rem 0.85rem;
-      background: linear-gradient(135deg, rgba(12, 18, 36, 0.99) 0%, rgba(76, 11, 26, 0.99) 50%, rgba(12, 18, 36, 0.99) 100%);
-      backdrop-filter: blur(10px);
-      -webkit-backdrop-filter: blur(10px);
-      box-shadow: 0 22px 50px rgba(0,0,0,0.95), 0 0 32px rgba(244, 63, 94, 0.75);
-      animation: duelBannerHold var(--duel-banner-dur, 2.6s) cubic-bezier(0.16, 1, 0.3, 1) forwards;
+      width: 94%;
+      max-width: 368px;
+      border-radius: 0.85rem;
+      padding: 0.45rem 0.65rem;
+      background: linear-gradient(135deg, rgba(12, 18, 36, 0.97) 0%, rgba(76, 11, 26, 0.97) 50%, rgba(12, 18, 36, 0.97) 100%);
+      backdrop-filter: blur(8px);
+      -webkit-backdrop-filter: blur(8px);
+      box-shadow: 0 14px 32px rgba(0,0,0,0.92), 0 0 20px rgba(244, 63, 94, 0.65);
+      animation: duelBannerHold var(--duel-banner-dur, 1.85s) cubic-bezier(0.16, 1, 0.3, 1) forwards;
     }
     .vfx-endpoint-tag {
       position: fixed;
       z-index: 9994;
       pointer-events: none !important;
       transform: translate(-50%, -50%);
-      padding: 0.22rem 0.6rem;
+      padding: 0.12rem 0.45rem;
       border-radius: 9999px;
-      font-size: 11px;
+      font-size: 10px;
       font-weight: 900;
       white-space: nowrap;
-      box-shadow: 0 6px 16px rgba(0,0,0,0.9);
+      box-shadow: 0 4px 12px rgba(0,0,0,0.88);
     }
     .opacity-75 { opacity: 0.75; }
     .opacity-85 { opacity: 0.85; }
@@ -830,4 +833,14 @@
       box-shadow: 0 12px 28px rgba(0,0,0,0.85);
       pointer-events: none;
       transition: opacity 0.25s ease;
+    }
+
+    /* === V13.1 Mobile Portrait Ergonomic Spacing & Waiting Room Utilities === */
+    .w-\[106px\] { width: 106px; }
+    .w-\[148px\] { width: 148px; }
+    .h-\[140px\] { height: 140px; }
+    @media (min-width: 640px) {
+      .sm\:w-\[142px\] { width: 142px; }
+      .sm\:w-\[196px\] { width: 196px; }
+      .sm\:h-\[184px\] { height: 184px; }
     }
