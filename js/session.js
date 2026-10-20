@@ -8,7 +8,7 @@ let lastPlayedVfxSeq = 0;
 
 function loadStoredString(storageKind, key, fallback) {
   try {
-    const st = storageKind === 'session' ? 'session' : 'local';
+    const st = storageKind === 'session' ? window.sessionStorage : window.localStorage;
     const val = st.getItem(key);
     return val || fallback;
   } catch (e) {
@@ -18,7 +18,7 @@ function loadStoredString(storageKind, key, fallback) {
 
 function saveStoredString(storageKind, key, val) {
   try {
-    const st = storageKind === 'session' ? 'session' : 'local';
+    const st = storageKind === 'session' ? window.sessionStorage : window.localStorage;
     st.setItem(key, val);
   } catch (e) {}
 }
@@ -49,31 +49,31 @@ const gameSession = {
   localSeatId: 'p1',
   playerName: initialPlayerName,
   clientToken: initialClientToken,
+  hasSimulatedHotSeat: false, // Only true when Host explicitly clicks "+ 同機模擬真人"
   peer: null,
   peerStatus: 'OFFLINE', // 'OFFLINE' | 'CONNECTING' | 'ONLINE' | 'BC_READY'
   peerConns: {}, // seatId -> PeerJS DataConnection
   clientHostConn: null, // Client's PeerJS connection to Host
   bc: null, // BroadcastChannel for zero-latency multi-tab play
-  hostMasterState: null, // Authoritative unmasked state on Host
+  hostMasterState: null, // Authoritative unmasked state on Host (null while waiting in Lobby!)
   lobbyState: {
     roomCode: '',
     playerCount: 3,
     playDiscardMode: 'STRICT_EITHER',
     fogOfWar: true,
-    allowHotSeatSwap: true,
     matchStarted: false,
     seats: [
       { id: 'p1', name: initialPlayerName + ' (房主)', role: 'HOST', isAI: false, connected: true, clientToken: initialClientToken },
       { id: 'p2', name: '等待玩家加入...', role: 'OPEN', isAI: false, connected: false, clientToken: null },
-      { id: 'p3', name: '鮮血女王・莉莉絲', role: 'AI', isAI: true, connected: true, clientToken: null },
-      { id: 'p4', name: '深淵暴君・阿薩謝爾', role: 'AI', isAI: true, connected: true, clientToken: null }
+      { id: 'p3', name: '鮮血女王・莉莉絲 (AI)', role: 'AI', isAI: true, connected: true, clientToken: null },
+      { id: 'p4', name: '深淵暴君・阿薩謝爾 (AI)', role: 'AI', isAI: true, connected: true, clientToken: null }
     ]
   }
 };
 
 window.gameSession = gameSession;
 
-function showToast(msg, durationMs = 2600) {
+function showToast(msg, durationMs = 2400) {
   const existing = document.querySelectorAll('.toast-notification');
   existing.forEach(el => el.remove());
   const toast = document.createElement('div');
@@ -129,25 +129,70 @@ function openBroadcastChannelForRoom(roomCode) {
   }
 }
 
+// Syncs Host nickname & lobby controls into lobbyState and broadcasts to waiting clients
+function syncHostLobbySettingsFromInputs() {
+  const nickInput = document.getElementById('inputPlayerNickname');
+  if (nickInput && nickInput.value.trim()) {
+    gameSession.playerName = nickInput.value.trim();
+    saveStoredString('local', 'dbr_v13_player_name', gameSession.playerName);
+  }
+  if (gameSession.mode === 'HOST') {
+    if (gameSession.lobbyState.seats[0]) {
+      gameSession.lobbyState.seats[0].name = `${gameSession.playerName} (房主)`;
+    }
+    const pCountEl = document.getElementById('selectPlayerCount');
+    if (pCountEl) {
+      gameSession.lobbyState.playerCount = parseInt(pCountEl.value, 10) || 3;
+    }
+    const ruleRadio = document.querySelector('input[name="playDiscardRule"]:checked');
+    if (ruleRadio) {
+      gameSession.lobbyState.playDiscardMode = ruleRadio.value;
+    }
+    const fogChk = document.getElementById('chkFogOfWar');
+    if (fogChk) {
+      gameSession.lobbyState.fogOfWar = fogChk.checked;
+    }
+    broadcastLobbyState();
+  }
+}
+
 // === Host: Create Online Room ===
 function createOnlineHostRoom(customCode = null) {
   cleanupNetworkChannels();
+  const nickInput = document.getElementById('inputPlayerNickname');
+  if (nickInput && nickInput.value.trim()) {
+    gameSession.playerName = nickInput.value.trim();
+    saveStoredString('local', 'dbr_v13_player_name', gameSession.playerName);
+  }
+
   const code = (customCode ? String(customCode).trim().toUpperCase() : generateRandomCode(4));
   gameSession.mode = 'HOST';
   gameSession.roomCode = code;
   gameSession.localSeatId = 'p1';
-  gameSession.lobbyState.roomCode = code;
-  gameSession.lobbyState.matchStarted = false;
-  gameSession.lobbyState.seats = [
-    { id: 'p1', name: `${gameSession.playerName} (房主)`, role: 'HOST', isAI: false, connected: true, clientToken: gameSession.clientToken },
-    { id: 'p2', name: '等待真人加入...', role: 'OPEN', isAI: false, connected: false, clientToken: null },
-    { id: 'p3', name: '鮮血女王・莉莉絲 (AI)', role: 'AI', isAI: true, connected: true, clientToken: null },
-    { id: 'p4', name: '深淵暴君・阿薩謝爾 (AI)', role: 'AI', isAI: true, connected: true, clientToken: null }
-  ];
+  gameSession.hasSimulatedHotSeat = false;
+  // Critical: clear hostMasterState while in Lobby so joining clients stay in the Waiting Room until Host clicks Start!
+  gameSession.hostMasterState = null;
+
+  const pCount = parseInt(document.getElementById('selectPlayerCount')?.value, 10) || 3;
+  const ruleRadio = document.querySelector('input[name="playDiscardRule"]:checked');
+  const fogChk = document.getElementById('chkFogOfWar');
+
+  gameSession.lobbyState = {
+    roomCode: code,
+    playerCount: pCount,
+    playDiscardMode: ruleRadio ? ruleRadio.value : 'STRICT_EITHER',
+    fogOfWar: fogChk ? fogChk.checked : true,
+    matchStarted: false,
+    seats: [
+      { id: 'p1', name: `${gameSession.playerName} (房主)`, role: 'HOST', isAI: false, connected: true, clientToken: gameSession.clientToken },
+      { id: 'p2', name: '等待真人加入...', role: 'OPEN', isAI: false, connected: false, clientToken: null },
+      { id: 'p3', name: '鮮血女王・莉莉絲 (AI)', role: 'AI', isAI: true, connected: true, clientToken: null },
+      { id: 'p4', name: '深淵暴君・阿薩謝爾 (AI)', role: 'AI', isAI: true, connected: true, clientToken: null }
+    ]
+  };
 
   openBroadcastChannelForRoom(code);
 
-  // Initialize PeerJS if available in browser
   if (typeof window.Peer !== 'undefined') {
     try {
       gameSession.peerStatus = 'CONNECTING';
@@ -179,7 +224,7 @@ function createOnlineHostRoom(customCode = null) {
   }
 
   if (typeof renderLobbyUI === 'function') renderLobbyUI();
-  showToast(`🌐 已建立連線房間【${code}】！可分享房間碼或開啟新分頁加入。`);
+  showToast(`🌐 已建立連線房間【${code}】！等待玩家加入後點擊下方開局。`);
 }
 
 // === Client: Join Online Room ===
@@ -197,6 +242,9 @@ function joinOnlineRoomAsClient(rawCode, playerName) {
   cleanupNetworkChannels();
   gameSession.mode = 'CLIENT';
   gameSession.roomCode = code;
+  gameSession.hasSimulatedHotSeat = false;
+  gameSession.lobbyState.roomCode = code;
+  gameSession.lobbyState.matchStarted = false;
   gameSession.peerStatus = 'CONNECTING';
   if (typeof renderLobbyUI === 'function') renderLobbyUI();
 
@@ -207,13 +255,13 @@ function joinOnlineRoomAsClient(rawCode, playerName) {
     playerName: gameSession.playerName
   };
 
-  // 1. Always open BroadcastChannel (instant same-browser multi-tab sync)
+  // 1. BroadcastChannel for instant same-browser multi-tab sync
   openBroadcastChannelForRoom(code);
   if (gameSession.bc) {
     gameSession.bc.postMessage(helloPacket);
   }
 
-  // 2. Also connect via PeerJS WebRTC for cross-device / internet play
+  // 2. PeerJS WebRTC for cross-device / internet play
   if (typeof window.Peer !== 'undefined') {
     try {
       const peer = new window.Peer();
@@ -230,7 +278,7 @@ function joinOnlineRoomAsClient(rawCode, playerName) {
           handleIncomingNetworkPacket(data, 'PEER', conn);
         });
         conn.on('close', () => {
-          showToast('⚠️ 與房主的 PeerJS 連線已中斷，可點擊重新連線。');
+          showToast('⚠️ 與房主的連線已中斷，可重新點擊連線入房。');
         });
       });
       peer.on('error', () => {
@@ -254,7 +302,7 @@ function handlePeerDisconnect(conn) {
   if (lobbySeat) {
     lobbySeat.connected = false;
   }
-  if (gameSession.hostMasterState) {
+  if (gameSession.lobbyState.matchStarted && gameSession.hostMasterState) {
     const pl = gameSession.hostMasterState.players.find(p => p.id === seatId);
     if (pl) {
       pl.connected = false;
@@ -290,7 +338,7 @@ function toggleHostLobbySeatRole(seatId) {
   if (typeof renderLobbyUI === 'function') renderLobbyUI();
 }
 
-// === Host: Simulate Local Human Seat in Current Window (Hot-Seat / Canvas Test Helper) ===
+// === Host: Simulate Local Human Seat in Current Window (Hot-Seat / Single-Window Test Helper) ===
 function addSimulatedHumanSeatInRoom() {
   if (gameSession.mode !== 'HOST') {
     createOnlineHostRoom();
@@ -305,11 +353,12 @@ function addSimulatedHumanSeatInRoom() {
   openSeat.role = 'HUMAN';
   openSeat.isAI = false;
   openSeat.connected = true;
-  openSeat.name = `連線魔王・玩家${seatNum}`;
+  openSeat.name = `同機玩家${seatNum}`;
   openSeat.clientToken = `sim_tk_${openSeat.id}`;
+  gameSession.hasSimulatedHotSeat = true;
   broadcastLobbyState();
   if (typeof renderLobbyUI === 'function') renderLobbyUI();
-  showToast(`👤 已將座位【${openSeat.id.toUpperCase()}】設為真人玩家「${openSeat.name}」！開局後可於頂部一鍵切換視角。`);
+  showToast(`👤 已新增同機測試席位【${openSeat.id.toUpperCase()}】！開局後頂部將顯示視角切換列。`);
 }
 
 // === Host: Toggle Disconnected Player AI Takeover Mid-Game ===
@@ -351,13 +400,11 @@ function broadcastLobbyState() {
 }
 
 function broadcastHostState() {
-  if (gameSession.mode !== 'HOST' || !gameSession.hostMasterState) return;
+  if (gameSession.mode !== 'HOST' || !gameSession.lobbyState.matchStarted || !gameSession.hostMasterState) return;
   const master = gameSession.hostMasterState;
 
-  // Update Host's own view state (respecting current localSeatId in case Host uses perspective switcher)
   gameState = sanitizeStateForSeat(master, getLocalPlayerId());
 
-  // Play latest VFX on Host if new
   if (master.lastVfxEvent && master.lastVfxEvent.seq > lastPlayedVfxSeq) {
     lastPlayedVfxSeq = master.lastVfxEvent.seq;
     if (typeof playSynchronizedVfxEvent === 'function') {
@@ -365,7 +412,6 @@ function broadcastHostState() {
     }
   }
 
-  // Send per-seat sanitized state to PeerJS clients
   Object.entries(gameSession.peerConns).forEach(([seatId, conn]) => {
     if (conn && conn.open) {
       try {
@@ -379,7 +425,6 @@ function broadcastHostState() {
     }
   });
 
-  // Broadcast per-seat state map on BroadcastChannel so multi-tab clients receive their exact sanitized view
   if (gameSession.bc) {
     const viewsBySeat = {};
     master.players.forEach(p => {
@@ -412,19 +457,20 @@ function handleIncomingNetworkPacket(packet, transport, peerConn) {
       const { clientToken, playerName } = packet;
       const pCount = gameSession.lobbyState.playerCount;
       const activeSeats = gameSession.lobbyState.seats.slice(0, pCount);
+      const isMatchRunning = Boolean(gameSession.lobbyState.matchStarted && gameSession.hostMasterState);
 
       // 1. Check if returning client reconnecting with same clientToken
       let assignedSeat = activeSeats.find(s => s.clientToken && s.clientToken === clientToken);
 
-      // 2. Otherwise find first OPEN seat, or convert an AI seat to HUMAN if no OPEN seat
+      // 2. Otherwise find first OPEN seat, or convert an AI seat to HUMAN if match hasn't started yet
       if (!assignedSeat) {
         assignedSeat = activeSeats.find(s => s.id !== 'p1' && s.role === 'OPEN');
       }
-      if (!assignedSeat && !gameSession.lobbyState.matchStarted) {
+      if (!assignedSeat && !isMatchRunning) {
         assignedSeat = activeSeats.find(s => s.id !== 'p1' && s.role === 'AI');
       }
       // 3. Or allow claiming a disconnected human seat mid-game
-      if (!assignedSeat && gameSession.lobbyState.matchStarted) {
+      if (!assignedSeat && isMatchRunning) {
         assignedSeat = activeSeats.find(s => s.id !== 'p1' && !s.isAI && !s.connected);
       }
 
@@ -450,15 +496,15 @@ function handleIncomingNetworkPacket(packet, transport, peerConn) {
         gameSession.peerConns[assignedSeat.id] = peerConn;
       }
 
-      // If match already started, update player info in hostMasterState
-      if (gameSession.hostMasterState) {
+      // Only mutate live game state if the Host has ALREADY started the match (mid-game reconnect)
+      if (isMatchRunning) {
         const pl = gameSession.hostMasterState.players.find(p => p.id === assignedSeat.id);
         if (pl) {
           pl.name = assignedSeat.name;
           pl.isAI = false;
           pl.isOnlineHuman = true;
           pl.connected = true;
-          addLog(gameSession.hostMasterState, `🌐 玩家【${pl.name}】已連線入座 (${assignedSeat.id.toUpperCase()})！`);
+          addLog(gameSession.hostMasterState, `🌐 玩家【${pl.name}】已重新連線入座 (${assignedSeat.id.toUpperCase()})！`);
         }
       }
 
@@ -468,17 +514,18 @@ function handleIncomingNetworkPacket(packet, transport, peerConn) {
         targetToken: clientToken,
         assignedSeatId: assignedSeat.id,
         lobbyState: gameSession.lobbyState,
-        state: gameSession.hostMasterState ? sanitizeStateForSeat(gameSession.hostMasterState, assignedSeat.id) : null
+        // Crucial: null while waiting in Lobby, non-null only if reconnecting to an already-started match!
+        state: isMatchRunning ? sanitizeStateForSeat(gameSession.hostMasterState, assignedSeat.id) : null
       };
 
       if (peerConn && peerConn.open) peerConn.send(acceptPacket);
       if (gameSession.bc) gameSession.bc.postMessage(acceptPacket);
 
       broadcastLobbyState();
-      if (gameSession.hostMasterState) {
+      if (isMatchRunning) {
         broadcastHostState();
       }
-      showToast(`🎉 玩家【${assignedSeat.name}】已加入座位 ${assignedSeat.id.toUpperCase()}！`);
+      showToast(`🎉 玩家【${assignedSeat.name}】已入座 ${assignedSeat.id.toUpperCase()}！`);
       return;
     }
 
@@ -496,16 +543,19 @@ function handleIncomingNetworkPacket(packet, transport, peerConn) {
       viewedPlayerId = packet.assignedSeatId;
       gameSession.lobbyState = packet.lobbyState;
       gameSession.peerStatus = transport === 'PEER' ? 'ONLINE' : 'BC_READY';
-      if (packet.state) {
+
+      // Only transition to board if the match has ALREADY started; otherwise stay in the Lobby Waiting Room!
+      if (packet.lobbyState && packet.lobbyState.matchStarted && packet.state) {
         gameState = packet.state;
         lastPlayedVfxSeq = packet.state.vfxSeq || 0;
-        const lobbyModal = document.getElementById('lobbyModal');
-        if (lobbyModal) lobbyModal.classList.add('hidden');
+        document.getElementById('lobbyModal')?.classList.add('hidden');
         if (typeof renderAll === 'function') renderAll();
+        showToast(`✅ 已重連返回房間【${gameSession.roomCode}】牌桌 (${packet.assignedSeatId.toUpperCase()})！`);
       } else {
+        document.getElementById('lobbyModal')?.classList.remove('hidden');
         if (typeof renderLobbyUI === 'function') renderLobbyUI();
+        showToast(`✅ 成功入座房間【${gameSession.roomCode}】座位 ${packet.assignedSeatId.toUpperCase()}！請等待房主啟動對局。`);
       }
-      showToast(`✅ 成功加入房間【${gameSession.roomCode}】！你的座位為 ${packet.assignedSeatId.toUpperCase()}`);
       return;
     }
 
@@ -516,6 +566,9 @@ function handleIncomingNetworkPacket(packet, transport, peerConn) {
 
     if (packet.msgType === 'LOBBY_SYNC') {
       gameSession.lobbyState = packet.lobbyState;
+      if (!gameSession.lobbyState.matchStarted) {
+        document.getElementById('lobbyModal')?.classList.remove('hidden');
+      }
       if (typeof renderLobbyUI === 'function') renderLobbyUI();
       return;
     }
@@ -537,10 +590,13 @@ function handleIncomingNetworkPacket(packet, transport, peerConn) {
 
 function applyClientReceivedState(newState) {
   if (!newState) return;
-  const wasInLobby = !document.getElementById('lobbyModal')?.classList.contains('hidden');
+  gameSession.lobbyState.matchStarted = true;
+  const lobbyModal = document.getElementById('lobbyModal');
+  const wasInLobby = lobbyModal && !lobbyModal.classList.contains('hidden');
   if (wasInLobby) {
-    document.getElementById('lobbyModal').classList.add('hidden');
+    lobbyModal.classList.add('hidden');
     viewedPlayerId = gameSession.localSeatId;
+    showToast(`⚔️ 房主已啟動對局！你的座位為 ${gameSession.localSeatId.toUpperCase()}`);
   }
   gameState = newState;
 
@@ -575,7 +631,6 @@ function dispatchPlayerAction(action) {
     });
     return;
   }
-  // SOLO or HOST mode
   const actorSeatId = getLocalPlayerId();
   handleHostReceiveAction(actorSeatId, action);
 }
@@ -672,7 +727,6 @@ function authoritativePlayCard(state, action) {
   const card = CARDS_BY_ID[action.cardUid];
   if (!card) return;
 
-  // Validate card playability on authoritative state
   const status = evaluateCardPlayability(state, player, card.uid);
   if (!status.playable) return;
 
@@ -883,7 +937,7 @@ function authoritativePlayCard(state, action) {
   syncMasterStateToClientsAndRender();
 
   if (!player.isAI && state.turn.actionsUsed >= state.turn.maxActions) {
-    const settleDelay = (typeof animSpeedMultiplier !== 'undefined' && animSpeedMultiplier === 2) ? 1100 : 2100;
+    const settleDelay = (typeof animSpeedMultiplier !== 'undefined' && animSpeedMultiplier === 2) ? 1050 : 1900;
     clearTimeout(aiTimer);
     aiTimer = setTimeout(() => authoritativeSettleAndAdvanceTurn(state), settleDelay);
   }
@@ -914,7 +968,7 @@ function authoritativeDiscardCards(state, cardUids) {
   syncMasterStateToClientsAndRender();
 
   if (state.config.playDiscardMode === 'STRICT_EITHER' || state.turn.actionsUsed >= state.turn.maxActions) {
-    const settleDelay = (typeof animSpeedMultiplier !== 'undefined' && animSpeedMultiplier === 2) ? 800 : 1400;
+    const settleDelay = (typeof animSpeedMultiplier !== 'undefined' && animSpeedMultiplier === 2) ? 750 : 1300;
     clearTimeout(aiTimer);
     aiTimer = setTimeout(() => authoritativeSettleAndAdvanceTurn(state), settleDelay);
   }
@@ -974,8 +1028,8 @@ function authoritativeSettleAndAdvanceTurn(state) {
   syncMasterStateToClientsAndRender();
 
   const speedMult = (typeof animSpeedMultiplier !== 'undefined') ? animSpeedMultiplier : 1;
-  const handoffDelay = speedMult === 2 ? 950 : 1850;
-  const postHandoffWait = speedMult === 2 ? 1400 : 2650;
+  const handoffDelay = speedMult === 2 ? 900 : 1650;
+  const postHandoffWait = speedMult === 2 ? 1250 : 2300;
 
   aiTimer = setTimeout(() => {
     const activeState = getActiveMasterState();
@@ -1033,7 +1087,7 @@ function checkAndScheduleHostAI(customDelayMs = null) {
   if (state.phase === 'INITIAL_DRAFT') {
     const picker = state.players[state.draft.pickerIndex];
     if (picker && picker.isAI) {
-      scheduleNextAITick(customDelayMs || 950);
+      scheduleNextAITick(customDelayMs || 900);
     }
   } else if (state.phase === 'STEP1_PLAY_OR_DISCARD') {
     const active = state.players[state.turn.activePlayerIndex];
@@ -1049,7 +1103,7 @@ function scheduleNextAITick(customDelayMs = null) {
   const speedMult = (typeof animSpeedMultiplier !== 'undefined') ? animSpeedMultiplier : 1;
   const delay = customDelayMs !== null
     ? customDelayMs
-    : (speedMult === 2 ? 1600 : 3100);
+    : (speedMult === 2 ? 1400 : 2500);
   aiTimer = setTimeout(() => runAIStep(), delay);
 }
 
@@ -1222,30 +1276,19 @@ function runAIStep() {
 // === Start Match from Lobby (Solo or Host Online) ===
 function startMatchFromLobby(quickStart = false) {
   clearTimeout(aiTimer);
-  const pCount = parseInt(document.getElementById('selectPlayerCount')?.value, 10) || gameSession.lobbyState.playerCount || 3;
-  const ruleRadio = document.querySelector('input[name="playDiscardRule"]:checked');
-  const mode = ruleRadio ? ruleRadio.value : gameSession.lobbyState.playDiscardMode;
-  const fogCheckbox = document.getElementById('chkFogOfWar');
-  const fogOfWar = fogCheckbox ? fogCheckbox.checked : true;
+  syncHostLobbySettingsFromInputs();
 
-  const nameInput = document.getElementById('inputPlayerNickname');
-  if (nameInput && nameInput.value.trim()) {
-    gameSession.playerName = nameInput.value.trim();
-    saveStoredString('local', 'dbr_v13_player_name', gameSession.playerName);
-  }
-
-  gameSession.lobbyState.playerCount = pCount;
-  gameSession.lobbyState.playDiscardMode = mode;
-  gameSession.lobbyState.fogOfWar = fogOfWar;
+  const pCount = gameSession.lobbyState.playerCount || 3;
+  const mode = gameSession.lobbyState.playDiscardMode || 'STRICT_EITHER';
+  const fogOfWar = gameSession.lobbyState.fogOfWar;
 
   if (gameSession.mode === 'HOST') {
     gameSession.lobbyState.seats[0].name = `${gameSession.playerName} (房主)`;
-    // Any seat still left as 'OPEN' when Host clicks Start is automatically filled by Smart AI so the match starts smoothly!
     const customSeats = gameSession.lobbyState.seats.slice(0, pCount).map((s, idx) => {
       if (s.role === 'OPEN') {
         return {
           id: s.id,
-          name: DEFAULT_AI_NAMES[idx - 1] + ' (AI補位)',
+          name: DEFAULT_AI_NAMES[idx - 1] + ' (AI)',
           isAI: true,
           connected: true
         };
@@ -1259,6 +1302,7 @@ function startMatchFromLobby(quickStart = false) {
     });
 
     gameSession.lobbyState.matchStarted = true;
+    gameSession.localSeatId = 'p1';
     gameSession.hostMasterState = createInitialGameState(pCount, mode, quickStart, customSeats, fogOfWar);
     lastPlayedVfxSeq = 0;
     if (typeof resetSelectionState === 'function') resetSelectionState();
@@ -1268,10 +1312,10 @@ function startMatchFromLobby(quickStart = false) {
     broadcastHostState();
     checkAndScheduleHostAI();
   } else {
-    // SOLO mode
     cleanupNetworkChannels();
     gameSession.mode = 'SOLO';
     gameSession.localSeatId = 'p1';
+    gameSession.hasSimulatedHotSeat = false;
     const soloSeats = [
       { id: 'p1', name: `${gameSession.playerName} (你)`, isAI: false, connected: true },
       { id: 'p2', name: DEFAULT_AI_NAMES[0], isAI: true, connected: true },
@@ -1279,7 +1323,7 @@ function startMatchFromLobby(quickStart = false) {
       { id: 'p4', name: DEFAULT_AI_NAMES[2], isAI: true, connected: true }
     ].slice(0, pCount);
     gameState = createInitialGameState(pCount, mode, quickStart, soloSeats, false);
-    gameSession.hostMasterState = gameState;
+    gameSession.hostMasterState = null;
     lastPlayedVfxSeq = 0;
     if (typeof resetSelectionState === 'function') resetSelectionState();
     document.getElementById('lobbyModal')?.classList.add('hidden');
@@ -1301,10 +1345,11 @@ function switchLocalSeatPerspective(newSeatId) {
   if (typeof resetSelectionState === 'function') resetSelectionState();
   if (typeof renderAll === 'function') renderAll();
   const pl = master.players.find(p => p.id === newSeatId);
-  showToast(`👁️ 已切換操控視角至【${pl ? pl.name : newSeatId.toUpperCase()}】（底牌與第一人稱主城已同步切換）`);
+  showToast(`👁️ 已切換操控視角至【${pl ? pl.name : newSeatId.toUpperCase()}】`);
 }
 
 window.showToast = showToast;
+window.syncHostLobbySettingsFromInputs = syncHostLobbySettingsFromInputs;
 window.createOnlineHostRoom = createOnlineHostRoom;
 window.joinOnlineRoomAsClient = joinOnlineRoomAsClient;
 window.toggleHostLobbySeatRole = toggleHostLobbySeatRole;

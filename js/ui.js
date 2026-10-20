@@ -5,11 +5,14 @@
 window.lastFlippedDeptKey = null;
 let animSpeedMultiplier = 1; // 1 = 1x, 2 = 2x
 
-// Returns the exact DOM selector for any player relative to the local player's perspective:
-// - Local Player (mySeatId): anchored at Bottom (#myHeroStatusBar)
-// - Opponents: anchored at Top ([data-seat-tab="pX"])
 function getPlayerAnchorSelector(playerId) {
   return playerId === getLocalPlayerId() ? '#myHeroStatusBar' : `[data-seat-tab="${playerId}"]`;
+}
+
+function clearDuelBannersVFX() {
+  const root = document.getElementById('vfxOverlayRoot');
+  if (!root) return;
+  root.querySelectorAll('.vfx-vs-duel-banner, .vfx-cutin-banner').forEach(el => el.remove());
 }
 
 function spawnTargetingArrowVFX(fromSelector, toSelector, colorHex = '#f43f5e', actionLabel = '⚔️攻擊') {
@@ -23,17 +26,18 @@ function spawnTargetingArrowVFX(fromSelector, toSelector, colorHex = '#f43f5e', 
   const r2 = toEl.getBoundingClientRect();
   if (r1.width === 0 || r2.width === 0) return;
 
-  const x1 = r1.left + r1.width / 2;
+  const vw = window.innerWidth || 375;
+  const x1 = Math.max(48, Math.min(vw - 48, r1.left + r1.width / 2));
   const y1 = r1.top + r1.height / 2;
-  const x2 = r2.left + r2.width / 2;
+  const x2 = Math.max(48, Math.min(vw - 48, r2.left + r2.width / 2));
   const y2 = r2.top + r2.height / 2;
 
   const mx = (x1 + x2) / 2;
   const my = (y1 + y2) / 2;
   const dx = x2 - x1;
   const dy = y2 - y1;
-  const cx = mx + (Math.abs(dy) > Math.abs(dx) ? (dx >= 0 ? 38 : -38) : 0);
-  const cy = my - (Math.abs(dx) >= Math.abs(dy) ? 42 : 0);
+  const cx = mx + (Math.abs(dy) > Math.abs(dx) ? (dx >= 0 ? 32 : -32) : 0);
+  const cy = my - (Math.abs(dx) >= Math.abs(dy) ? 34 : 0);
 
   const svgNS = 'http://www.w3.org/2000/svg';
   const svg = document.createElementNS(svgNS, 'svg');
@@ -47,12 +51,12 @@ function spawnTargetingArrowVFX(fromSelector, toSelector, colorHex = '#f43f5e', 
   const markerId = 'arrow_' + Math.random().toString(36).slice(2, 8);
   svg.innerHTML = `
     <defs>
-      <marker id="${markerId}" viewBox="0 0 10 10" refX="7" refY="5" markerWidth="7" markerHeight="7" orient="auto-start-reverse">
+      <marker id="${markerId}" viewBox="0 0 10 10" refX="7" refY="5" markerWidth="6.5" markerHeight="6.5" orient="auto-start-reverse">
         <path d="M 0 1 L 10 5 L 0 9 z" fill="${colorHex}" />
       </marker>
     </defs>
-    <path d="M ${x1} ${y1} Q ${cx} ${cy} ${x2} ${y2}" fill="none" stroke="${colorHex}" stroke-width="8" stroke-opacity="0.28" stroke-linecap="round" />
-    <path d="M ${x1} ${y1} Q ${cx} ${cy} ${x2} ${y2}" fill="none" stroke="${colorHex}" stroke-width="3.5" stroke-linecap="round" class="vfx-laser-path" marker-end="url(#${markerId})" />
+    <path d="M ${x1} ${y1} Q ${cx} ${cy} ${x2} ${y2}" fill="none" stroke="${colorHex}" stroke-width="6" stroke-opacity="0.25" stroke-linecap="round" />
+    <path d="M ${x1} ${y1} Q ${cx} ${cy} ${x2} ${y2}" fill="none" stroke="${colorHex}" stroke-width="3" stroke-linecap="round" class="vfx-laser-path" marker-end="url(#${markerId})" />
   `;
   root.appendChild(svg);
 
@@ -63,28 +67,24 @@ function spawnTargetingArrowVFX(fromSelector, toSelector, colorHex = '#f43f5e', 
   startTag.textContent = actionLabel;
   root.appendChild(startTag);
 
-  const endTag = document.createElement('div');
-  endTag.className = 'vfx-endpoint-tag bg-rose-600 text-white border-2 border-white';
-  endTag.style.left = `${x2}px`;
-  endTag.style.top = `${y2}px`;
-  endTag.textContent = '🎯目標';
-  root.appendChild(endTag);
-
-  const duration = animSpeedMultiplier === 2 ? 1400 : 2600;
+  const duration = animSpeedMultiplier === 2 ? 1050 : 1750;
   setTimeout(() => {
     svg.remove();
     startTag.remove();
-    endTag.remove();
   }, duration);
 }
 
+// Compact Single-Band Tactical HUD Banner (Never blocks central cards or Mode D target drawer!)
 function showVsDuelBanner(attackerName, cardIcon, cardTitle, defenderName, effectDesc, isSelfBuff = false, actorId = null, defenderId = null) {
+  // Do not show banner over Mode D Target Drawer if local player is actively picking a target
+  if (uiSelection.mode === 'MODE_D_SELECT') return;
+
   const root = document.getElementById('vfxOverlayRoot');
   if (!root) return;
-  root.querySelectorAll('.vfx-vs-duel-banner, .vfx-cutin-banner').forEach(el => el.remove());
+  clearDuelBannersVFX();
 
   const myId = getLocalPlayerId();
-  const duration = animSpeedMultiplier === 2 ? 1400 : 2600;
+  const duration = animSpeedMultiplier === 2 ? 1050 : 1850;
   const banner = document.createElement('div');
   banner.className = 'vfx-vs-duel-banner border-2 ' + (isSelfBuff ? 'border-emerald-400' : 'border-rose-400');
   banner.style.setProperty('--duel-banner-dur', `${duration}ms`);
@@ -92,49 +92,42 @@ function showVsDuelBanner(attackerName, cardIcon, cardTitle, defenderName, effec
   const isAtkMe = (actorId && actorId === myId) || (!actorId && attackerName && attackerName.includes('你'));
   const isDefMe = (defenderId && defenderId === myId) || (!defenderId && defenderName && defenderName.includes('你'));
 
-  const shortAtk = isAtkMe ? '👑 我方主帥' : ('😈 ' + getShortPlayerName(attackerName));
-  const shortDef = defenderName ? (isDefMe ? '👑 我方主帥' : ('😈 ' + getShortPlayerName(defenderName))) : '';
+  const shortAtk = isAtkMe ? '👑我方' : ('😈' + getShortPlayerName(attackerName));
+  const shortDef = defenderName ? (isDefMe ? '👑我方' : ('😈' + getShortPlayerName(defenderName))) : '';
 
   if (isSelfBuff) {
-    banner.style.background = 'linear-gradient(135deg, rgba(6, 78, 59, 0.99) 0%, rgba(15, 23, 42, 0.99) 100%)';
-    banner.style.boxShadow = '0 22px 50px rgba(0,0,0,0.95), 0 0 32px rgba(16, 185, 129, 0.75)';
+    banner.style.background = 'linear-gradient(135deg, rgba(6, 78, 59, 0.96) 0%, rgba(15, 23, 42, 0.98) 100%)';
+    banner.style.boxShadow = '0 14px 32px rgba(0,0,0,0.92), 0 0 20px rgba(16, 185, 129, 0.6)';
     banner.innerHTML = `
-      <div class="flex items-center justify-between gap-2.5">
-        <div class="px-3 py-2 rounded-xl bg-slate-950/95 border-2 border-emerald-400 text-center shrink-0 shadow-lg">
-          <div class="text-[10px] text-emerald-300 font-extrabold">⚡ 施法者</div>
-          <div class="text-sm sm:text-base font-black text-white mt-0.5">${shortAtk}</div>
-        </div>
-        <div class="text-amber-400 font-black text-base shrink-0">━━►</div>
-        <div class="flex-1 flex items-center gap-2.5 bg-slate-950/90 rounded-xl px-3 py-2 border border-emerald-500/40 min-w-0 shadow-lg">
-          <span class="text-3xl leading-none shrink-0">${cardIcon}</span>
-          <div class="min-w-0 flex-1">
-            <div class="text-sm sm:text-base font-black text-emerald-300 truncate">${cardTitle}</div>
-            <div class="text-xs font-bold text-white truncate mt-0.5">${effectDesc}</div>
+      <div class="flex items-center justify-between gap-2 min-w-0">
+        <span class="px-2 py-1 rounded-lg bg-slate-950 border border-emerald-400 text-xs font-black text-emerald-300 whitespace-nowrap shrink-0">${shortAtk}</span>
+        <span class="text-amber-400 font-black text-xs shrink-0">▸</span>
+        <div class="flex-1 flex items-center justify-between gap-1.5 bg-slate-950/90 rounded-lg px-2 py-1 border border-emerald-500/40 min-w-0">
+          <div class="flex items-center gap-1 min-w-0">
+            <span class="text-base leading-none shrink-0">${cardIcon}</span>
+            <span class="text-xs font-black text-white truncate">${cardTitle}</span>
           </div>
+          <span class="text-[11px] font-extrabold text-emerald-300 truncate shrink-0">${effectDesc}</span>
         </div>
       </div>
     `;
   } else {
     banner.innerHTML = `
-      <div class="flex flex-col gap-1.5">
-        <div class="flex items-center justify-between px-1">
-          <span class="px-2 py-0.5 rounded-full bg-rose-600 text-white text-[10px] font-black">⚔️ 戰術交鋒快訊</span>
-          <span class="text-[10px] font-bold text-amber-300">請留意紅線箭頭指向</span>
+      <div class="flex items-center justify-between gap-1.5 min-w-0">
+        <div class="px-2 py-1 rounded-lg bg-slate-950 border border-amber-400 text-center shrink-0">
+          <div class="text-[9px] text-amber-300 font-bold leading-none">⚔️攻方</div>
+          <div class="text-xs font-black text-white mt-0.5 whitespace-nowrap">${shortAtk}</div>
         </div>
-        <div class="grid grid-cols-3 items-stretch gap-2 text-center">
-          <div class="rounded-xl bg-slate-950/95 border-2 border-amber-400 px-2 py-2 flex flex-col justify-center min-w-0 shadow-lg">
-            <div class="text-[10px] font-extrabold text-amber-300">⚔️ 攻擊方</div>
-            <div class="text-sm sm:text-base font-black text-white truncate mt-0.5">${shortAtk}</div>
+        <div class="flex-1 rounded-lg bg-rose-950/95 border border-rose-400 px-2 py-1 flex items-center justify-between gap-1.5 min-w-0">
+          <div class="flex items-center gap-1 min-w-0">
+            <span class="text-base leading-none shrink-0">${cardIcon}</span>
+            <span class="text-xs font-black text-amber-300 truncate">${cardTitle}</span>
           </div>
-          <div class="rounded-xl bg-rose-950/95 border-2 border-rose-400 px-1.5 py-2 flex flex-col items-center justify-center min-w-0 shadow-lg">
-            <div class="text-xl leading-none">${cardIcon}</div>
-            <div class="text-xs sm:text-sm font-black text-amber-300 truncate w-full mt-0.5">${cardTitle}</div>
-            <div class="text-[11px] font-extrabold text-white bg-rose-600/90 px-1.5 py-0.5 rounded mt-1 truncate w-full">${effectDesc}</div>
-          </div>
-          <div class="rounded-xl bg-slate-950/95 border-2 border-rose-400 px-2 py-2 flex flex-col justify-center min-w-0 shadow-lg">
-            <div class="text-[10px] font-extrabold text-rose-300">🎯 受擊目標</div>
-            <div class="text-sm sm:text-base font-black text-white truncate mt-0.5">${shortDef}</div>
-          </div>
+          <span class="px-1.5 py-0.5 rounded bg-rose-600 text-[10px] font-black text-white whitespace-nowrap shrink-0">${effectDesc}</span>
+        </div>
+        <div class="px-2 py-1 rounded-lg bg-slate-950 border border-rose-400 text-center shrink-0">
+          <div class="text-[9px] text-rose-300 font-bold leading-none">🎯目標</div>
+          <div class="text-xs font-black text-white mt-0.5 whitespace-nowrap">${shortDef}</div>
         </div>
       </div>
     `;
@@ -149,7 +142,7 @@ function showTurnHandoverBanner(player, roundNumber) {
   if (!root) return;
   root.querySelectorAll('.vfx-turn-handover-backdrop, .vfx-turn-handover').forEach(el => el.remove());
 
-  const duration = animSpeedMultiplier === 2 ? 1250 : 2300;
+  const duration = animSpeedMultiplier === 2 ? 1150 : 2000;
   const isMe = player.id === getLocalPlayerId();
   const burn = getPlayerBurnRate(player);
   const crisisReq = getCrisisTotalEngineerReq(player);
@@ -166,8 +159,8 @@ function showTurnHandoverBanner(player, roundNumber) {
   });
   const avatarSrc = repEmp ? GPT_MINI_AVATAR[repEmp.tplId] : null;
   const avatarHTML = avatarSrc
-    ? `<img src="${avatarSrc}" class="w-16 h-16 rounded-full object-cover border-2 ${isMe ? 'border-emerald-300' : 'border-amber-300'} shadow-2xl mx-auto" style="width:64px;height:64px;object-position:center 18%;" />`
-    : `<div class="w-16 h-16 rounded-full bg-slate-950 border-2 ${isMe ? 'border-emerald-300' : 'border-amber-300'} flex items-center justify-center text-3xl mx-auto shadow-2xl" style="width:64px;height:64px;">${isMe ? '👑' : '😈'}</div>`;
+    ? `<img src="${avatarSrc}" class="w-14 h-14 rounded-full object-cover border-2 ${isMe ? 'border-emerald-300' : 'border-amber-300'} shadow-2xl mx-auto" style="width:56px;height:56px;object-position:center 18%;" />`
+    : `<div class="w-14 h-14 rounded-full bg-slate-950 border-2 ${isMe ? 'border-emerald-300' : 'border-amber-300'} flex items-center justify-center text-2xl mx-auto shadow-2xl" style="width:56px;height:56px;">${isMe ? '👑' : '😈'}</div>`;
 
   const backdrop = document.createElement('div');
   backdrop.className = 'vfx-turn-handover-backdrop';
@@ -175,14 +168,14 @@ function showTurnHandoverBanner(player, roundNumber) {
 
   backdrop.innerHTML = `
     <div class="vfx-turn-handover border-2 ${isMe ? 'border-emerald-400' : 'border-amber-400'}" style="--turn-banner-dur: ${duration}ms;">
-      <div class="inline-flex items-center gap-1 px-3 py-0.5 rounded-full ${isMe ? 'bg-emerald-950 border border-emerald-400 text-emerald-300' : 'bg-amber-950/90 border border-amber-400 text-amber-300'} text-xs font-black mb-2">
+      <div class="inline-flex items-center gap-1 px-3 py-0.5 rounded-full ${isMe ? 'bg-emerald-950 border border-emerald-400 text-emerald-300' : 'bg-amber-950/90 border border-amber-400 text-amber-300'} text-xs font-black mb-1.5">
         ⏳ 第 ${roundNumber} 回合・回合交接
       </div>
       ${avatarHTML}
-      <div class="text-xl sm:text-2xl font-black text-white mt-2 leading-tight">
+      <div class="text-lg sm:text-xl font-black text-white mt-1.5 leading-tight">
         ${isMe ? `👑 輪到【${player.name}】行動！` : `😈 輪到【${player.name}】行動！`}
       </div>
-      <div class="grid grid-cols-3 gap-1.5 mt-3 bg-slate-950/90 p-2 rounded-xl border border-slate-700">
+      <div class="grid grid-cols-3 gap-1.5 mt-2.5 bg-slate-950/90 p-2 rounded-xl border border-slate-700">
         <div class="flex flex-col items-center">
           <span class="text-[10px] text-slate-400 font-bold">魔晶儲備</span>
           <span class="text-sm font-black text-emerald-400 mt-0.5">💎 ${player.crystals}</span>
@@ -195,9 +188,6 @@ function showTurnHandoverBanner(player, roundNumber) {
           <span class="text-[10px] text-slate-400 font-bold">討伐危機</span>
           <span class="text-sm font-black text-amber-300 mt-0.5">⚠️ ${player.crises.length} (需${crisisReq})</span>
         </div>
-      </div>
-      <div class="text-xs font-bold ${isMe ? 'text-emerald-200' : 'text-amber-200'} mt-2.5">
-        ${isMe ? '✨ 請從下方手牌點選施放或棄牌（最多 4 張額度）' : '⚡ 對手正在施展法術，請留意頂部席位與攻擊指向！'}
       </div>
     </div>
   `;
@@ -215,23 +205,30 @@ function spawnShockwaveVFX(x, y, colorHex = '#fbbf24') {
   ring.style.borderColor = colorHex;
   ring.style.boxShadow = `0 0 18px ${colorHex}`;
   root.appendChild(ring);
-  setTimeout(() => ring.remove(), 600);
+  setTimeout(() => ring.remove(), 550);
 }
 
-function spawnFloatingNumberVFX(targetSelectorOrEl, text, bgClass = 'bg-emerald-600 text-white border-2 border-emerald-300') {
+// Clamped Floating Combat Badge (Never overflows left/right screen edge & floats above status numbers!)
+function spawnFloatingNumberVFX(targetSelectorOrEl, text, bgClass = 'bg-emerald-600 text-white border border-emerald-300') {
   const root = document.getElementById('vfxOverlayRoot');
   if (!root) return;
   const el = typeof targetSelectorOrEl === 'string' ? document.querySelector(targetSelectorOrEl) : targetSelectorOrEl;
-  let x = window.innerWidth / 2;
-  let y = window.innerHeight * 0.28;
+  const vw = window.innerWidth || 375;
+  const vh = window.innerHeight || 667;
+  let x = vw / 2;
+  let y = vh * 0.25;
   if (el) {
     const rect = el.getBoundingClientRect();
     if (rect.width > 0) {
       x = rect.left + rect.width / 2;
-      y = rect.top + rect.height / 2;
+      // Anchor near the top border of the seat/status bar so it floats upward away from crystal/burn counters
+      y = Math.max(38, rect.top + 8);
     }
   }
-  const duration = animSpeedMultiplier === 2 ? 1200 : 2200;
+  // Clamp horizontal position so long badges never clip off screen edges
+  x = Math.max(82, Math.min(vw - 82, x));
+
+  const duration = animSpeedMultiplier === 2 ? 850 : 1350;
   const badge = document.createElement('div');
   badge.className = `vfx-floating-number ${bgClass}`;
   badge.style.setProperty('--float-num-dur', `${duration}ms`);
@@ -264,22 +261,22 @@ function spawnFlyingCardVFX(fromSelector, toSelector, labelText, iconEmoji, bord
 
   const flyer = document.createElement('div');
   flyer.style.position = 'fixed';
-  flyer.style.left = `${startX - 42}px`;
-  flyer.style.top = `${startY - 58}px`;
-  flyer.style.width = '84px';
-  flyer.style.height = '116px';
-  flyer.style.borderRadius = '0.65rem';
+  flyer.style.left = `${startX - 36}px`;
+  flyer.style.top = `${startY - 48}px`;
+  flyer.style.width = '72px';
+  flyer.style.height = '96px';
+  flyer.style.borderRadius = '0.55rem';
   flyer.style.background = '#0f172a';
   flyer.style.border = `2px solid ${borderColorHex}`;
-  flyer.style.boxShadow = `0 12px 28px rgba(0,0,0,0.85), 0 0 18px ${borderColorHex}`;
+  flyer.style.boxShadow = `0 10px 22px rgba(0,0,0,0.85), 0 0 14px ${borderColorHex}`;
   flyer.style.zIndex = '9992';
   flyer.style.display = 'flex';
   flyer.style.flexDirection = 'column';
   flyer.style.alignItems = 'center';
   flyer.style.justifyContent = 'center';
-  flyer.style.padding = '4px';
-  flyer.style.transition = 'transform 0.48s cubic-bezier(0.22, 1, 0.36, 1), opacity 0.48s ease';
-  flyer.innerHTML = `<div class="text-2xl">${iconEmoji}</div><div class="text-[10px] font-black text-white text-center mt-1 leading-tight">${labelText}</div>`;
+  flyer.style.padding = '3px';
+  flyer.style.transition = 'transform 0.44s cubic-bezier(0.22, 1, 0.36, 1), opacity 0.44s ease';
+  flyer.innerHTML = `<div class="text-xl">${iconEmoji}</div><div class="text-[9px] font-black text-white text-center mt-0.5 leading-tight truncate w-full">${labelText}</div>`;
   root.appendChild(flyer);
 
   requestAnimationFrame(() => {
@@ -291,8 +288,8 @@ function spawnFlyingCardVFX(fromSelector, toSelector, labelText, iconEmoji, bord
   setTimeout(() => {
     spawnShockwaveVFX(endX, endY, borderColorHex);
     flyer.style.opacity = '0';
-    setTimeout(() => flyer.remove(), 180);
-  }, 460);
+    setTimeout(() => flyer.remove(), 160);
+  }, 420);
 }
 
 function triggerHitShakeOnPlayer(playerId) {
@@ -333,13 +330,13 @@ function playSynchronizedVfxEvent(ev) {
   if (ev.vfxType === 'SETTLE_BURN') {
     playSfx('burn');
     const actorAnchor = getPlayerAnchorSelector(ev.actorId);
-    spawnFloatingNumberVFX(actorAnchor, `🔥供品 -${ev.burnAmount} 💎`, 'bg-rose-700 text-white border-2 border-amber-300');
+    spawnFloatingNumberVFX(actorAnchor, `🔥供品 -${ev.burnAmount} 💎`, 'bg-rose-700 text-white border border-amber-300');
     showVsDuelBanner(
       ev.actorName,
       '🔥',
-      `回合末供品結算 -${ev.burnAmount} 💎`,
+      `回合供品 -${ev.burnAmount}💎`,
       null,
-      `${ev.wasDouble ? '雙倍暴動×2！' : ''}結算後剩餘 💎 ${ev.remainingCrystals}`,
+      `${ev.wasDouble ? '雙倍×2·' : ''}剩 💎${ev.remainingCrystals}`,
       true,
       ev.actorId,
       null
@@ -366,73 +363,73 @@ function playSynchronizedVfxEvent(ev) {
   if (ev.effect === 'GAIN_FUNDS') {
     playSfx('coin');
     spawnFlyingCardVFX(actorAnchor, actorSelfAnchor, ev.cardTitle, '💎', '#34d399');
-    showVsDuelBanner(ev.actorName, '💎', ev.cardTitle, null, `金庫入帳 +${ev.val} 💎 (現有 ${ev.crystals})`, true, ev.actorId, null);
-    spawnFloatingNumberVFX(actorSelfAnchor, `+${ev.val} 💎`, 'bg-emerald-600 text-white border-2 border-emerald-300');
+    showVsDuelBanner(ev.actorName, '💎', ev.cardTitle, null, `+${ev.val}💎 (現${ev.crystals})`, true, ev.actorId, null);
+    spawnFloatingNumberVFX(actorSelfAnchor, `+${ev.val} 💎`, 'bg-emerald-600 text-white border border-emerald-300');
   } else if (ev.effect === 'RELEASE_CRISIS') {
     playSfx('card');
     spawnFlyingCardVFX(actorAnchor, actorSelfAnchor, '鎮壓危機', '🍾', '#38bdf8');
-    showVsDuelBanner(ev.actorName, '🍾', '鎮壓危機', null, `成功解除「${ev.crisisTitle}」(省苦工×${ev.crisisVal})`, true, ev.actorId, null);
-    spawnFloatingNumberVFX(actorSelfAnchor, `🍾危機 -1`, 'bg-sky-600 text-white border-2 border-sky-300');
+    showVsDuelBanner(ev.actorName, '🍾', '鎮壓危機', null, `解除「${ev.crisisTitle}」`, true, ev.actorId, null);
+    spawnFloatingNumberVFX(actorSelfAnchor, `🍾危機 -1`, 'bg-sky-600 text-white border border-sky-300');
   } else if (ev.effect === 'HIRE_BANK') {
     playSfx('card');
-    spawnTargetingArrowVFX(`[data-open-bank-dept="${ev.dept}"]`, actorSelfAnchor, '#38bdf8', '🏛️人才池');
+    spawnTargetingArrowVFX(`[data-open-bank-dept="${ev.dept}"]`, actorSelfAnchor, '#38bdf8', '🏛️招募');
     spawnFlyingCardVFX(`[data-open-bank-dept="${ev.dept}"]`, actorSelfAnchor, ev.empTitle, '🤝', '#38bdf8');
-    showVsDuelBanner(ev.actorName, '🤝', `契約召喚：${ev.empTitle}`, null, `自人才池加入【${DEPT_META[ev.dept].short}】`, true, ev.actorId, null);
-    spawnFloatingNumberVFX(actorSelfAnchor, `🤝+${ev.empTitle}`, 'bg-indigo-600 text-white border-2 border-sky-300');
+    showVsDuelBanner(ev.actorName, '🤝', `召喚：${ev.empTitle}`, null, `加入${DEPT_META[ev.dept].short}`, true, ev.actorId, null);
+    spawnFloatingNumberVFX(actorSelfAnchor, `🤝+${ev.empTitle}`, 'bg-indigo-600 text-white border border-sky-300');
   } else if (ev.effect === 'FIRE_OWN') {
     playSfx('attack');
     spawnFlyingCardVFX(actorSelfAnchor, `[data-open-bank-dept="${ev.dept}"]`, ev.empTitle, '🚪', '#f59e0b');
-    showVsDuelBanner(ev.actorName, '🚪', `${ev.isVP ? '雙卡' : ''}獻祭遣散`, null, `遣散【${ev.empTitle}】(省💎-${ev.empSalary}/回)`, true, ev.actorId, null);
-    spawnFloatingNumberVFX(actorSelfAnchor, `🚪遣散 ${ev.empTitle}`, 'bg-amber-600 text-white border-2 border-amber-300');
+    showVsDuelBanner(ev.actorName, '🚪', `${ev.isVP ? '雙卡' : ''}獻祭遣散`, null, `遣散${ev.empTitle}`, true, ev.actorId, null);
+    spawnFloatingNumberVFX(actorSelfAnchor, `🚪遣散 ${ev.empTitle}`, 'bg-amber-600 text-white border border-amber-300');
   } else if (ev.effect === 'BAD_IDEA') {
     playSfx('attack');
-    spawnTargetingArrowVFX(actorSelfAnchor, oppAnchor, '#f43f5e', `⚔️${ev.actorId === myId ? '我方' : getShortPlayerName(ev.actorName)}攻`);
+    spawnTargetingArrowVFX(actorSelfAnchor, oppAnchor, '#f43f5e', `⚔️${ev.actorId === myId ? '我方' : getShortPlayerName(ev.actorName)}`);
     spawnFlyingCardVFX(actorAnchor, oppAnchor, ev.cardTitle, '⚔️', '#f43f5e');
-    showVsDuelBanner(ev.actorName, '⚔️', ev.cardTitle, ev.targetName, `需苦工 ⚒×${ev.val}`, false, ev.actorId, ev.targetPlayerId);
+    showVsDuelBanner(ev.actorName, '⚔️', ev.cardTitle, ev.targetName, `需苦工×${ev.val}`, false, ev.actorId, ev.targetPlayerId);
     setTimeout(() => {
       triggerHitShakeOnPlayer(ev.targetPlayerId);
-      spawnFloatingNumberVFX(oppAnchor, `⚠️危機 ×${ev.val}`, 'bg-rose-600 text-white border-2 border-white');
-    }, 280);
+      spawnFloatingNumberVFX(oppAnchor, `⚠️危機 ×${ev.val}`, 'bg-rose-600 text-white border border-white');
+    }, 240);
   } else if (ev.effect === 'FORCE_HIRE') {
     playSfx('attack');
-    spawnTargetingArrowVFX(actorSelfAnchor, oppAnchor, '#f43f5e', `🪤強塞魔物`);
+    spawnTargetingArrowVFX(actorSelfAnchor, oppAnchor, '#f43f5e', `🪤強塞`);
     spawnFlyingCardVFX(`[data-open-bank-dept="${ev.dept}"]`, oppAnchor, ev.empTitle, '🪤', '#f43f5e');
-    showVsDuelBanner(ev.actorName, '🪤', `強塞：${ev.empTitle}`, ev.targetName, `強制塞入${DEPT_META[ev.dept].short}(扣💎-${ev.empSalary})`, false, ev.actorId, ev.targetPlayerId);
+    showVsDuelBanner(ev.actorName, '🪤', `強塞：${ev.empTitle}`, ev.targetName, `塞入${DEPT_META[ev.dept].short}`, false, ev.actorId, ev.targetPlayerId);
     setTimeout(() => {
       triggerHitShakeOnPlayer(ev.targetPlayerId);
-      spawnFloatingNumberVFX(oppAnchor, `🪤強塞 ${ev.empTitle}`, 'bg-rose-600 text-white border-2 border-amber-300');
-    }, 280);
+      spawnFloatingNumberVFX(oppAnchor, `🪤強塞 ${ev.empTitle}`, 'bg-rose-600 text-white border border-amber-300');
+    }, 240);
   } else if (ev.effect === 'POACH_ENEMY') {
     playSfx('attack');
-    spawnTargetingArrowVFX(actorSelfAnchor, oppAnchor, '#c084fc', `🕸️魅惑挖角`);
+    spawnTargetingArrowVFX(actorSelfAnchor, oppAnchor, '#c084fc', `🕸️挖角`);
     spawnFlyingCardVFX(oppAnchor, actorSelfAnchor, ev.empTitle, '🕸️', '#c084fc');
-    showVsDuelBanner(ev.actorName, '🕸️', `挖角：${ev.empTitle}`, ev.targetName, `奪取【${ev.empTitle}】！`, false, ev.actorId, ev.targetPlayerId);
+    showVsDuelBanner(ev.actorName, '🕸️', `挖角：${ev.empTitle}`, ev.targetName, `奪取${ev.empTitle}`, false, ev.actorId, ev.targetPlayerId);
     setTimeout(() => {
       triggerHitShakeOnPlayer(ev.targetPlayerId);
-      spawnFloatingNumberVFX(oppAnchor, `💔被挖 ${ev.empTitle}`, 'bg-purple-800 text-white border-2 border-rose-300');
-    }, 260);
+      spawnFloatingNumberVFX(oppAnchor, `💔被挖 ${ev.empTitle}`, 'bg-purple-800 text-white border border-rose-300');
+    }, 220);
   } else if (ev.effect === 'VP_KICK_ENEMY') {
     playSfx('attack');
-    spawnTargetingArrowVFX(actorSelfAnchor, oppAnchor, '#c084fc', `⚡皇室放逐`);
+    spawnTargetingArrowVFX(actorSelfAnchor, oppAnchor, '#c084fc', `⚡放逐`);
     spawnFlyingCardVFX(actorAnchor, oppAnchor, ev.cardTitle, '⚡', '#c084fc');
-    showVsDuelBanner(ev.actorName, '⚡', ev.cardTitle, ev.targetName, `放逐皇室【${ev.empTitle}】`, false, ev.actorId, ev.targetPlayerId);
+    showVsDuelBanner(ev.actorName, '⚡', ev.cardTitle, ev.targetName, `放逐${ev.empTitle}`, false, ev.actorId, ev.targetPlayerId);
     setTimeout(() => {
       triggerHitShakeOnPlayer(ev.targetPlayerId);
-      spawnFloatingNumberVFX(oppAnchor, `⚡放逐 ${ev.empTitle}`, 'bg-purple-700 text-white border-2 border-amber-300');
-    }, 280);
+      spawnFloatingNumberVFX(oppAnchor, `⚡放逐 ${ev.empTitle}`, 'bg-purple-700 text-white border border-amber-300');
+    }, 240);
   } else if (ev.effect === 'VP_DOUBLE_PAY') {
     playSfx('burn');
-    spawnTargetingArrowVFX(actorSelfAnchor, oppAnchor, '#f43f5e', `🔥雙倍供品`);
+    spawnTargetingArrowVFX(actorSelfAnchor, oppAnchor, '#f43f5e', `🔥雙倍`);
     spawnFlyingCardVFX(actorAnchor, oppAnchor, ev.cardTitle, '🔥', '#f43f5e');
-    showVsDuelBanner(ev.actorName, '🔥', '魔界工會暴動', ev.targetName, `下回總供品翻倍(×2)！`, false, ev.actorId, ev.targetPlayerId);
+    showVsDuelBanner(ev.actorName, '🔥', '魔界工會暴動', ev.targetName, `下回供品×2`, false, ev.actorId, ev.targetPlayerId);
     setTimeout(() => {
       triggerHitShakeOnPlayer(ev.targetPlayerId);
-      spawnFloatingNumberVFX(oppAnchor, `🔥供品 ×2 詛咒!`, 'bg-rose-700 text-amber-300 border-2 border-amber-300');
-    }, 280);
+      spawnFloatingNumberVFX(oppAnchor, `🔥供品 ×2 詛咒!`, 'bg-rose-700 text-amber-300 border border-amber-300');
+    }, 240);
   } else if (ev.effect === 'VP_MASS_LAYOFF') {
     playSfx('burn');
-    showVsDuelBanner(ev.actorName, '🩸', '血祭大掃除', null, `一口氣遣散 ${ev.layoffCount} 名部下`, true, ev.actorId, null);
-    spawnFloatingNumberVFX(actorSelfAnchor, `🩸裁員 ${ev.layoffCount}人`, 'bg-purple-700 text-white border-2 border-amber-300');
+    showVsDuelBanner(ev.actorName, '🩸', '血祭大掃除', null, `遣散 ${ev.layoffCount} 人`, true, ev.actorId, null);
+    spawnFloatingNumberVFX(actorSelfAnchor, `🩸裁員 ${ev.layoffCount}人`, 'bg-purple-700 text-white border border-amber-300');
   }
 }
 
@@ -497,6 +494,7 @@ function renderEmployeeCardHTML(empUid, extraClasses = '', badgeLabel = '') {
   `;
 }
 
+// Ergonomic Mobile Hand Card (w-[106px] h-[140px] on mobile -> fits 3+ cards & keeps bottom buttons 100% visible)
 function renderActionCardHTML(actUid, extraClasses = '', playStatus = null, isSelected = false, isDiscardChecked = false) {
   const c = CARDS_BY_ID[actUid];
   if (!c) return '';
@@ -510,39 +508,39 @@ function renderActionCardHTML(actUid, extraClasses = '', playStatus = null, isSe
     const pills = [0, 1, 2, 3].map(num => {
       const active = c.reqSkills.includes(num);
       return active
-        ? `<span class="w-4 h-4 rounded-full bg-slate-950 border border-white text-white text-[10px] font-black flex items-center justify-center shadow">${num}</span>`
+        ? `<span class="w-4 h-4 rounded-full bg-slate-950 border border-white text-white text-[9px] font-black flex items-center justify-center shadow">${num}</span>`
         : `<span class="w-4 h-4 rounded-full bg-black/30 text-white/40 text-[9px] flex items-center justify-center">${num}</span>`;
     }).join('');
     reqBarHTML = `<div class="flex items-center justify-center gap-0.5">${pills}</div>`;
   }
 
   const valueBadge = c.effect === 'GAIN_FUNDS'
-    ? `<span class="px-1.5 py-0.5 rounded bg-emerald-950 border border-emerald-400 text-[11px] font-black text-emerald-300 mt-0.5">+${c.val} 💎</span>`
+    ? `<span class="px-1.5 py-0.5 rounded bg-emerald-950 border border-emerald-400 text-[10px] font-black text-emerald-300 mt-0.5">+${c.val} 💎</span>`
     : c.effect === 'BAD_IDEA'
-    ? `<span class="text-[9px] font-black text-amber-300 bg-rose-950/90 px-1.5 py-0.5 rounded border border-rose-500/50 mt-0.5">需苦工 ⚒×${c.val}</span>`
+    ? `<span class="text-[9px] font-black text-amber-300 bg-rose-950/90 px-1 py-0.5 rounded border border-rose-500/50 mt-0.5">需苦工 ⚒×${c.val}</span>`
     : '';
 
   const lockFooterHTML = (playStatus && !playStatus.playable && uiSelection.mode !== 'DISCARD_SELECT')
-    ? `<div class="bg-rose-950/90 border-t border-rose-500/50 px-1 py-1 text-center min-w-0">
-         <span class="text-[10px] font-extrabold text-rose-200 block truncate">🔒 ${playStatus.shortReason}</span>
+    ? `<div class="bg-rose-950/90 border-t border-rose-500/50 px-1 py-0.5 text-center min-w-0">
+         <span class="text-[9px] font-extrabold text-rose-200 block truncate">🔒 ${playStatus.shortReason}</span>
        </div>`
-    : `<div class="bg-slate-950/90 border-t border-slate-800 px-1.5 py-1 min-w-0">
-         <p class="text-[10px] text-slate-300 leading-tight text-center">${c.desc}</p>
+    : `<div class="bg-slate-950/90 border-t border-slate-800 px-1 py-0.5 min-w-0">
+         <p class="text-[9px] text-slate-300 leading-tight text-center truncate">${c.desc}</p>
        </div>`;
 
   return `
-    <div data-act-uid="${c.uid}" class="w-[116px] sm:w-[148px] h-[166px] sm:h-[190px] rounded-xl ${isAttack ? 'spell-card-sigil-atk' : 'spell-card-sigil'} border-2 ${meta.border} ${c.dept === 'PURPLE' ? 'vp-card-frame' : ''} ${(playStatus && playStatus.playable && uiSelection.mode !== 'DISCARD_SELECT') ? 'playable-card-glow' : ''} overflow-hidden flex flex-col justify-between text-left shadow-xl cursor-pointer relative shrink-0 snap-start ${extraClasses} ${isSelected ? 'selected-card' : ''}">
-      <div class="${meta.color} px-1.5 py-1 flex flex-col items-center gap-0.5 relative min-w-0">
-        <div class="w-full flex items-center justify-between text-[10px] font-extrabold text-white gap-0.5 min-w-0">
+    <div data-act-uid="${c.uid}" class="w-[106px] sm:w-[142px] h-[140px] sm:h-[184px] rounded-xl ${isAttack ? 'spell-card-sigil-atk' : 'spell-card-sigil'} border-2 ${meta.border} ${c.dept === 'PURPLE' ? 'vp-card-frame' : ''} ${(playStatus && playStatus.playable && uiSelection.mode !== 'DISCARD_SELECT') ? 'playable-card-glow' : ''} overflow-hidden flex flex-col justify-between text-left shadow-xl cursor-pointer relative shrink-0 snap-start ${extraClasses} ${isSelected ? 'selected-card' : ''}">
+      <div class="${meta.color} px-1.5 py-0.5 flex flex-col items-center gap-0.5 relative min-w-0">
+        <div class="w-full flex items-center justify-between text-[9px] font-extrabold text-white gap-0.5 min-w-0">
           <span class="truncate">${meta.icon}${meta.short}</span>
           <span class="px-1 rounded text-[9px] whitespace-nowrap shrink-0 ${isAttack ? 'bg-rose-950 text-rose-200' : 'bg-slate-950/80 text-emerald-200'}">${isAttack ? '▲攻' : '🛡️防'}</span>
         </div>
         ${reqBarHTML}
       </div>
 
-      <div class="flex-1 px-1 py-1 flex flex-col items-center justify-center relative min-w-0">
-        <div class="text-xl leading-none">${c.svg}</div>
-        <div class="text-xs font-black ${isAttack ? 'text-rose-300' : 'text-white'} mt-0.5 text-center leading-tight truncate w-full">${c.title}</div>
+      <div class="flex-1 px-1 py-0.5 flex flex-col items-center justify-center relative min-w-0">
+        <div class="text-lg leading-none">${c.svg}</div>
+        <div class="text-[11px] font-black ${isAttack ? 'text-rose-300' : 'text-white'} mt-0.5 text-center leading-tight truncate w-full">${c.title}</div>
         ${valueBadge || `<div class="text-[9px] text-slate-400 truncate w-full text-center mt-0.5">${c.origTitle}</div>`}
       </div>
 
@@ -564,7 +562,7 @@ function resetSelectionState() {
 }
 
 /********************************************************************
- * FULL RENDERING PIPELINE (Mobile Portrait First A + D + B + V13 MP)
+ * FULL RENDERING PIPELINE (Mobile Portrait First A + D + B + V13.1)
  ********************************************************************/
 function renderAll() {
   const state = gameState;
@@ -576,35 +574,29 @@ function renderAll() {
   const viewedPlayer = state.players.find(p => p.id === viewedPlayerId) || localPlayer;
   const isMyTurnNow = isLocalPlayerTurn(state);
 
-  // 1. Top Header Status & Connection Badge
+  // 1. Compact Top Header Status (Never truncates game title!)
   document.getElementById('phaseBadge').textContent =
-    state.phase === 'INITIAL_DRAFT' ? `首輪輪抽 (${state.draft.totalPicked}/${state.draft.targetTotal})` :
-    state.phase === 'GAME_OVER' ? '對局結束' : `第${state.turn.roundNumber}回・步驟一`;
+    state.phase === 'INITIAL_DRAFT' ? `首輪 ${state.draft.totalPicked}/${state.draft.targetTotal}` :
+    state.phase === 'GAME_OVER' ? '結束' : `R${state.turn.roundNumber}`;
 
-  document.getElementById('activePlayerBadge').textContent =
-    state.phase === 'INITIAL_DRAFT'
-      ? `挑選：${state.players[state.draft.pickerIndex].name}`
-      : `行動：${activePlayer.name}`;
-
+  const ruleShort = state.config.playDiscardMode === 'STRICT_EITHER' ? '二選一' : '共用4';
   const netTag = gameSession.mode === 'SOLO'
-    ? '單機AI'
-    : `🌐房號:${gameSession.roomCode}(${myId.toUpperCase()})`;
-  document.getElementById('modeIndicatorTag').textContent =
-    `${netTag} · ${state.config.playDiscardMode === 'STRICT_EITHER' ? '標準二選一' : '共用4額度'}`;
+    ? `單機·${ruleShort}`
+    : `🌐${gameSession.roomCode}·${myId.toUpperCase()}`;
+  document.getElementById('modeIndicatorTag').textContent = netTag;
 
-  // Optional Hot-Seat / Multi-Perspective Bar when multiple human seats exist on Host
+  // Only show Hot-Seat Switcher Bar if Host explicitly added a simulated local human seat
   const perspectiveBar = document.getElementById('hotSeatSwitcherBar');
   if (perspectiveBar) {
-    const humanPlayers = state.players.filter(p => !p.isAI);
-    if (gameSession.mode !== 'CLIENT' && humanPlayers.length > 1) {
+    if (gameSession.mode !== 'CLIENT' && gameSession.hasSimulatedHotSeat) {
       perspectiveBar.classList.remove('hidden');
       perspectiveBar.innerHTML = `
-        <div class="flex items-center justify-between gap-1.5 w-full">
-          <span class="text-[10px] font-black text-amber-300 truncate">🎮 多人同機／測試視角切換（當前底牌視角：<b class="text-emerald-300">${localPlayer.name}</b>）：</span>
+        <div class="flex items-center justify-between gap-1 w-full">
+          <span class="text-[9px] font-black text-amber-300 truncate">🎮 同機視角：</span>
           <div class="flex items-center gap-1 shrink-0">
             ${state.players.map(p => `
-              <button data-switch-seat="${p.id}" class="px-2 py-0.5 rounded text-[10px] font-black border ${p.id === myId ? 'bg-emerald-500 text-slate-950 border-white shadow' : 'bg-slate-900 text-slate-300 border-slate-700'}">
-                ${p.id.toUpperCase()} ${p.isAI ? '🤖' : '👤'}${getShortPlayerName(p.name)}
+              <button data-switch-seat="${p.id}" class="px-1.5 py-0.5 rounded text-[9px] font-black border ${p.id === myId ? 'bg-emerald-500 text-slate-950 border-white shadow' : 'bg-slate-900 text-slate-300 border-slate-700'}">
+                ${p.id.toUpperCase()} ${getShortPlayerName(p.name)}
               </button>
             `).join('')}
           </div>
@@ -615,19 +607,19 @@ function renderAll() {
     }
   }
 
+  // 2-Line Compact Battle Log Ticker
   const tickerEl = document.getElementById('latestLogTicker');
   if (tickerEl) {
     const line1 = formatLogItemToTickerHTML(state.logs[0] || '', true);
     const line2 = state.logs[1] ? formatLogItemToTickerHTML(state.logs[1], false) : '';
-    const line3 = state.logs[2] ? formatLogItemToTickerHTML(state.logs[2], false) : '';
-    tickerEl.innerHTML = line1 + line2 + line3;
+    tickerEl.innerHTML = line1 + line2;
   }
 
-  // 2. ZONE 1 (TOP): Render ONLY Opponents in Clockwise Order relative to Local Player!
+  // 2. ZONE 1 (TOP): Render ONLY Opponents in Clockwise Order relative to Local Player
   const seatTabsBar = document.getElementById('seatTabsBar');
   const opponents = getClockwiseOpponents(state);
   const oppCount = opponents.length;
-  seatTabsBar.className = `w-full grid ${oppCount === 1 ? 'grid-cols-1' : oppCount === 3 ? 'grid-cols-3' : 'grid-cols-2'} gap-1.5 min-w-0`;
+  seatTabsBar.className = `w-full grid ${oppCount === 1 ? 'grid-cols-1' : oppCount === 3 ? 'grid-cols-3' : 'grid-cols-2'} gap-1 min-w-0`;
 
   seatTabsBar.innerHTML = opponents.map((pl) => {
     const idx = state.players.findIndex(p => p.id === pl.id);
@@ -635,7 +627,7 @@ function renderAll() {
     const isViewed = pl.id === viewedPlayer.id;
     const isTurn = (state.phase === 'INITIAL_DRAFT' ? state.draft.pickerIndex === idx : state.turn.activePlayerIndex === idx);
     const isNearBankrupt = !pl.isEliminated && burn > 0 && pl.crystals < burn * 2;
-    const shortName = getShortPlayerName(pl.name);
+    const cleanShortName = getShortPlayerName(pl.name).replace(/\s*\(AI.*?\)/g, '');
     const totalCrisisReq = getCrisisTotalEngineerReq(pl);
     const handCnt = typeof pl.handCount === 'number' ? pl.handCount : pl.hand.length;
 
@@ -656,31 +648,31 @@ function renderAll() {
     }
 
     const turnBadge = pl.isEliminated
-      ? `<span class="px-1.5 py-0.5 rounded bg-slate-800 text-slate-400 text-[9px] font-bold">💀破產</span>`
+      ? `<span class="px-1 py-0.5 rounded bg-slate-800 text-slate-400 text-[9px] font-bold">💀破產</span>`
       : modeDSeatState === 'VALID_TARGET'
-      ? `<span class="px-1.5 py-0.5 rounded bg-rose-600 text-white border border-white text-[9px] font-black shadow">🎯點此直擊</span>`
+      ? `<span class="px-1 py-0.5 rounded bg-rose-600 text-white border border-white text-[9px] font-black shadow">🎯直擊</span>`
       : modeDSeatState === 'IMMUNE_TARGET'
-      ? `<span class="px-1.5 py-0.5 rounded bg-slate-800 text-sky-300 border border-sky-500/50 text-[9px] font-bold">🛡️部門免疫</span>`
+      ? `<span class="px-1 py-0.5 rounded bg-slate-800 text-sky-300 border border-sky-500/50 text-[9px] font-bold">🛡️免疫</span>`
       : isTurn
-      ? `<span class="px-1.5 py-0.5 rounded bg-amber-400 text-slate-950 text-[9px] font-black shadow">⚡行動中 (${state.phase === 'INITIAL_DRAFT' ? '選牌' : `${state.turn.actionsUsed}/4`})</span>`
+      ? `<span class="px-1 py-0.5 rounded bg-amber-400 text-slate-950 text-[9px] font-black shadow">⚡${state.phase === 'INITIAL_DRAFT' ? '選牌' : `${state.turn.actionsUsed}/4`}</span>`
       : isViewed
-      ? `<span class="px-1.5 py-0.5 rounded bg-sky-500 text-slate-950 text-[9px] font-black">👁️偵察中</span>`
-      : `<span class="px-1 py-0.5 rounded bg-slate-800 text-slate-400 text-[9px] font-bold">🔍手牌${handCnt}</span>`;
+      ? `<span class="px-1 py-0.5 rounded bg-sky-500 text-slate-950 text-[9px] font-black">👁️偵察</span>`
+      : `<span class="px-1 py-0.5 rounded bg-slate-800 text-slate-400 text-[9px] font-bold">🎴${handCnt}</span>`;
 
     const activeTurnNotMe = !isMyTurnNow && !isTurn && state.phase !== 'INITIAL_DRAFT';
     const roleIcon = pl.isAI ? '😈' : '👤';
 
     return `
-      <button data-seat-tab="${pl.id}" data-mode-d-seat="${modeDSeatState || ''}" class="rounded-xl px-2 py-1 text-left transition flex flex-col justify-between border ${pl.isEliminated ? 'bg-slate-950/80 border-slate-800 opacity-40' : modeDSeatState === 'VALID_TARGET' ? 'bg-rose-950/90 border-2 border-rose-400 targetable-seat-glow' : modeDSeatState === 'IMMUNE_TARGET' ? 'bg-slate-950/80 border-slate-700 opacity-60' : isTurn ? 'bg-indigo-950/90 border-2 border-amber-400 active-turn-seat' : isViewed ? 'bg-slate-900 border-2 border-sky-400 recon-viewed-seat' : 'bg-slate-900/90 border-slate-700'} ${activeTurnNotMe ? 'opacity-75' : ''} ${isNearBankrupt ? 'danger-pulse' : ''} min-w-0">
+      <button data-seat-tab="${pl.id}" data-mode-d-seat="${modeDSeatState || ''}" class="rounded-xl px-1.5 py-1 text-left transition flex flex-col justify-between border ${pl.isEliminated ? 'bg-slate-950/80 border-slate-800 opacity-40' : modeDSeatState === 'VALID_TARGET' ? 'bg-rose-950/90 border-2 border-rose-400 targetable-seat-glow' : modeDSeatState === 'IMMUNE_TARGET' ? 'bg-slate-950/80 border-slate-700 opacity-60' : isTurn ? 'bg-indigo-950/90 border-2 border-amber-400 active-turn-seat' : isViewed ? 'bg-slate-900 border-2 border-sky-400 recon-viewed-seat' : 'bg-slate-900/90 border-slate-700'} ${activeTurnNotMe ? 'opacity-75' : ''} ${isNearBankrupt ? 'danger-pulse' : ''} min-w-0">
         <div class="flex items-center justify-between w-full gap-1 min-w-0">
-          <span class="text-xs font-black ${isTurn ? 'text-amber-300' : isViewed ? 'text-sky-300' : 'text-white'} truncate">${roleIcon} ${shortName}</span>
+          <span class="text-[11px] font-black ${isTurn ? 'text-amber-300' : isViewed ? 'text-sky-300' : 'text-white'} truncate">${roleIcon}${cleanShortName}</span>
           ${turnBadge}
         </div>
         <div class="flex items-center justify-between w-full text-[10px] mt-0.5 gap-1 min-w-0">
           <span class="font-black whitespace-nowrap"><b class="text-emerald-400">💎${pl.crystals}</b> <b class="text-rose-400">🔥-${burn}</b></span>
-          <span class="text-[9px] text-slate-300 whitespace-nowrap">⚒${pl.engineers.length} ⚠️${pl.crises.length}(需${totalCrisisReq}) 👹${pl.outsourcedCount}</span>
+          <span class="text-[9px] text-slate-300 whitespace-nowrap">⚒${pl.engineers.length} ⚠️${pl.crises.length}${totalCrisisReq > 0 ? `(${totalCrisisReq})` : ''} 👹${pl.outsourcedCount}</span>
         </div>
-        <div class="grid grid-cols-4 gap-0.5 mt-1 w-full min-w-0">
+        <div class="grid grid-cols-4 gap-0.5 mt-0.5 w-full min-w-0">
           ${skillDots}
         </div>
       </button>
@@ -691,24 +683,24 @@ function renderAll() {
   const turnActor = state.phase === 'INITIAL_DRAFT' ? state.players[state.draft.pickerIndex] : activePlayer;
   const publicTurnBanner = document.getElementById('publicTurnBanner');
   if (publicTurnBanner) {
-    publicTurnBanner.className = `w-full rounded-lg px-2 py-1 flex items-center justify-between gap-1.5 border transition min-w-0 ${isMyTurnNow ? 'bg-emerald-950/80 border-emerald-400 shadow' : 'bg-rose-950/90 border-amber-400 shadow-lg'}`;
+    publicTurnBanner.className = `w-full rounded-lg px-2 py-0.5 flex items-center justify-between gap-1.5 border transition min-w-0 ${isMyTurnNow ? 'bg-emerald-950/80 border-emerald-400 shadow' : 'bg-rose-950/90 border-amber-400 shadow'}`;
     publicTurnBanner.innerHTML = `
       <div class="flex items-center gap-1.5 min-w-0 flex-1">
         <span class="px-1.5 py-0.5 rounded text-[10px] font-black whitespace-nowrap shrink-0 ${isMyTurnNow ? 'bg-emerald-400 text-slate-950' : 'bg-amber-400 text-slate-950'}">
           ${isMyTurnNow ? '👑 我方回合' : '⚡ 對手回合'}
         </span>
-        <span class="text-xs font-black ${isMyTurnNow ? 'text-white' : 'text-amber-300'} truncate">
+        <span class="text-[11px] font-black ${isMyTurnNow ? 'text-white' : 'text-amber-300'} truncate">
           ${state.phase === 'INITIAL_DRAFT'
-            ? (isMyTurnNow ? '請從下方點選 1 張部門頂牌招募部下！' : `等待【${turnActor.name}】挑選部下 (${state.draft.totalPicked}/${state.draft.targetTotal})...`)
-            : (isMyTurnNow ? `請出牌或棄牌 (已用 ${state.turn.actionsUsed}/4 額度)` : `【${turnActor.name}】正在施法行動中 (${state.turn.actionsUsed}/4)...`)}
+            ? (isMyTurnNow ? '請點選下方部門頂牌招募部下！' : `等待【${getShortPlayerName(turnActor.name)}】挑選部下 (${state.draft.totalPicked}/${state.draft.targetTotal})`)
+            : (isMyTurnNow ? `請出牌或棄牌 (已用 ${state.turn.actionsUsed}/4 額度)` : `【${getShortPlayerName(turnActor.name)}】施法行動中 (${state.turn.actionsUsed}/4)...`)}
         </span>
       </div>
       <div class="flex items-center gap-1 shrink-0">
         ${(gameSession.mode === 'HOST' && turnActor && turnActor.id !== 'p1' && !turnActor.isAI)
-          ? `<button id="btnHostTakeoverAI" data-takeover-seat="${turnActor.id}" class="px-1.5 py-0.5 rounded bg-purple-900 border border-purple-400 text-[10px] font-black text-purple-200 whitespace-nowrap" title="切換AI代打">🤖AI代打</button>`
+          ? `<button id="btnHostTakeoverAI" data-takeover-seat="${turnActor.id}" class="px-1.5 py-0.5 rounded bg-purple-900 border border-purple-400 text-[9px] font-black text-purple-200 whitespace-nowrap" title="切換AI代打">🤖代打</button>`
           : ''}
-        <button id="btnToggleAnimSpeed" class="px-1.5 py-0.5 rounded bg-slate-950 border border-slate-600 text-[10px] font-black text-sky-300 whitespace-nowrap shrink-0">
-          ${animSpeedMultiplier === 1 ? '▶ 1x速度' : '⏩ 2x快轉'}
+        <button id="btnToggleAnimSpeed" class="px-1.5 py-0.5 rounded bg-slate-950 border border-slate-600 text-[9px] font-black text-sky-300 whitespace-nowrap shrink-0">
+          ${animSpeedMultiplier === 1 ? '▶ 1x' : '⏩ 2x'}
         </button>
       </div>
     `;
@@ -722,9 +714,9 @@ function renderAll() {
     const topUid = deck[0];
     if (!topUid) {
       return `
-        <div class="rounded-lg bg-slate-950 border border-slate-800 px-1.5 py-1 text-center min-w-0">
-          <div class="text-[10px] font-bold text-slate-500 truncate">${meta.icon}${meta.short}(0)</div>
-          <div class="text-[10px] text-slate-500">已抽乾</div>
+        <div class="rounded-lg bg-slate-950 border border-slate-800 px-1 py-0.5 text-center min-w-0">
+          <div class="text-[9px] font-bold text-slate-500 truncate">${meta.icon}${meta.short}(0)</div>
+          <div class="text-[9px] text-slate-500">已抽乾</div>
         </div>
       `;
     }
@@ -732,14 +724,14 @@ function renderAll() {
     const avSrc = GPT_MINI_AVATAR[topCard.tplId] || '';
     const skillTag = topCard.role === 'ENGINEER' ? '⚒$1' : `${topCard.isVP ? '👑' : ''}${topCard.skill}級$${topCard.salary}`;
     return `
-      <button data-open-bank-dept="${d}" class="rounded-lg ${meta.panelBg} border ${meta.border} p-1 text-left flex items-center gap-1 transition shadow min-w-0">
+      <button data-open-bank-dept="${d}" class="rounded-lg ${meta.panelBg} border ${meta.border} px-1 py-0.5 text-left flex items-center gap-1 transition shadow min-w-0">
         ${avSrc ? `<img src="${avSrc}" alt="${topCard.title}" class="art-mini-avatar shrink-0" />` : `<span class="text-xs shrink-0">${meta.icon}</span>`}
         <div class="flex flex-col justify-between min-w-0 flex-1">
           <div class="flex items-center justify-between w-full gap-0.5 min-w-0">
             <span class="text-[9px] font-extrabold ${meta.text} whitespace-nowrap">${meta.short}</span>
             <span class="text-[9px] px-1 rounded bg-slate-950 text-amber-300 font-black whitespace-nowrap">${skillTag}</span>
           </div>
-          <div class="text-[10px] font-black text-white truncate w-full">${topCard.title}</div>
+          <div class="text-[9px] sm:text-[10px] font-black text-white truncate w-full">${topCard.title}</div>
         </div>
       </button>
     `;
@@ -757,12 +749,12 @@ function renderAll() {
     document.getElementById('draftBankCardsGrid').innerHTML = ['RED', 'YELLOW', 'BLUE', 'GREEN'].map(d => {
       const topUid = state.jobBank[d][0];
       const meta = DEPT_META[d];
-      if (!topUid) return `<div class="w-[162px] shrink-0 p-4 text-center text-slate-500">已抽乾</div>`;
+      if (!topUid) return `<div class="w-[148px] shrink-0 p-4 text-center text-slate-500">已抽乾</div>`;
       const emp = CARDS_BY_ID[topUid];
       const canPick = isMyTurnNow && !(emp.isVP && hasVPInDept(localPlayer, d));
       return `
-        <div data-draft-dept="${d}" class="w-[162px] sm:w-[210px] lg:flex-1 shrink-0 snap-start flex flex-col gap-1 min-w-0">
-          <div class="flex items-center justify-between text-[11px] px-1">
+        <div data-draft-dept="${d}" class="w-[148px] sm:w-[196px] lg:flex-1 shrink-0 snap-start flex flex-col gap-1 min-w-0">
+          <div class="flex items-center justify-between text-[10px] px-1">
             <span class="font-black ${meta.text} truncate">${meta.icon}${meta.short}</span>
             <span class="text-slate-400 whitespace-nowrap">剩${state.jobBank[d].length}張</span>
           </div>
@@ -780,7 +772,7 @@ function renderAll() {
   const isViewingSelf = viewedPlayer.id === myId;
   document.getElementById('btnReturnToSelfView').classList.add('hidden');
 
-  companyStage.className = `${state.phase === 'INITIAL_DRAFT' ? 'hidden ' : ''}relative flex-1 stage-25d-container rounded-2xl p-2 flex flex-col justify-between gap-1 min-w-0 transition overflow-hidden ${isViewingSelf ? 'self-castle-stage' : 'enemy-recon-stage'}`;
+  companyStage.className = `${state.phase === 'INITIAL_DRAFT' ? 'hidden ' : ''}relative flex-1 stage-25d-container rounded-2xl p-1.5 flex flex-col justify-between gap-1 min-w-0 transition overflow-hidden ${isViewingSelf ? 'self-castle-stage' : 'enemy-recon-stage'}`;
 
   const viewedCrisisReq = getCrisisTotalEngineerReq(viewedPlayer);
   const viewedCrisisCnt = viewedPlayer.crises.length;
@@ -789,13 +781,13 @@ function renderAll() {
     ? ''
     : `
     <div class="flex flex-col gap-1 min-w-0">
-      <div class="flex items-center justify-between gap-1.5 px-2 py-1 rounded-xl bg-rose-950/90 border border-rose-400 min-w-0">
+      <div class="flex items-center justify-between gap-1.5 px-2 py-0.5 rounded-xl bg-rose-950/90 border border-rose-400 min-w-0">
         <div class="flex items-center gap-1.5 min-w-0 flex-1">
-          <span class="px-1.5 py-0.5 rounded bg-rose-600 text-white text-[10px] font-black whitespace-nowrap shrink-0">👁️ 敵情偵察</span>
+          <span class="px-1.5 py-0.5 rounded bg-rose-600 text-white text-[9px] font-black whitespace-nowrap shrink-0">👁️ 敵情偵察</span>
           <h2 class="text-xs font-black text-rose-200 truncate">${viewedPlayer.name}</h2>
-          <span class="px-1.5 py-0.5 rounded bg-purple-950 border border-purple-400 text-[10px] font-black text-purple-200 whitespace-nowrap shrink-0">👑${getTotalVPCount(viewedPlayer)}</span>
+          <span class="px-1.5 py-0.5 rounded bg-purple-950 border border-purple-400 text-[9px] font-black text-purple-200 whitespace-nowrap shrink-0">👑${getTotalVPCount(viewedPlayer)}</span>
         </div>
-        <button id="btnQuickBackSelf" class="px-2.5 py-0.5 rounded-lg bg-amber-400 text-[11px] font-black text-slate-950 whitespace-nowrap shadow">↩ 返回我方主城</button>
+        <button id="btnQuickBackSelf" class="px-2 py-0.5 rounded-lg bg-amber-400 text-[10px] font-black text-slate-950 whitespace-nowrap shadow">↩ 返回主城</button>
       </div>
       <div class="grid grid-cols-3 gap-1 w-full min-w-0">
         <button data-inspect-eng="${viewedPlayer.id}" class="rounded-lg bg-red-950/60 border border-red-500/40 px-1.5 py-0.5 text-left flex items-center justify-between min-w-0">
@@ -826,20 +818,20 @@ function renderAll() {
     `;
   }).join('');
 
-  // 5A-2. ZONE 4 (LOWER-MIDDLE): Render My Permanent Hero Status Bar (#myHeroStatusBar) — ALWAYS shows Local Player (myId)!
+  // 5A-2. ZONE 4 (LOWER-MIDDLE): Render My Permanent Hero Status Bar (#myHeroStatusBar)
   recalcPlayerStats(localPlayer);
   const myBurn = getPlayerBurnRate(localPlayer);
   const myCrisisReq = getCrisisTotalEngineerReq(localPlayer);
   const myCrisisCnt = localPlayer.crises.length;
   const myHeroBar = document.getElementById('myHeroStatusBar');
   if (myHeroBar) {
-    myHeroBar.className = `w-full rounded-xl bg-slate-950/95 border-2 ${isMyTurnNow ? 'border-amber-400 shadow-lg' : 'border-slate-700'} px-2 py-1 flex flex-col gap-1 transition min-w-0`;
+    myHeroBar.className = `w-full rounded-xl bg-slate-950/95 border-2 ${isMyTurnNow ? 'border-amber-400 shadow-lg' : 'border-slate-700'} px-2 py-1 flex flex-col gap-0.5 transition min-w-0`;
     myHeroBar.innerHTML = `
       <div class="flex items-center justify-between gap-1.5 min-w-0">
         <div class="flex items-center gap-1.5 min-w-0 flex-1">
-          <span class="px-1.5 py-0.5 rounded text-[10px] font-black whitespace-nowrap shrink-0 ${isMyTurnNow ? 'bg-amber-400 text-slate-950' : 'bg-slate-800 text-amber-300'}">👑 我方主帥 (${myId.toUpperCase()})</span>
-          <span class="text-xs font-black text-white truncate">${localPlayer.name}</span>
-          <span class="px-1.5 py-0.5 rounded bg-purple-950 border border-purple-400 text-[10px] font-black text-purple-200 whitespace-nowrap shrink-0">👑皇室:${getTotalVPCount(localPlayer)}</span>
+          <span class="px-1.5 py-0.5 rounded text-[10px] font-black whitespace-nowrap shrink-0 ${isMyTurnNow ? 'bg-amber-400 text-slate-950' : 'bg-slate-800 text-amber-300'}">👑 我方 (${myId.toUpperCase()})</span>
+          <span class="text-xs font-black text-white truncate">${getShortPlayerName(localPlayer.name)}</span>
+          <span class="px-1.5 py-0.5 rounded bg-purple-950 border border-purple-400 text-[9px] font-black text-purple-200 whitespace-nowrap shrink-0">👑皇室:${getTotalVPCount(localPlayer)}</span>
         </div>
         <div class="flex items-center gap-1 shrink-0">
           <span class="px-2 py-0.5 rounded-lg bg-emerald-950/80 border border-emerald-500/40 text-xs font-black text-emerald-400 whitespace-nowrap">💎${localPlayer.crystals}</span>
@@ -848,28 +840,28 @@ function renderAll() {
       </div>
       <div class="grid grid-cols-3 gap-1 w-full min-w-0">
         <button data-inspect-eng="${myId}" class="rounded-lg bg-red-950/60 border border-red-500/40 px-1.5 py-0.5 text-left flex items-center justify-between min-w-0">
-          <span class="text-[10px] font-bold text-red-200 truncate">⚒苦工:${localPlayer.engineers.length}人</span>
+          <span class="text-[10px] font-bold text-red-200 truncate">⚒苦工:${localPlayer.engineers.length}</span>
           <span class="text-[10px] font-black text-rose-300 whitespace-nowrap shrink-0">💎-${localPlayer.engineers.length} 🔍</span>
         </button>
         <button data-inspect-crises="${myId}" class="rounded-lg ${myCrisisCnt > 0 ? 'bg-amber-950/80 border border-amber-400' : 'bg-slate-900 border border-slate-700'} px-1.5 py-0.5 text-left flex items-center justify-between min-w-0">
           <span class="text-[10px] font-bold ${myCrisisCnt > 0 ? 'text-amber-200' : 'text-slate-400'} whitespace-nowrap">⚠️危機:${myCrisisCnt}</span>
-          <span class="text-[10px] font-black ${myCrisisCnt > 0 ? 'text-amber-300' : 'text-slate-500'} whitespace-nowrap shrink-0">需${myCrisisReq}人 🔍</span>
+          <span class="text-[10px] font-black ${myCrisisCnt > 0 ? 'text-amber-300' : 'text-slate-500'} whitespace-nowrap shrink-0">需${myCrisisReq} 🔍</span>
         </button>
         <button data-inspect-outsourced="${myId}" class="rounded-lg ${localPlayer.outsourcedCount > 0 ? 'bg-rose-950/90 border border-rose-400' : 'bg-slate-900 border border-slate-700'} px-1.5 py-0.5 text-left flex items-center justify-between min-w-0">
-          <span class="text-[10px] font-bold ${localPlayer.outsourcedCount > 0 ? 'text-rose-200' : 'text-slate-400'} truncate">👹外包:${localPlayer.outsourcedCount}人</span>
+          <span class="text-[10px] font-bold ${localPlayer.outsourcedCount > 0 ? 'text-rose-200' : 'text-slate-400'} truncate">👹外包:${localPlayer.outsourcedCount}</span>
           <span class="text-[10px] font-black ${localPlayer.outsourcedCount > 0 ? 'text-rose-300' : 'text-slate-500'} whitespace-nowrap shrink-0">💎-${localPlayer.outsourcedCount * 3} 🔍</span>
         </button>
       </div>
     `;
   }
 
-  // 5B. Render 4-Department Columns
+  // 5B. Render 4-Department Columns (w-[148px] on mobile portrait frees ~42px of vertical height!)
   const deptGrid = document.getElementById('companyDepartmentsGrid');
   const isGrid2x2 = deptLayoutMode === 'GRID2X2';
   deptGrid.className = isGrid2x2
     ? 'w-full flex-1 grid grid-cols-2 lg:grid-cols-4 gap-1.5 min-w-0'
-    : 'w-full flex-1 flex items-center gap-2.5 overflow-x-auto no-scrollbar snap-x pb-0.5 min-w-0';
-  const colWidthCls = isGrid2x2 ? 'w-full' : 'w-[176px] sm:w-[210px] lg:flex-1 shrink-0 snap-start';
+    : 'w-full flex-1 flex items-center gap-2 overflow-x-auto no-scrollbar snap-x pb-0.5 min-w-0';
+  const colWidthCls = isGrid2x2 ? 'w-full' : 'w-[148px] sm:w-[196px] lg:flex-1 shrink-0 snap-start';
   deptGrid.innerHTML = ['RED', 'YELLOW', 'BLUE', 'GREEN'].map(d => {
     const meta = DEPT_META[d];
     const deptArr = viewedPlayer.departments[d];
@@ -878,17 +870,17 @@ function renderAll() {
       return `
         <div data-empty-dept="${d}" class="${colWidthCls} aspect-card-2-3 empty-rune-slot rounded-xl border-2 border-dashed ${meta.border} overflow-hidden flex flex-col justify-between p-2 min-w-0 relative cursor-pointer transition">
           <div class="flex items-center justify-between w-full gap-1">
-            <span class="w-6 h-6 rounded-full bg-slate-950 border border-slate-600 text-slate-400 flex items-center justify-center text-xs font-black shadow">0</span>
-            <span class="text-[11px] font-black ${meta.text} truncate">${meta.icon}${meta.name}</span>
-            <span class="px-1.5 py-0.5 rounded bg-slate-900 border border-slate-700 text-[9px] font-bold text-slate-400">空城</span>
+            <span class="w-5 h-5 rounded-full bg-slate-950 border border-slate-600 text-slate-400 flex items-center justify-center text-[10px] font-black shadow">0</span>
+            <span class="text-[10px] font-black ${meta.text} truncate">${meta.icon}${meta.name}</span>
+            <span class="px-1 py-0.5 rounded bg-slate-900 border border-slate-700 text-[9px] font-bold text-slate-400">空城</span>
           </div>
-          <div class="flex flex-col items-center justify-center text-center my-auto px-2">
-            <div class="w-14 h-14 rounded-full ${meta.panelBg} border ${meta.border} flex items-center justify-center text-2xl opacity-60 shadow-lg">${meta.icon}</div>
-            <span class="text-xs font-black text-slate-300 mt-2">缺工空城 (0級)</span>
-            <span class="text-[10px] text-slate-400 mt-0.5 leading-tight">無主管駐守，檢定視為 0 級</span>
+          <div class="flex flex-col items-center justify-center text-center my-auto px-1">
+            <div class="w-12 h-12 rounded-full ${meta.panelBg} border ${meta.border} flex items-center justify-center text-xl opacity-60 shadow-lg">${meta.icon}</div>
+            <span class="text-[11px] font-black text-slate-300 mt-1.5">缺工空城 (0級)</span>
+            <span class="text-[9px] text-slate-400 mt-0.5 leading-tight">無主管駐守，檢定視為 0 級</span>
           </div>
-          <div class="bg-slate-950/90 border border-slate-800 rounded-lg py-1 px-2 flex items-center justify-between text-[10px] text-slate-400">
-            <span>💎 0 魔晶</span>
+          <div class="bg-slate-950/90 border border-slate-800 rounded-lg py-0.5 px-1.5 flex items-center justify-between text-[9px] text-slate-400">
+            <span>💎 0</span>
             <span class="text-sky-300 font-bold">點人才池招募 ▸</span>
           </div>
         </div>
@@ -905,7 +897,7 @@ function renderAll() {
       <div data-inspect-dept="${d}" data-inspect-player="${viewedPlayer.id}" class="${colWidthCls} aspect-card-2-3 tilt-card-3d ${isNewlyFlipped ? 'anim-flip-in' : ''} rounded-xl bg-slate-950 border-2 ${meta.border} ${hCard.isVP ? 'vp-card-frame' : ''} overflow-hidden cursor-pointer shadow-xl min-w-0 relative">
         ${getCardImgTag(hCard.tplId, hCard.title, 'w-full h-full object-cover block')}
         <div class="holo-sheen-layer"></div>
-        <span class="absolute bottom-2 left-1/2 -translate-x-1/2 px-2 py-0.5 rounded-full text-[9px] font-black shadow-lg whitespace-nowrap z-20 ${isViewingSelf ? 'bg-slate-950/90 border border-amber-400 text-amber-300' : 'bg-rose-700 border border-white text-white'}">${ownerShort}${subordinates.length > 0 ? ` · ➕${subordinates.length}下屬(點此展開)` : ''}</span>
+        <span class="absolute bottom-1.5 left-1/2 -translate-x-1/2 px-2 py-0.5 rounded-full text-[9px] font-black shadow-lg whitespace-nowrap z-20 ${isViewingSelf ? 'bg-slate-950/90 border border-amber-400 text-amber-300' : 'bg-rose-700 border border-white text-white'}">${ownerShort}${subordinates.length > 0 ? ` · ➕${subordinates.length}下屬` : ''}</span>
       </div>
     `;
   }).join('');
@@ -923,7 +915,7 @@ function renderAll() {
   const playableBadge = document.getElementById('playableCountBadge');
   if (localPlayer.hand.length === 0) {
     if (playableBadge) playableBadge.textContent = '無手牌';
-    handContainer.innerHTML = `<div class="text-xs text-slate-400 py-4 mx-auto text-center">${state.phase === 'INITIAL_DRAFT' ? '🎲 請先在上方完成「首輪召喚」（挑選 4 名部下），結束後將發放 6 張手牌！' : '目前無手牌'}</div>`;
+    handContainer.innerHTML = `<div class="text-xs text-slate-400 py-3 mx-auto text-center">${state.phase === 'INITIAL_DRAFT' ? '🎲 請先在上方完成「首輪召喚」（挑選 4 名部下），結束後將發放 6 張手牌！' : '目前無手牌'}</div>`;
   } else {
     const evaluatedHand = localPlayer.hand.map(hUid => {
       const status = isHumanStep1 ? evaluateCardPlayability(state, localPlayer, hUid) : { playable: false, shortReason: '等待回合', reason: '非我方出牌階段' };
@@ -974,7 +966,7 @@ function renderAll() {
   btnEndTurn.textContent = isHumanStep1 ? '⏭️ 結束出牌 ➔ 發薪' : `⏳ ${getShortPlayerName(turnActor.name)} 行動中...`;
   const handDock = document.getElementById('myHandDockSection');
   if (handDock) {
-    handDock.className = `bg-slate-950/90 border-t-2 ${isHumanStep1 ? 'border-amber-400' : 'border-slate-800 opacity-85'} rounded-xl px-1.5 py-1.5 flex flex-col gap-1 shadow-2xl transition min-w-0`;
+    handDock.className = `bg-slate-950/90 border-t-2 ${isHumanStep1 ? 'border-amber-400' : 'border-slate-800 opacity-85'} rounded-xl px-1.5 py-1 flex flex-col gap-1 shadow-2xl transition min-w-0`;
   }
 
   attachDynamicBoardListeners();
@@ -990,6 +982,9 @@ function renderModeDDrawer() {
     drawer.classList.add('hidden');
     return;
   }
+
+  // Dismiss any lingering VS Duel banner so it never blocks Mode D target selection
+  clearDuelBannersVFX();
 
   const state = gameState;
   const localPlayer = getLocalPlayer(state);
@@ -1026,7 +1021,7 @@ function renderModeDDrawer() {
 
     container.className = 'w-full min-w-0';
     container.innerHTML = `
-      <button data-d-action="CONFIRM_FUNDS" class="w-full rounded-xl bg-emerald-950/80 border-2 border-emerald-400 p-2.5 text-left shadow-xl flex items-center justify-between gap-2.5 min-w-0">
+      <button data-d-action="CONFIRM_FUNDS" class="w-full rounded-xl bg-emerald-950/80 border-2 border-emerald-400 p-2 text-left shadow-xl flex items-center justify-between gap-2 min-w-0">
         <div class="flex items-center gap-2 min-w-0 flex-1">
           ${getPortraitHTML(gHeadCard)}
           <div class="min-w-0 flex-1">
@@ -1034,14 +1029,14 @@ function renderModeDDrawer() {
               <span class="px-1.5 py-0.5 rounded bg-emerald-700 text-white text-[9px] font-black">💎金庫 ${gSkill}級認證</span>
               <span class="text-[10px] text-emerald-200 truncate">${gHeadCard ? gHeadCard.title : '缺工空城 (0級)'}</span>
             </div>
-            <div class="text-sm font-black text-white mt-0.5 truncate">⚡ 立即施放：${card.title}</div>
+            <div class="text-xs font-black text-white mt-0.5 truncate">⚡ 立即施放：${card.title}</div>
             <div class="text-[11px] font-extrabold text-amber-300 mt-0.5">
-              金庫儲備：💎 ${localPlayer.crystals} ➔ <b class="text-emerald-300 text-xs">💎 ${nextCrystals}</b>
+              金庫儲備：💎 ${localPlayer.crystals} ➔ <b class="text-emerald-300">💎 ${nextCrystals}</b>
             </div>
           </div>
         </div>
-        <div class="px-3 py-2 rounded-xl bg-emerald-600 border border-white text-center shrink-0 shadow-lg">
-          <div class="text-sm font-black text-white">+${card.val} 💎</div>
+        <div class="px-2.5 py-1.5 rounded-xl bg-emerald-600 border border-white text-center shrink-0 shadow-lg">
+          <div class="text-xs font-black text-white">+${card.val} 💎</div>
           <div class="text-[9px] font-bold text-emerald-100">點擊入帳</div>
         </div>
       </button>
@@ -1060,9 +1055,9 @@ function renderModeDDrawer() {
           <div class="min-w-0 flex-1">
             <div class="text-xs font-black text-white truncate">${c.svg} ${c.title}</div>
             <div class="text-[10px] text-amber-200 truncate mt-0.5">${c.desc}</div>
-            <div class="text-[10px] font-black text-emerald-300 mt-0.5">✨ 解除後省苦工 ×${c.val}</div>
+            <div class="text-[10px] font-black text-emerald-300 mt-0.5">✨ 省苦工 ×${c.val}</div>
           </div>
-          <span class="px-2 py-1 rounded-lg bg-amber-500 text-slate-950 text-[11px] font-black shrink-0 shadow">🍾解除</span>
+          <span class="px-2 py-1 rounded-lg bg-amber-500 text-slate-950 text-[10px] font-black shrink-0 shadow">🍾解除</span>
         </button>
       `;
     }).join('');
@@ -1083,11 +1078,11 @@ function renderModeDDrawer() {
 
       let impactHint = '';
       if (emp.role === 'ENGINEER') {
-        impactHint = localPlayer.outsourcedCount > 0 ? '🔥 抵1外包(省2💎/回)!' : '⚒ 苦工儲備 +1';
+        impactHint = localPlayer.outsourcedCount > 0 ? '🔥 抵1外包(省2💎)!' : '⚒ 苦工 +1';
       } else if (emp.isVP) {
         impactHint = `👑 空降主管(${emp.skill}級)`;
       } else if (!hasVPInDept(localPlayer, d) && emp.skill > curSkill) {
-        impactHint = `✨ ${meta.short}升至 ${emp.skill}級!`;
+        impactHint = `✨ ${meta.short}升${emp.skill}級!`;
       } else {
         impactHint = `➕ 納入${meta.short}下屬`;
       }
@@ -1151,7 +1146,7 @@ function renderModeDDrawer() {
       pillEl.textContent = '⚔️ 討伐危機';
       pillEl.className = 'px-1.5 py-0.5 rounded bg-rose-500 text-white font-black text-[10px] whitespace-nowrap shrink-0';
     }
-    titleEl.textContent = `「${card.title} (需對手黑魔 ${card.reqSkills.join('/')} 級)」— 點選對手或頂部席位：`;
+    titleEl.textContent = `「${card.title} (對手黑魔 ${card.reqSkills.join('/')} 級)」— 點選目標：`;
     container.className = `grid ${aliveOpponents.length > 1 ? 'grid-cols-2' : 'grid-cols-1'} gap-1.5 w-full min-w-0`;
     container.innerHTML = aliveOpponents.map(opp => {
       const oppSkill = getEffectiveSkill(opp, 'YELLOW');
@@ -1168,17 +1163,16 @@ function renderModeDDrawer() {
 
       if (!isValid) {
         return `
-          <div class="rounded-xl bg-slate-900/75 border border-slate-700 p-2 opacity-60 flex flex-col justify-between gap-1 min-w-0">
+          <div class="rounded-xl bg-slate-900/75 border border-slate-700 p-1.5 opacity-60 flex flex-col justify-between gap-1 min-w-0">
             <div class="flex items-center justify-between gap-1">
               <span class="text-xs font-black text-slate-300 truncate">😈 ${shortOpp}</span>
-              <span class="px-1.5 py-0.5 rounded bg-slate-800 text-sky-300 text-[9px] font-bold shrink-0">🛡️黑魔${oppSkill}級免疫</span>
+              <span class="px-1 py-0.5 rounded bg-slate-800 text-sky-300 text-[9px] font-bold shrink-0">🛡️黑魔${oppSkill}級免疫</span>
             </div>
             <div class="flex items-center gap-1.5 bg-slate-950/80 rounded-lg p-1 border border-slate-800">
               ${getPortraitHTML(headCard)}
               <div class="min-w-0 flex-1">
-                <div class="text-[9px] text-slate-400">黑魔法部主管</div>
-                <div class="text-[10px] font-bold text-slate-300 truncate">${headCard ? headCard.title : '缺工空城(0級)'}</div>
-                <div class="text-[9px] text-sky-300">等級不符 [${card.reqSkills.join(',')}]</div>
+                <div class="text-[10px] font-bold text-slate-300 truncate">${headCard ? headCard.title : '空城(0級)'}</div>
+                <div class="text-[9px] text-sky-300">不符 [${card.reqSkills.join(',')}]</div>
               </div>
             </div>
           </div>
@@ -1186,20 +1180,20 @@ function renderModeDDrawer() {
       }
 
       return `
-        <button data-d-action="CONFIRM_BAD_IDEA" data-opp-id="${opp.id}" class="rounded-xl bg-rose-950/90 border-2 border-rose-400 p-2 text-left shadow-xl flex flex-col justify-between gap-1.5 min-w-0">
+        <button data-d-action="CONFIRM_BAD_IDEA" data-opp-id="${opp.id}" class="rounded-xl bg-rose-950/90 border-2 border-rose-400 p-1.5 text-left shadow-xl flex flex-col justify-between gap-1 min-w-0">
           <div class="flex items-center justify-between gap-1 w-full">
             <span class="text-xs font-black text-white truncate">🎯 ${shortOpp}</span>
-            <span class="px-1.5 py-0.5 rounded bg-rose-600 text-white text-[9px] font-black shrink-0">黑魔 ${oppSkill}級可攻</span>
+            <span class="px-1 py-0.5 rounded bg-rose-600 text-white text-[9px] font-black shrink-0">黑魔${oppSkill}級可攻</span>
           </div>
           <div class="flex items-center gap-1.5 bg-slate-950/80 rounded-lg p-1 border border-rose-500/50">
             ${getPortraitHTML(headCard)}
             <div class="min-w-0 flex-1">
-              <div class="text-[9px] text-amber-300 font-bold">黑魔主管：${headCard ? headCard.title : '空城(0級)'}</div>
-              <div class="text-[10px] font-extrabold text-white mt-0.5">💎${opp.crystals} ｜ ⚒苦工:${opp.engineers.length}</div>
+              <div class="text-[9px] text-amber-300 font-bold truncate">${headCard ? headCard.title : '空城(0級)'}</div>
+              <div class="text-[10px] font-extrabold text-white">💎${opp.crystals} ｜ ⚒苦工:${opp.engineers.length}</div>
               <div class="text-[10px] font-black text-rose-300">🔥-${curBurn} ➔ <b class="text-amber-300">🔥-${projBurn}/回</b></div>
             </div>
           </div>
-          <div class="w-full py-1 rounded-lg bg-rose-600 text-center text-[11px] font-black text-white shadow">
+          <div class="w-full py-1 rounded-lg bg-rose-600 text-center text-[10px] font-black text-white shadow">
             ⚔️ 施放討伐危機 ×${card.val}
           </div>
         </button>
@@ -1211,7 +1205,7 @@ function renderModeDDrawer() {
       pillEl.className = 'px-1.5 py-0.5 rounded bg-rose-500 text-white font-black text-[10px] whitespace-nowrap shrink-0';
     }
     if (!uiSelection.step2OpponentId) {
-      titleEl.textContent = `步驟1/2：「強塞魔物 (需對手召喚 ${card.reqSkills.join('/')} 級)」— 先選對手：`;
+      titleEl.textContent = `步驟1/2：「強塞魔物 (對手召喚 ${card.reqSkills.join('/')} 級)」— 選對手：`;
       container.className = `grid ${aliveOpponents.length > 1 ? 'grid-cols-2' : 'grid-cols-1'} gap-1.5 w-full min-w-0`;
       container.innerHTML = aliveOpponents.map(opp => {
         const oppSkill = getEffectiveSkill(opp, 'BLUE');
@@ -1221,7 +1215,7 @@ function renderModeDDrawer() {
         const shortOpp = getShortPlayerName(opp.name);
         if (!isValid) {
           return `
-            <div class="rounded-xl bg-slate-900/75 border border-slate-700 p-2 opacity-60 flex items-center gap-1.5 min-w-0">
+            <div class="rounded-xl bg-slate-900/75 border border-slate-700 p-1.5 opacity-60 flex items-center gap-1.5 min-w-0">
               ${getPortraitHTML(bHeadCard)}
               <div class="min-w-0 flex-1">
                 <div class="text-xs font-bold text-slate-300 truncate">🛡️ ${shortOpp} (免疫)</div>
@@ -1231,16 +1225,16 @@ function renderModeDDrawer() {
           `;
         }
         return `
-          <button data-d-action="STEP2_FORCE_HIRE_OPP" data-opp-id="${opp.id}" class="rounded-xl bg-rose-950/90 border-2 border-rose-400 p-2 text-left shadow-lg flex flex-col justify-between gap-1.5 min-w-0">
+          <button data-d-action="STEP2_FORCE_HIRE_OPP" data-opp-id="${opp.id}" class="rounded-xl bg-rose-950/90 border-2 border-rose-400 p-1.5 text-left shadow-lg flex flex-col justify-between gap-1 min-w-0">
             <div class="flex items-center gap-1.5 min-w-0">
               ${getPortraitHTML(bHeadCard)}
               <div class="min-w-0 flex-1">
                 <div class="text-xs font-black text-white truncate">🎯 ${shortOpp}</div>
-                <div class="text-[10px] text-amber-200">召喚祭壇：${oppSkill}級 (可強塞)</div>
+                <div class="text-[10px] text-amber-200">召喚：${oppSkill}級 (可強塞)</div>
                 <div class="text-[10px] text-rose-300 font-bold">💎${opp.crystals} ｜ 🔥-${getPlayerBurnRate(opp)}/回</div>
               </div>
             </div>
-            <div class="w-full py-1 rounded-lg bg-rose-600 text-center text-[11px] font-black text-white shadow">下一步：選人才池魔物 ➔</div>
+            <div class="w-full py-1 rounded-lg bg-rose-600 text-center text-[10px] font-black text-white shadow">下一步：選人才池魔物 ➔</div>
           </button>
         `;
       }).join('');
@@ -1265,7 +1259,7 @@ function renderModeDDrawer() {
               </div>
             </div>
             <div class="w-full flex items-center justify-between bg-slate-950/90 rounded-lg px-1.5 py-0.5">
-              <span class="text-[9px] font-bold text-rose-300 truncate">${isSabotageVP ? `😈壓低他至${emp.skill}級!` : `🔥燒魔+${emp.salary}`}</span>
+              <span class="text-[9px] font-bold text-rose-300 truncate">${isSabotageVP ? `😈壓低至${emp.skill}級!` : `🔥燒魔+${emp.salary}`}</span>
               <span class="px-1.5 py-0.5 rounded bg-rose-600 text-white text-[9px] font-black">🪤強塞</span>
             </div>
           </button>
@@ -1277,7 +1271,7 @@ function renderModeDDrawer() {
       pillEl.textContent = '🕸️ 魅惑挖角';
       pillEl.className = 'px-1.5 py-0.5 rounded bg-purple-500 text-white font-black text-[10px] whitespace-nowrap shrink-0';
     }
-    titleEl.textContent = `「魅惑挖角 (對手召喚 ${card.reqSkills.join('/')} 級)」— 點選要奪取的部下：`;
+    titleEl.textContent = `「魅惑挖角 (對手召喚 ${card.reqSkills.join('/')} 級)」— 點選部下：`;
     container.className = 'grid grid-cols-2 gap-1.5 w-full min-w-0';
     const buttons = [];
     aliveOpponents.forEach(opp => {
@@ -1340,13 +1334,13 @@ function renderModeDDrawer() {
       const burn = getPlayerBurnRate(opp);
       const shortOpp = getShortPlayerName(opp.name);
       return `
-        <button data-d-action="CONFIRM_DOUBLE_PAY" data-opp-id="${opp.id}" class="rounded-xl bg-rose-950/90 border-2 border-rose-400 p-2 text-left shadow-lg flex flex-col justify-between gap-1.5 min-w-0">
+        <button data-d-action="CONFIRM_DOUBLE_PAY" data-opp-id="${opp.id}" class="rounded-xl bg-rose-950/90 border-2 border-rose-400 p-2 text-left shadow-lg flex flex-col justify-between gap-1 min-w-0">
           <div class="flex items-center justify-between">
             <span class="text-xs font-black text-white">🔥 ${shortOpp}</span>
             <span class="text-[10px] font-black text-emerald-300">💎${opp.crystals}</span>
           </div>
-          <div class="text-[11px] text-amber-200 font-bold">原燒魔 🔥-${burn} ➔ <b class="text-rose-300">翻倍扣 🔥-${burn * 2}！</b></div>
-          <div class="w-full py-1 rounded-lg bg-rose-600 text-center text-[11px] font-black text-white shadow">🔥 施放雙倍暴動 ×2</div>
+          <div class="text-[10px] text-amber-200 font-bold">原燒魔 🔥-${burn} ➔ <b class="text-rose-300">翻倍扣 🔥-${burn * 2}！</b></div>
+          <div class="w-full py-1 rounded-lg bg-rose-600 text-center text-[10px] font-black text-white shadow">🔥 施放雙倍暴動 ×2</div>
         </button>
       `;
     }).join('');
@@ -1532,6 +1526,7 @@ function attachDynamicBoardListeners() {
         return;
       }
 
+      clearDuelBannersVFX();
       uiSelection.mode = 'MODE_D_SELECT';
       uiSelection.sourceCardUid = actUid;
       uiSelection.step2OpponentId = null;
@@ -1766,7 +1761,7 @@ function renderGallery(filter = 'ALL') {
 }
 
 /********************************************************************
- * V13 MULTIPLAYER LOBBY UI RENDERER & HANDLERS
+ * V13.1 MULTIPLAYER LOBBY & WAITING ROOM UI RENDERER
  ********************************************************************/
 let activeLobbyTab = 'SOLO'; // 'SOLO' | 'HOST' | 'CLIENT'
 
@@ -1797,7 +1792,6 @@ function fallbackCopy(text, successMsg) {
 }
 
 function renderLobbyUI() {
-  // Update mode tab buttons
   document.querySelectorAll('[data-lobby-tab]').forEach(btn => {
     const tab = btn.getAttribute('data-lobby-tab');
     if (tab === activeLobbyTab) {
@@ -1833,6 +1827,10 @@ function renderLobbyUI() {
 
     const pCount = parseInt(document.getElementById('selectPlayerCount')?.value, 10) || gameSession.lobbyState.playerCount || 3;
     gameSession.lobbyState.playerCount = pCount;
+    if (gameSession.lobbyState.seats[0]) {
+      gameSession.lobbyState.seats[0].name = `${gameSession.playerName} (房主)`;
+    }
+
     const rosterEl = document.getElementById('hostSeatsRosterGrid');
     if (rosterEl) {
       const visibleSeats = gameSession.lobbyState.seats.slice(0, pCount);
@@ -1880,19 +1878,55 @@ function renderLobbyUI() {
     const statusBox = document.getElementById('clientJoinStatusBox');
     if (statusBox) {
       if (gameSession.mode === 'CLIENT' && gameSession.roomCode) {
-        const mySeat = gameSession.lobbyState.seats.find(s => s.id === gameSession.localSeatId);
-        const isAccepted = mySeat && mySeat.clientToken === gameSession.clientToken;
-        statusBox.innerHTML = isAccepted
-          ? `<div class="rounded-xl p-2.5 seat-card-human text-xs space-y-1">
-               <div class="font-black text-emerald-300">✅ 已成功連入房間【${gameSession.roomCode}】！</div>
-               <div class="text-white">分配座位：<b class="text-amber-300">${gameSession.localSeatId.toUpperCase()} (${mySeat.name})</b></div>
-               <div class="text-[11px] text-slate-300">⏳ 正在等待房主點擊「開始對局」，房主開局後畫面將自動載入牌桌！</div>
-             </div>`
-          : `<div class="rounded-xl p-2.5 seat-card-waiting text-xs text-amber-200 font-bold">
-               🔄 正在呼叫房間【${gameSession.roomCode}】房主回應中...（若為同瀏覽器測試，請確認另一分頁已開啟建立房間）
-             </div>`;
+        const pCount = gameSession.lobbyState.playerCount || 3;
+        const visibleSeats = (gameSession.lobbyState.seats || []).slice(0, pCount);
+        const mySeat = visibleSeats.find(s => s.id === gameSession.localSeatId && s.clientToken === gameSession.clientToken);
+
+        if (mySeat) {
+          const ruleLabel = gameSession.lobbyState.playDiscardMode === 'STRICT_EITHER' ? '標準二選一' : '流暢共用4額度';
+          const fogLabel = gameSession.lobbyState.fogOfWar ? '🔒 戰爭迷霧開啟' : '🔓 公開牌庫';
+          const seatsHTML = visibleSeats.map(s => {
+            const isMe = s.id === gameSession.localSeatId;
+            const isHost = s.id === 'p1';
+            const isAI = s.role === 'AI';
+            const isHuman = s.role === 'HOST' || (s.role === 'HUMAN' && s.connected);
+            const cardCls = isMe ? 'seat-card-human border-2 border-amber-400' : isHuman ? 'seat-card-human' : isAI ? 'seat-card-ai' : 'seat-card-waiting';
+            const roleBadge = isHost ? '👑 房主' : isMe ? '🙋‍♂️ 你本人' : isHuman ? '👤 真人已連線' : isAI ? '🤖 智慧 AI' : '⏳ 等待加入';
+            return `
+              <div class="rounded-xl p-2 ${cardCls} flex items-center justify-between gap-2">
+                <div class="min-w-0">
+                  <div class="text-[10px] font-black ${isMe ? 'text-amber-300' : isHuman ? 'text-emerald-300' : isAI ? 'text-indigo-300' : 'text-slate-400'}">座位 ${s.id.toUpperCase()} · ${roleBadge}</div>
+                  <div class="text-xs font-black text-white truncate">${s.name}</div>
+                </div>
+                <span class="px-2 py-0.5 rounded ${isHuman || isAI ? 'bg-emerald-950 border border-emerald-400 text-emerald-300' : 'bg-slate-900 text-amber-300'} text-[10px] font-black shrink-0">
+                  ${isHuman || isAI ? '✔ 就緒' : '等待中'}
+                </span>
+              </div>
+            `;
+          }).join('');
+
+          statusBox.innerHTML = `
+            <div class="space-y-2 pt-1">
+              <div class="rounded-xl p-2.5 bg-emerald-950/70 border border-emerald-400 flex items-center justify-between gap-2">
+                <div>
+                  <div class="text-xs font-black text-emerald-300"><span class="online-dot-pulse mr-1"></span>已進入房間【${gameSession.roomCode}】候戰室</div>
+                  <div class="text-[10px] text-slate-200 mt-0.5">${pCount} 人局 ｜ ${ruleLabel} ｜ ${fogLabel}</div>
+                </div>
+                <span class="px-2 py-1 rounded-lg bg-amber-400 text-slate-950 text-xs font-black shrink-0">座位 ${gameSession.localSeatId.toUpperCase()}</span>
+              </div>
+              <div class="text-[11px] font-bold text-amber-300">🪑 房間即時席位列表（等待房主點擊啟動對局...）：</div>
+              <div class="space-y-1.5">${seatsHTML}</div>
+            </div>
+          `;
+        } else {
+          statusBox.innerHTML = `
+            <div class="rounded-xl p-2.5 seat-card-waiting text-xs text-amber-200 font-bold">
+              🔄 正在連線至房間【${gameSession.roomCode}】並同步候戰室席位...
+            </div>
+          `;
+        }
       } else {
-        statusBox.innerHTML = `<div class="text-[11px] text-slate-400">輸入房主提供的 4 碼房間碼即可跨裝置或跨分頁連線入座。</div>`;
+        statusBox.innerHTML = `<div class="text-[11px] text-slate-400">輸入房主提供的 4 碼房間通行碼，即可進入房間候戰室並即時查看席位狀態。</div>`;
       }
     }
   }
@@ -1901,16 +1935,20 @@ function renderLobbyUI() {
 function initAppOnLoad() {
   if (window.__dbrV13Initialized) return;
   window.__dbrV13Initialized = true;
-  // Check URL query parameters for ?room=XXXX auto-join
+
   const params = new URLSearchParams(window.location.search);
   const urlRoom = params.get('room');
   const nicknameInput = document.getElementById('inputPlayerNickname');
   if (nicknameInput) {
     nicknameInput.value = gameSession.playerName;
+    nicknameInput.addEventListener('input', () => {
+      syncHostLobbySettingsFromInputs();
+      if (gameSession.mode === 'HOST') renderLobbyUI();
+    });
   }
 
   gameState = createInitialGameState(3, 'STRICT_EITHER', true);
-  gameSession.hostMasterState = gameState;
+  gameSession.hostMasterState = null;
   renderAll();
 
   if (urlRoom) {
@@ -2031,7 +2069,6 @@ function initAppOnLoad() {
     document.getElementById('lobbyModal').classList.add('hidden');
   });
 
-  // Lobby Mode Tabs
   document.querySelectorAll('[data-lobby-tab]').forEach(btn => {
     btn.addEventListener('click', () => {
       const tab = btn.getAttribute('data-lobby-tab');
@@ -2046,10 +2083,18 @@ function initAppOnLoad() {
   });
 
   document.getElementById('selectPlayerCount')?.addEventListener('change', () => {
-    if (gameSession.mode === 'HOST') {
-      gameSession.lobbyState.playerCount = parseInt(document.getElementById('selectPlayerCount').value, 10) || 3;
-      renderLobbyUI();
-    }
+    syncHostLobbySettingsFromInputs();
+    renderLobbyUI();
+  });
+
+  document.querySelectorAll('input[name="playDiscardRule"]').forEach(radio => {
+    radio.addEventListener('change', () => {
+      syncHostLobbySettingsFromInputs();
+    });
+  });
+
+  document.getElementById('chkFogOfWar')?.addEventListener('change', () => {
+    syncHostLobbySettingsFromInputs();
   });
 
   document.getElementById('btnCopyRoomCode')?.addEventListener('click', () => {
@@ -2078,6 +2123,11 @@ function initAppOnLoad() {
   document.getElementById('btnStartQuickMatch').addEventListener('click', () => startMatchFromLobby(true));
   document.getElementById('btnPlayAgain').addEventListener('click', () => {
     document.getElementById('gameOverModal').classList.add('hidden');
+    if (gameSession.mode === 'HOST') {
+      gameSession.lobbyState.matchStarted = false;
+      gameSession.hostMasterState = null;
+      broadcastLobbyState();
+    }
     renderLobbyUI();
     document.getElementById('lobbyModal').classList.remove('hidden');
   });
@@ -2086,6 +2136,7 @@ function initAppOnLoad() {
     document.getElementById('inspectorModal').classList.add('hidden');
   });
 }
+
 if (document.readyState === 'loading') {
   window.addEventListener('DOMContentLoaded', initAppOnLoad);
 } else {
