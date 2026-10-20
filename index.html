@@ -3,7 +3,7 @@
 <head>
   <meta charset="UTF-8" />
   <meta name="viewport" content="width=device-width, initial-scale=1.0, maximum-scale=1.0, user-scalable=no" />
-  <title>深淵魔王城：燒魔率爭霸戰 V13 (連線對戰模組化版)</title>
+  <title>深淵魔王城：燒魔率爭霸戰 V13.1 (連線對戰模組化版)</title>
   <link rel="stylesheet" href="css/style.css" />
   <!-- PeerJS WebRTC DataChannel CDN for Cross-Device Room Code Multiplayer -->
   <script src="https://unpkg.com/peerjs@1.5.4/dist/peerjs.min.js" async></script>
@@ -11,41 +11,34 @@
 <body class="flex flex-col min-h-screen w-full max-w-full overflow-x-hidden">
 
   <!-- ===================================================================
-       1. COMPACT MOBILE-FIRST HEADER BAR (Zero Horizontal Overflow)
+       1. COMPACT SINGLE-LINE MOBILE HEADER BAR (Zero Truncation)
        =================================================================== -->
-  <header class="w-full bg-slate-950/95 border-b border-amber-500/40 px-2.5 py-1.5 flex items-center justify-between gap-1.5 z-30">
-    <!-- Left: Game Title + Round/Turn Pill -->
-    <div class="flex items-center gap-1.5 min-w-0 flex-1">
-      <span class="text-base shrink-0">🏰</span>
-      <div class="min-w-0 flex-1">
-        <div class="flex items-center gap-1.5 min-w-0">
-          <h1 class="text-xs sm:text-sm font-black text-amber-400 truncate">深淵魔王城</h1>
-          <span id="phaseBadge" class="px-1.5 py-0.5 rounded-full bg-purple-950 border border-purple-500/50 text-[10px] font-extrabold text-amber-300 whitespace-nowrap shrink-0">第1回・步驟一</span>
-        </div>
-        <div class="flex items-center gap-1 text-[10px] text-slate-300 truncate">
-          <span id="activePlayerBadge" class="font-bold text-white truncate">行動：深淵領主(你)</span>
-          <span class="text-slate-500">|</span>
-          <span id="modeIndicatorTag" class="text-indigo-300 truncate">單機AI · 標準二選一</span>
-        </div>
-      </div>
+  <header class="w-full bg-slate-950/95 border-b border-amber-500/40 px-2 py-1 flex items-center justify-between gap-1 z-30">
+    <!-- Left: Game Title + Round Pill + Room/Mode Pill -->
+    <div class="flex items-center gap-1 min-w-0 flex-1 overflow-hidden">
+      <span class="text-sm shrink-0">🏰</span>
+      <h1 class="text-xs sm:text-sm font-black text-amber-400 whitespace-nowrap shrink-0">深淵魔王城</h1>
+      <span id="phaseBadge" class="px-1.5 py-0.5 rounded-full bg-purple-950 border border-purple-500/50 text-[10px] font-extrabold text-amber-300 whitespace-nowrap shrink-0">R1</span>
+      <span id="modeIndicatorTag" class="px-1.5 py-0.5 rounded bg-slate-900 border border-slate-700 text-[10px] font-bold text-indigo-300 truncate">單機·二選一</span>
+      <span id="activePlayerBadge" class="hidden"></span>
     </div>
 
     <!-- Right: Compact Utility Buttons (Mobile thumb-friendly) -->
     <div class="flex items-center gap-1 shrink-0">
-      <button id="btnOpenGallery" class="px-1.5 py-1 rounded-lg bg-indigo-900/80 text-[11px] font-bold text-indigo-100 border border-indigo-500/50 whitespace-nowrap" title="卡牌圖鑑">
+      <button id="btnOpenGallery" class="px-1.5 py-0.5 rounded-lg bg-indigo-900/80 text-[11px] font-bold text-indigo-100 border border-indigo-500/50 whitespace-nowrap" title="卡牌圖鑑">
         🃏圖鑑
       </button>
-      <button id="btnOpenLogModal" class="px-1.5 py-1 rounded-lg bg-slate-800 text-[11px] font-bold text-amber-300 border border-slate-600 whitespace-nowrap" title="戰況日誌">
+      <button id="btnOpenLogModal" class="px-1.5 py-0.5 rounded-lg bg-slate-800 text-[11px] font-bold text-amber-300 border border-slate-600" title="戰況日誌">
         📜
       </button>
-      <button id="btnOpenRules" class="px-1.5 py-1 rounded-lg bg-slate-800 text-[11px] font-bold text-slate-200 border border-slate-600 whitespace-nowrap" title="遊戲規則">
+      <button id="btnOpenRules" class="px-1.5 py-0.5 rounded-lg bg-slate-800 text-[11px] font-bold text-slate-200 border border-slate-600" title="遊戲規則">
         📖
       </button>
-      <button id="btnToggleMute" class="px-1.5 py-1 rounded-lg bg-slate-800 text-[11px] font-bold text-slate-200 border border-slate-600">
+      <button id="btnToggleMute" class="px-1.5 py-0.5 rounded-lg bg-slate-800 text-[11px] font-bold text-slate-200 border border-slate-600" title="音效開關">
         🔊
       </button>
-      <button id="btnOpenLobby" class="px-2 py-1 rounded-lg bg-amber-500 text-[11px] font-black text-slate-950 whitespace-nowrap shadow">
-        🌐連線/開局
+      <button id="btnOpenLobby" class="px-2 py-0.5 rounded-lg bg-amber-500 text-[11px] font-black text-slate-950 whitespace-nowrap shadow">
+        🌐房間
       </button>
     </div>
   </header>
@@ -56,24 +49,24 @@
        =================================================================== -->
   <section class="w-full max-w-[1480px] mx-auto px-1.5 pt-1 flex flex-col gap-1 min-w-0">
 
-    <!-- Optional Multi-Human Perspective Switcher Bar (Active when >=2 Human seats on Host) -->
-    <div id="hotSeatSwitcherBar" class="hidden w-full rounded-lg bg-indigo-950/90 border border-amber-400/60 px-2 py-1 min-w-0"></div>
+    <!-- Optional Multi-Human Perspective Switcher Bar (Only shown when simulated local human seat is added) -->
+    <div id="hotSeatSwitcherBar" class="hidden w-full rounded-lg bg-indigo-950/90 border border-amber-400/60 px-2 py-0.5 min-w-0"></div>
 
     <!-- Zone 1: Opponents Row (Only Opponents in Clockwise Order!) -->
-    <div id="seatTabsBar" class="w-full grid grid-cols-2 gap-1.5 min-w-0">
+    <div id="seatTabsBar" class="w-full grid grid-cols-2 gap-1 min-w-0">
       <!-- Populated dynamically with ONLY opponents -->
     </div>
 
     <!-- Zone 2A: Prominent Full-Width Active Turn Banner + Speed Toggle -->
-    <div id="publicTurnBanner" class="w-full rounded-lg px-2 py-1 flex items-center justify-between gap-1.5 border transition min-w-0">
+    <div id="publicTurnBanner" class="w-full rounded-lg px-2 py-0.5 flex items-center justify-between gap-1.5 border transition min-w-0">
       <!-- Populated dynamically -->
     </div>
 
     <!-- Zone 2B: Public 4-Column Job Bank Strip -->
     <div class="w-full flex flex-col gap-0.5 min-w-0">
       <div class="flex items-center justify-between px-1 min-w-0">
-        <span class="text-[10px] font-extrabold text-amber-300/90 truncate">🏛️ 公共魔界人才池（點擊放大｜招募自此分發）</span>
-        <button id="btnExpandJobBankModal" class="text-[10px] font-bold text-sky-300 whitespace-nowrap shrink-0">
+        <span class="text-[9px] font-extrabold text-amber-300/90 truncate">🏛️ 公共魔界人才池（點擊部門頂牌可展開檢視）</span>
+        <button id="btnExpandJobBankModal" class="text-[9px] font-bold text-sky-300 whitespace-nowrap shrink-0">
           🔍全展開 ▸
         </button>
       </div>
@@ -89,10 +82,10 @@
        + ZONE 4 (LOWER-MIDDLE): MY PERMANENT HERO STATUS BAR
        + ZONE 5 (BOTTOM): MY HAND DOCK
        =================================================================== -->
-  <main class="flex-1 w-full max-w-[1480px] mx-auto px-1.5 py-1 flex flex-col justify-between gap-1 min-w-0">
+  <main class="flex-1 w-full max-w-[1480px] mx-auto px-1.5 py-0.5 flex flex-col justify-between gap-1 min-w-0">
 
     <!-- INITIAL DRAFT STAGE -->
-    <section id="draftStageSection" class="hidden stage-25d-container border border-amber-400 rounded-xl p-2 flex flex-col gap-1.5 min-w-0">
+    <section id="draftStageSection" class="hidden stage-25d-container border border-amber-400 rounded-xl p-2 flex flex-col gap-1 min-w-0">
       <div class="flex items-center justify-between border-b border-slate-800 pb-1 gap-2 min-w-0">
         <div class="min-w-0 flex-1">
           <h2 class="text-xs sm:text-base font-black text-amber-300 truncate">🎲 首輪召喚：點選下方頂牌招募 (左右滑動看4部門)</h2>
@@ -143,27 +136,27 @@
     </section>
 
     <!-- ZONE 4: MY PERMANENT HERO STATUS BAR -->
-    <section id="myHeroStatusBar" class="w-full rounded-xl bg-slate-950/95 border-2 border-amber-500/60 px-2 py-1 flex flex-col gap-1 shadow-lg transition min-w-0">
+    <section id="myHeroStatusBar" class="w-full rounded-xl bg-slate-950/95 border-2 border-amber-500/60 px-2 py-1 flex flex-col gap-0.5 shadow-lg transition min-w-0">
     </section>
 
-    <!-- ENLARGED 3-LINE HIGH-CONTRAST LIVE BATTLE MESSAGE PANEL -->
-    <div id="liveTickerBanner" class="w-full bg-slate-900/95 border-2 border-indigo-500/50 rounded-xl px-2.5 py-1.5 flex items-center justify-between gap-2 min-w-0 cursor-pointer shadow-lg">
-      <div id="latestLogTicker" class="flex-1 min-w-0 flex flex-col gap-1">
+    <!-- COMPACT 2-LINE HIGH-CONTRAST LIVE BATTLE MESSAGE PANEL -->
+    <div id="liveTickerBanner" class="w-full bg-slate-900/95 border border-indigo-500/50 rounded-xl px-2 py-1 flex items-center justify-between gap-1.5 min-w-0 cursor-pointer shadow">
+      <div id="latestLogTicker" class="flex-1 min-w-0 flex flex-col gap-0.5">
       </div>
-      <span class="px-2 py-1 rounded-lg bg-indigo-950/90 border border-sky-400 text-[11px] text-sky-300 font-black whitespace-nowrap shrink-0 shadow">📜戰況日誌 ▸</span>
+      <span class="px-1.5 py-0.5 rounded-lg bg-indigo-950/90 border border-sky-400 text-[10px] text-sky-300 font-black whitespace-nowrap shrink-0">📜日誌 ▸</span>
     </div>
 
     <!-- ZONE 5: BOTTOM MY HAND DOCK -->
-    <section id="myHandDockSection" class="bg-slate-950/90 border-t border-amber-500/40 rounded-xl px-1.5 py-1.5 flex flex-col gap-1 shadow-2xl transition min-w-0">
+    <section id="myHandDockSection" class="bg-slate-950/90 border-t border-amber-500/40 rounded-xl px-1.5 py-1 flex flex-col gap-1 shadow-2xl transition min-w-0">
 
       <!-- Hand Header Bar -->
       <div class="flex items-center justify-between gap-1 px-0.5 min-w-0">
         <div class="flex items-center gap-1.5 min-w-0">
-          <span class="text-xs sm:text-sm font-black text-amber-300 truncate">✋ 法術手牌</span>
+          <span class="text-xs font-black text-amber-300 truncate">✋ 法術手牌</span>
           <span id="playableCountBadge" class="px-1.5 py-0.5 rounded bg-emerald-950/80 border border-emerald-500/40 text-[10px] font-black text-emerald-300 whitespace-nowrap shrink-0">可出 0 張</span>
         </div>
-        <div class="flex items-center gap-1.5 text-[11px] font-extrabold shrink-0">
-          <span id="quotaCounterText" class="px-2 py-0.5 rounded-full bg-indigo-950/90 text-sky-300 border border-sky-500/50 whitespace-nowrap">額度: 0/4</span>
+        <div class="flex items-center gap-1.5 text-[10px] font-extrabold shrink-0">
+          <span id="quotaCounterText" class="px-1.5 py-0.5 rounded-full bg-indigo-950/90 text-sky-300 border border-sky-500/50 whitespace-nowrap">額度: 0/4</span>
           <span class="text-slate-400 whitespace-nowrap">牌庫 <b id="actionDeckCountText" class="text-amber-300">86</b>｜棄 <b id="discardPileCountText" class="text-slate-300">0</b></span>
         </div>
       </div>
@@ -173,17 +166,17 @@
       </div>
 
       <!-- Compact Single-Row Bottom Action Bar -->
-      <div class="grid grid-cols-2 sm:grid-cols-4 gap-1.5 pt-0.5 min-w-0">
-        <button id="btnReturnToSelfView" class="hidden py-2 px-2 rounded-xl bg-sky-600 text-xs font-black text-white shadow truncate">
+      <div class="grid grid-cols-2 sm:grid-cols-4 gap-1.5 min-w-0">
+        <button id="btnReturnToSelfView" class="hidden py-1.5 px-2 rounded-xl bg-sky-600 text-xs font-black text-white shadow truncate">
           👑 返回看自己 (A)
         </button>
-        <button id="btnToggleDiscardMode" class="py-2 px-2 rounded-xl bg-slate-800 border border-slate-600 text-xs font-bold text-slate-200 truncate">
-          🗑️ 棄牌濾牌模式
+        <button id="btnToggleDiscardMode" class="py-1.5 px-2 rounded-xl bg-slate-800 border border-slate-600 text-xs font-bold text-slate-200 truncate">
+          🗑️ 棄牌濾牌
         </button>
-        <button id="btnConfirmDiscard" class="hidden py-2 px-2 rounded-xl bg-orange-600 text-xs font-black text-white shadow truncate">
+        <button id="btnConfirmDiscard" class="hidden py-1.5 px-2 rounded-xl bg-orange-600 text-xs font-black text-white shadow truncate">
           ✔ 確認棄置 (0)
         </button>
-        <button id="btnEndTurn" class="py-2 px-2 rounded-xl bg-amber-500 text-slate-950 font-black text-xs shadow truncate">
+        <button id="btnEndTurn" class="py-1.5 px-2 rounded-xl bg-amber-500 text-slate-950 font-black text-xs shadow truncate">
           ⏭️ 結束出牌 ➔ 發薪
         </button>
       </div>
@@ -262,15 +255,15 @@
     </div>
   </div>
 
-  <!-- MODAL 5: V13 ONLINE MULTIPLAYER LOBBY & ROOM SETTINGS -->
+  <!-- MODAL 5: V13.1 ONLINE MULTIPLAYER LOBBY & WAITING ROOM -->
   <div id="lobbyModal" class="hidden fixed inset-0 bg-black/85 backdrop-blur-sm flex items-center justify-center z-50 p-3">
-    <div class="bg-slate-900 border-2 border-amber-400 rounded-2xl max-w-lg w-full p-4 shadow-2xl max-h-[90vh] overflow-y-auto">
-      <div class="flex items-center justify-between border-b border-slate-700 pb-2 mb-3">
-        <h3 class="text-base font-black text-amber-400">🌐 連線對戰大廳 ＆ 開房設定 (V13)</h3>
+    <div class="bg-slate-900 border-2 border-amber-400 rounded-2xl max-w-lg w-full p-3.5 shadow-2xl max-h-[90vh] overflow-y-auto">
+      <div class="flex items-center justify-between border-b border-slate-700 pb-2 mb-2.5">
+        <h3 class="text-sm sm:text-base font-black text-amber-400">🌐 連線對戰大廳 ＆ 開房設定 (V13.1)</h3>
         <button id="btnCloseLobby" class="px-2.5 py-1 rounded-lg bg-slate-800 text-xs font-bold text-slate-300">✕ 關閉</button>
       </div>
 
-      <div class="space-y-3 text-xs">
+      <div class="space-y-2.5 text-xs">
         <!-- Nickname Input -->
         <div class="flex items-center gap-2 bg-slate-950/90 border border-slate-700 rounded-xl px-2.5 py-1.5">
           <span class="text-slate-300 font-bold whitespace-nowrap">👑 你的魔王尊號：</span>
@@ -291,15 +284,15 @@
         </div>
 
         <!-- PANEL B: HOST ONLINE ROOM -->
-        <div id="lobbyHostPanel" class="hidden space-y-2.5 rounded-xl bg-slate-950/80 border border-amber-500/40 p-2.5">
+        <div id="lobbyHostPanel" class="hidden space-y-2 rounded-xl bg-slate-950/80 border border-amber-500/40 p-2.5">
           <div class="flex items-center justify-between gap-2">
             <div>
-              <div class="text-[11px] font-bold text-amber-300">房間專屬通行碼 (支援跨網 PeerJS ＋ 同機跨分頁)</div>
+              <div class="text-[11px] font-bold text-amber-300">房間專屬通行碼 (跨網 PeerJS ＋ 同機跨分頁)</div>
               <div id="hostNetStatusBadge" class="text-[10px] text-emerald-300 font-semibold mt-0.5">
                 <span class="online-dot-pulse mr-1"></span>雙軌通道就緒
               </div>
             </div>
-            <div id="hostRoomCodeText" class="mp-room-code-box px-3 py-1.5 rounded-xl text-base font-black text-amber-300">
+            <div id="hostRoomCodeText" class="mp-room-code-box px-3 py-1 rounded-xl text-base font-black text-amber-300">
               ----
             </div>
           </div>
@@ -329,12 +322,12 @@
           </label>
         </div>
 
-        <!-- PANEL C: CLIENT JOIN ROOM -->
+        <!-- PANEL C: CLIENT JOIN ROOM & WAITING ROOM ROSTER -->
         <div id="lobbyClientPanel" class="hidden space-y-2.5 rounded-xl bg-slate-950/80 border border-sky-500/40 p-3">
           <div class="font-bold text-sky-300">請輸入房主提供的 4 碼房間通行碼：</div>
           <div class="flex items-center gap-2">
-            <input id="inputJoinRoomCode" type="text" maxlength="8" placeholder="例如：AB88" class="flex-1 bg-slate-900 border-2 border-sky-400 rounded-xl px-3 py-2 text-base font-black text-amber-300 uppercase" />
-            <button id="btnConnectJoinRoom" class="px-4 py-2.5 rounded-xl bg-sky-500 text-slate-950 font-black text-xs shadow-lg shrink-0">
+            <input id="inputJoinRoomCode" type="text" maxlength="8" placeholder="例如：MBZ3" class="flex-1 bg-slate-900 border-2 border-sky-400 rounded-xl px-3 py-1.5 text-base font-black text-amber-300 uppercase" />
+            <button id="btnConnectJoinRoom" class="px-4 py-2 rounded-xl bg-sky-500 text-slate-950 font-black text-xs shadow-lg shrink-0">
               🚀 連線入房
             </button>
           </div>
@@ -342,10 +335,10 @@
         </div>
 
         <!-- HOST / SOLO MATCH RULES & START BUTTONS -->
-        <div id="lobbyHostStartControls" class="space-y-3 pt-1">
+        <div id="lobbyHostStartControls" class="space-y-2.5 pt-1">
           <div>
             <label class="block font-bold text-slate-200 mb-1">1. 對戰總人數 (支援 2–4 人)：</label>
-            <select id="selectPlayerCount" class="w-full bg-slate-950 border border-slate-700 rounded-lg px-3 py-2 text-white font-semibold">
+            <select id="selectPlayerCount" class="w-full bg-slate-950 border border-slate-700 rounded-lg px-3 py-1.5 text-white font-semibold">
               <option value="2">2 人對決 (P1 vs P2)</option>
               <option value="3" selected>3 人混戰 (P1 ~ P3)</option>
               <option value="4">4 人標準局 (P1 ~ P4)</option>
@@ -390,11 +383,11 @@
   <div id="rulesModal" class="hidden fixed inset-0 bg-black/85 backdrop-blur-sm flex items-center justify-center z-50 p-3">
     <div class="bg-slate-900 border-2 border-slate-600 rounded-2xl max-w-2xl w-full p-4 shadow-2xl max-h-[85vh] overflow-y-auto space-y-2.5 text-xs">
       <div class="flex items-center justify-between border-b border-slate-700 pb-2">
-        <h3 class="text-sm sm:text-base font-black text-amber-300">📖 《深淵魔王城 V13》連線對戰與手機直屏規則速查</h3>
+        <h3 class="text-sm sm:text-base font-black text-amber-300">📖 《深淵魔王城 V13.1》連線對戰與手機直屏規則速查</h3>
         <button id="btnCloseRules" class="px-2.5 py-1 rounded-lg bg-slate-800 text-xs font-bold text-white">✕ 關閉</button>
       </div>
       <ul class="list-disc pl-4 space-y-1.5 text-slate-200">
-        <li><strong>🌐 連線對戰模式（V13 新增）</strong>：點擊右上角「🌐連線/開局」可切換「建立連線房間」或「輸入房號加入」。支援跨網域 WebRTC (PeerJS)、同機多分頁 (BroadcastChannel) 以及同視窗多人視角切換測試。</li>
+        <li><strong>🌐 連線對戰與候戰大廳</strong>：點擊右上角「🌐房間」可切換「建立連線房間」或「輸入房號加入」。玩家連入房間後會停留於候戰席位畫面，待房主點擊「首輪輪抽開局」或「快速開局」後全場同步進入牌桌。</li>
         <li><strong>視角 A（預設看自己）＋ 視角 B（點頂部看對手）</strong>：無論你是 P1～P4 哪一個座位，底部永遠顯示你自己的主城與手牌，頂部依順時鐘排列其他對手。點擊任一對手頁籤即可偵察對手的完整四部門編制。</li>
         <li><strong>視角 D（點手牌只列合法目標）</strong>：點擊底部任何一張可用手牌，即彈出「模式 D 選擇目標」毛玻璃抽屜，直接列出所有合法目標大按鈕，一鍵即可施放。</li>
         <li><strong>👑 魔族皇室（副總）三大鐵律</strong>：① 進入部門即強制成為主管（0 級皇室會把部門技能壓成 0 級）；② 每部門最多 1 名皇室；③ 用「獻祭遣散」或「魅惑挖角」處理皇室須同時消耗 2 張符合技能需求的同名卡（可混搭不同技能數字）。</li>
