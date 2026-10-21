@@ -654,6 +654,18 @@ function updateSettingsMenuUI() {
     muteIcon.textContent = isMuted ? '🔇' : '🔊';
     muteLabel.textContent = isMuted ? '已靜音' : '音效開啟';
   }
+  const homeSpeedBtn = document.getElementById('btnHomeToggleSpeed');
+  if (homeSpeedBtn) {
+    homeSpeedBtn.textContent = animSpeedMultiplier === 1 ? '⏩ 1x 標準速度' : '⏩ 2x 快轉中';
+  }
+  const homeMuteBtn = document.getElementById('btnHomeToggleMute');
+  if (homeMuteBtn) {
+    homeMuteBtn.textContent = isMuted ? '🔇 已靜音' : '🔊 音效開啟';
+  }
+  const homeFsBtn = document.getElementById('btnHomeFullscreen');
+  if (homeFsBtn) {
+    homeFsBtn.textContent = deferredPwaPrompt ? '📲 安裝PWA' : isRunningStandalonePWA() ? '✔ PWA全螢幕' : isFs ? '✕ 退出全螢幕' : '⛶ 全螢幕/PWA';
+  }
   if (gameState) {
     const modeText = document.getElementById('settingsModeText');
     const ruleText = document.getElementById('settingsRuleText');
@@ -858,13 +870,13 @@ function renderAll() {
     }).join('');
   }
 
-  // 3. ZONE 2: Per-Column Incremental Diffing for Public 4-Column Job Bank Portrait Cards
-  // Unchanged columns NEVER recreate their DOM or portrait <img>!
+  // 3. ZONE 2: Per-Column Incremental Diffing for Public 4-Column Job Bank Pure 2:3 Card Thumbnails
+  // Displays ONLY the 2:3 character card directly (no redundant top header or bottom name bar)
   const condensedStrip = document.getElementById('condensedJobBankPills');
   if (condensedStrip) {
     if (condensedStrip.children.length !== 4 || !condensedStrip.querySelector('[data-bank-slot]')) {
       condensedStrip.innerHTML = ['RED', 'YELLOW', 'BLUE', 'GREEN'].map(d =>
-        `<div data-bank-slot="${d}" class="h-full min-h-0 min-w-0"></div>`
+        `<div data-bank-slot="${d}" class="h-full min-h-0 min-w-0 flex items-center justify-center"></div>`
       ).join('');
     }
     ['RED', 'YELLOW', 'BLUE', 'GREEN'].forEach(d => {
@@ -879,27 +891,18 @@ function renderAll() {
 
       if (!topUid) {
         slotEl.innerHTML = `
-          <div class="jobbank-portrait-card w-full bg-slate-950 border border-slate-800 text-center min-w-0">
-            <div class="text-[10px] font-bold text-slate-500 truncate">${meta.icon}${meta.short}(0)</div>
-            <div class="text-[10px] text-slate-500 my-auto">已抽乾</div>
+          <div class="jobbank-thumb-card empty-rune-slot border border-dashed ${meta.border} flex flex-col items-center justify-center text-center p-1">
+            <div class="text-[10px] font-bold ${meta.text}">${meta.icon}${meta.short}</div>
+            <div class="text-[9px] text-slate-400 mt-0.5">已抽乾</div>
           </div>
         `;
         return;
       }
       const topCard = CARDS_BY_ID[topUid];
-      const avSrc = getMiniAvatarSrc(topCard.tplId);
-      const skillTag = topCard.role === 'ENGINEER' ? '⚒苦工·$1' : `${topCard.isVP ? '👑' : ''}${topCard.skill}級·$${topCard.salary}`;
       slotEl.innerHTML = `
-        <button data-open-bank-dept="${d}" class="jobbank-portrait-card w-full ${meta.panelBg} border ${meta.border} text-left shadow-md min-w-0">
-          <div class="flex items-center justify-between w-full gap-0.5 min-w-0 shrink-0 mb-0.5">
-            <span class="text-[10px] font-black ${meta.text} whitespace-nowrap">${meta.icon}${meta.short}</span>
-            <span class="text-[9px] font-bold text-slate-300 whitespace-nowrap">剩${deck.length}</span>
-          </div>
-          <div class="jobbank-portrait-art-wrap">
-            ${avSrc ? `<img src="${avSrc}" alt="${topCard.title}" decoding="async" class="jobbank-portrait-art-img" />` : `<div class="w-full h-full flex items-center justify-center text-base">${meta.icon}</div>`}
-            <span class="absolute bottom-0.5 right-0.5 px-1 py-0.5 rounded bg-slate-950/90 border border-amber-400/60 text-[9px] font-black text-amber-300 leading-none whitespace-nowrap shadow">${skillTag}</span>
-          </div>
-          <div class="text-[10px] sm:text-xs font-black text-white truncate w-full text-center mt-1 shrink-0">${topCard.title}</div>
+        <button data-open-bank-dept="${d}" class="jobbank-thumb-card border-2 ${meta.border} ${topCard.isVP ? 'vp-card-frame' : ''} bg-slate-950">
+          ${getCardImgTag(topCard.tplId, topCard.title, 'w-full h-full object-cover block')}
+          <span class="absolute top-0.5 right-0.5 px-1 py-0.5 rounded bg-slate-950/90 border border-slate-600 text-[8px] font-black text-amber-300 leading-none shadow">剩${deck.length}</span>
         </button>
       `;
     });
@@ -1725,7 +1728,7 @@ function attachDynamicBoardListeners() {
   });
 }
 
-// === Job Bank Modal (Compact 2:3 Card + Enlarged Info Panel) ===
+// === Job Bank Modal (Pure 2:3 Character Cards Only — No Redundant Text Boxes) ===
 function openJobBankModal() {
   document.getElementById('jobBankModalTitle').textContent = '🏛️ 中央魔界人才池（四大部門翻開頂牌）';
   document.getElementById('jobBankModalSub').textContent = '打出「契約召喚」或「強塞魔物」時可選取此處翻開的部下。';
@@ -1741,34 +1744,24 @@ function openJobBankModal() {
     const deck = gameState.jobBank[d];
     const topUid = deck[0];
     if (!topUid) {
-      return `<div class="rounded-xl bg-slate-950 border border-slate-800 p-4 text-center text-slate-500">${meta.name} 已抽乾</div>`;
+      return `
+        <div class="modal-pure-card empty-rune-slot rounded-xl border-2 border-dashed ${meta.border} p-3 flex flex-col items-center justify-center text-center">
+          <div class="w-10 h-10 rounded-full ${meta.panelBg} border ${meta.border} flex items-center justify-center text-lg opacity-60">${meta.icon}</div>
+          <div class="text-xs font-black ${meta.text} mt-1.5">${meta.name}</div>
+          <div class="text-[11px] font-bold text-slate-400 mt-0.5">已抽乾 (0張)</div>
+        </div>
+      `;
     }
-    const c = CARDS_BY_ID[topUid];
-    const roleLabel = c.role === 'ENGINEER' ? '⚒ 哥布林苦工 (抵1危機)' : c.isVP ? `👑 魔族皇室 (${c.skill}級主管)` : `⚡ 部門統領 (技能 ${c.skill}級)`;
     return `
-      <div class="rounded-xl bg-slate-950/90 border-2 ${meta.border} p-2 flex flex-col justify-between gap-1.5 min-w-0 shadow-lg">
-        <div class="flex items-center justify-between text-xs px-0.5">
-          <span class="font-black ${meta.text} truncate">${meta.icon}${meta.name}</span>
-          <span class="px-1.5 py-0.5 rounded bg-slate-900 border border-slate-700 text-[10px] font-bold text-slate-300">剩 ${deck.length} 張</span>
-        </div>
-        <div class="bank-modal-card-wrap">
-          ${renderEmployeeCardHTML(topUid, 'w-full', '頂牌')}
-        </div>
-        <div class="rounded-lg bg-slate-900/95 border border-slate-800 p-1.5 text-left space-y-0.5">
-          <div class="text-xs font-black text-white truncate">${c.isVP ? '👑 ' : ''}${c.title}</div>
-          <div class="text-[11px] font-bold text-amber-300 truncate">${roleLabel}</div>
-          <div class="flex items-center justify-between text-[11px] font-extrabold pt-0.5 border-t border-slate-800">
-            <span class="text-rose-400">每回供品：💎-${c.salary}</span>
-            <span class="text-sky-300">${c.role === 'ENGINEER' ? '苦工池' : `${meta.short}${c.skill}級`}</span>
-          </div>
-        </div>
+      <div class="modal-pure-card">
+        ${renderEmployeeCardHTML(topUid, 'w-full h-full', `剩${deck.length}張`)}
       </div>
     `;
   }).join('');
   document.getElementById('jobBankModal').classList.remove('hidden');
 }
 
-// === Opponent Castle Popup Modal: Shrunk 2:3 Character Cards + Enlarged Opponent & Department Info! ===
+// === Opponent Castle Popup Modal: Enlarged Opponent Overview + Pure 2:3 Character Cards Only! ===
 function openOpponentCastleModal(oppId) {
   const opp = gameState.players.find(p => p.id === oppId);
   if (!opp) return;
@@ -1781,7 +1774,7 @@ function openOpponentCastleModal(oppId) {
   const roundsLeft = burn > 0 ? Math.max(0, Math.ceil(opp.crystals / burn)) : 99;
 
   document.getElementById('jobBankModalTitle').textContent = `🎯 對手偵察：【${opp.name}】主城編制`;
-  document.getElementById('jobBankModalSub').textContent = '點擊苦工、危機、外包或任一部門可查看完整卡牌清單';
+  document.getElementById('jobBankModalSub').textContent = '點擊苦工、危機、外包或任一角色卡可查看下屬與完整卡牌清單';
 
   const summaryEl = document.getElementById('jobBankOpponentSummary');
   if (summaryEl) {
@@ -1812,7 +1805,7 @@ function openOpponentCastleModal(oppId) {
           </div>
         </div>
 
-        <!-- Part 2: Enlarged 3-Column Workforce & Crisis Inspection Cards (Zero awkward line wrapping!) -->
+        <!-- Part 2: Enlarged 3-Column Workforce & Crisis Inspection Cards -->
         <div class="grid grid-cols-3 gap-1.5 w-full">
           <button data-opp-modal-eng="${opp.id}" class="rounded-xl bg-red-950/75 border border-red-500/50 p-2 text-left flex flex-col justify-between gap-0.5 shadow">
             <div class="flex items-center justify-between w-full">
@@ -1857,72 +1850,29 @@ function openOpponentCastleModal(oppId) {
     summaryEl.querySelector('[data-opp-modal-outsourced]')?.addEventListener('click', () => openOutsourcedInspectorModal(opp.id));
   }
 
-  // Part 3: 4 Departments with Shrunk Character Card (.opp-modal-card-wrap) + Enlarged Tactical & Subordinate Info
+  // Part 3: 4 Departments — Pure 2:3 Character Cards Only (No redundant outer box, header, or footer text!)
   const grid = document.getElementById('jobBankModalGrid');
   grid.innerHTML = ['RED', 'YELLOW', 'BLUE', 'GREEN'].map(d => {
     const meta = DEPT_META[d];
     const deptArr = opp.departments[d];
-    const effSkill = getEffectiveSkill(opp, d);
-    const deptSalary = deptArr.reduce((s, uid) => s + ((CARDS_BY_ID[uid] && CARDS_BY_ID[uid].salary) || 0), 0);
-
-    const tacticalNote =
-      d === 'YELLOW' ? `🎯 弱點：吃 [${effSkill}級] 討伐危機` :
-      d === 'BLUE' ? `🎯 弱點：吃 [${effSkill}級] 強塞/挖角` :
-      d === 'RED' ? `🛡️ 可鎮壓 [${effSkill}級] 討伐危機` :
-      `💰 可徵收 [${effSkill}級] 金庫魔晶`;
 
     if (deptArr.length === 0) {
       return `
-        <div class="rounded-xl bg-slate-950/90 border-2 border-dashed ${meta.border} p-2 flex flex-col justify-between gap-1.5 min-w-0">
-          <div class="flex items-center justify-between px-0.5">
-            <span class="text-xs sm:text-sm font-black ${meta.text} truncate">${meta.icon}${meta.name}</span>
-            <span class="px-2 py-0.5 rounded bg-slate-900 border border-slate-700 text-xs font-black text-slate-400">0 級</span>
-          </div>
-          <div class="opp-modal-card-wrap empty-rune-slot rounded-xl border border-dashed ${meta.border} p-2 flex flex-col items-center justify-center text-center">
-            <div class="w-9 h-9 rounded-full ${meta.panelBg} border ${meta.border} flex items-center justify-center text-base opacity-60">${meta.icon}</div>
-            <div class="text-[11px] font-black text-slate-400 mt-1">缺工空城</div>
-          </div>
-          <div class="rounded-lg bg-slate-900/95 border border-slate-800 p-1.5 text-left space-y-0.5">
-            <div class="text-xs font-black text-slate-400">無主管駐守 (視為 0 級)</div>
-            <div class="flex items-center justify-between text-[11px] font-bold">
-              <span class="text-slate-400">編制 0 人</span>
-              <span class="text-emerald-400">💎-0/回</span>
-            </div>
-            <div class="text-[10px] font-extrabold text-amber-300 truncate pt-0.5 border-t border-slate-800">${tacticalNote}</div>
-          </div>
+        <div class="modal-pure-card empty-rune-slot rounded-xl border-2 border-dashed ${meta.border} p-2.5 flex flex-col items-center justify-center text-center">
+          <div class="w-10 h-10 rounded-full ${meta.panelBg} border ${meta.border} flex items-center justify-center text-lg opacity-60">${meta.icon}</div>
+          <div class="text-xs font-black ${meta.text} mt-1.5">${meta.name}</div>
+          <div class="text-[11px] font-bold text-slate-400 mt-0.5">缺工空城 (0級)</div>
         </div>
       `;
     }
 
     const headUid = deptArr[0];
-    const hCard = CARDS_BY_ID[headUid];
     const subordinates = deptArr.slice(1);
-    const subNames = subordinates.map(u => CARDS_BY_ID[u]?.title).filter(Boolean).join('、');
+    const badgeText = subordinates.length > 0 ? `+${subordinates.length}下屬 🔍` : '';
 
     return `
-      <div data-opp-dept-detail="${d}" data-opp-id="${opp.id}" class="rounded-xl bg-slate-950/95 border-2 ${meta.border} p-2 flex flex-col justify-between gap-1.5 min-w-0 cursor-pointer shadow-lg">
-        <!-- Enlarged Dept Title & Skill Level Header -->
-        <div class="flex items-center justify-between gap-1 px-0.5">
-          <span class="text-xs sm:text-sm font-black ${meta.text} truncate">${meta.icon}${meta.name}</span>
-          <span class="px-2 py-0.5 rounded-md ${meta.badgeBg} border ${meta.border} text-xs font-black text-white whitespace-nowrap shrink-0">⚡ ${effSkill} 級</span>
-        </div>
-
-        <!-- Shrunk 2:3 Character Card (.opp-modal-card-wrap: 88px wide on mobile) -->
-        <div class="opp-modal-card-wrap">
-          ${renderEmployeeCardHTML(headUid, 'w-full', hCard.isVP ? '👑皇室主管' : '👑主管')}
-        </div>
-
-        <!-- Enlarged Department Details Footer -->
-        <div class="rounded-lg bg-slate-900/95 border border-slate-700 p-1.5 text-left space-y-0.5">
-          <div class="flex items-center justify-between gap-1">
-            <span class="text-xs font-black text-white truncate">${hCard.isVP ? '👑 ' : ''}${hCard.title}</span>
-            <span class="text-[11px] font-black text-rose-400 whitespace-nowrap shrink-0">💎-${deptSalary}/回</span>
-          </div>
-          <div class="text-[11px] font-bold ${subordinates.length > 0 ? 'text-amber-300' : 'text-slate-400'} truncate">
-            ${subordinates.length > 0 ? `➕ 下屬(${subordinates.length})：${subNames} 🔍` : `編制 1 人（無下屬·點此放大🔍）`}
-          </div>
-          <div class="text-[10px] font-extrabold text-sky-300 truncate pt-0.5 border-t border-slate-800">${tacticalNote}</div>
-        </div>
+      <div data-opp-dept-detail="${d}" data-opp-id="${opp.id}" class="modal-pure-card cursor-pointer">
+        ${renderEmployeeCardHTML(headUid, 'w-full h-full', badgeText)}
       </div>
     `;
   }).join('');
@@ -2275,6 +2225,62 @@ function renderLobbyUI() {
   }
 }
 
+
+window.hasStartedActiveMatch = false;
+
+function renderHomeScreenUI() {
+  const fanContainer = document.getElementById('homeHeroCardsFan');
+  if (fanContainer && !fanContainer.hasChildNodes()) {
+    const heroTpls = [
+      { tplId: 'E_R_VP3', cls: 'home-hero-fan-card home-hero-fan-left border-2 border-red-400' },
+      { tplId: 'E_G_VP3', cls: 'home-hero-fan-card home-hero-fan-center border-2 border-amber-400' },
+      { tplId: 'E_B_VP3', cls: 'home-hero-fan-card home-hero-fan-right border-2 border-blue-400' }
+    ];
+    fanContainer.innerHTML = heroTpls.map(item =>
+      `<div class="${item.cls}">${getCardImgTag(item.tplId, item.tplId, 'w-full h-full object-cover block')}</div>`
+    ).join('');
+  }
+
+  const homeNick = document.getElementById('homeInputNickname');
+  if (homeNick && document.activeElement !== homeNick) {
+    homeNick.value = gameSession.playerName || '深淵領主';
+  }
+
+  const resumeBtn = document.getElementById('btnHomeResumeGame');
+  if (resumeBtn) {
+    resumeBtn.classList.toggle('hidden', !window.hasStartedActiveMatch);
+  }
+
+  updateSettingsMenuUI();
+}
+
+function syncHomeSetupToLobbyControls() {
+  const homeNick = document.getElementById('homeInputNickname');
+  const lobbyNick = document.getElementById('inputPlayerNickname');
+  if (homeNick && homeNick.value.trim()) {
+    gameSession.playerName = homeNick.value.trim();
+    if (lobbyNick) lobbyNick.value = gameSession.playerName;
+  }
+
+  const homePCount = document.getElementById('homeSelectPlayerCount');
+  const lobbyPCount = document.getElementById('selectPlayerCount');
+  if (homePCount && lobbyPCount) {
+    lobbyPCount.value = homePCount.value;
+    gameSession.lobbyState.playerCount = parseInt(homePCount.value, 10) || 3;
+  }
+
+  const homeRule = document.getElementById('homeSelectRule');
+  if (homeRule) {
+    const val = homeRule.value;
+    gameSession.lobbyState.playDiscardMode = val;
+    document.querySelectorAll('input[name="playDiscardRule"]').forEach(r => {
+      r.checked = (r.value === val);
+    });
+  }
+
+  syncHostLobbySettingsFromInputs();
+}
+
 function initAppOnLoad() {
   if (window.__dbrV13Initialized) return;
   window.__dbrV13Initialized = true;
@@ -2294,14 +2300,88 @@ function initAppOnLoad() {
   gameSession.hostMasterState = null;
   renderAll();
 
+  renderHomeScreenUI();
+
   if (urlRoom) {
+    document.getElementById('homeScreenModal')?.classList.add('hidden');
     activeLobbyTab = 'CLIENT';
     const joinInput = document.getElementById('inputJoinRoomCode');
     if (joinInput) joinInput.value = urlRoom.toUpperCase();
     document.getElementById('lobbyModal')?.classList.remove('hidden');
     renderLobbyUI();
     joinOnlineRoomAsClient(urlRoom, gameSession.playerName);
+  } else {
+    document.getElementById('homeScreenModal')?.classList.remove('hidden');
   }
+
+  // Home Screen Controls
+  document.getElementById('homeInputNickname')?.addEventListener('input', () => {
+    syncHomeSetupToLobbyControls();
+  });
+  document.getElementById('homeSelectPlayerCount')?.addEventListener('change', () => {
+    syncHomeSetupToLobbyControls();
+  });
+  document.getElementById('homeSelectRule')?.addEventListener('change', () => {
+    syncHomeSetupToLobbyControls();
+  });
+  document.getElementById('btnHomeToggleSpeed')?.addEventListener('click', () => {
+    animSpeedMultiplier = animSpeedMultiplier === 1 ? 2 : 1;
+    updateSettingsMenuUI();
+  });
+  document.getElementById('btnHomeToggleMute')?.addEventListener('click', () => {
+    isMuted = !isMuted;
+    updateSettingsMenuUI();
+  });
+  document.getElementById('btnHomeFullscreen')?.addEventListener('click', () => {
+    triggerPwaInstallOrFullscreen();
+  });
+  document.getElementById('btnHomeQuickStart')?.addEventListener('click', () => {
+    syncHomeSetupToLobbyControls();
+    gameSession.mode = 'SOLO';
+    window.hasStartedActiveMatch = true;
+    document.getElementById('homeScreenModal')?.classList.add('hidden');
+    startMatchFromLobby(true);
+  });
+  document.getElementById('btnHomeDraftStart')?.addEventListener('click', () => {
+    syncHomeSetupToLobbyControls();
+    gameSession.mode = 'SOLO';
+    window.hasStartedActiveMatch = true;
+    document.getElementById('homeScreenModal')?.classList.add('hidden');
+    startMatchFromLobby(false);
+  });
+  document.getElementById('btnHomeOpenLobby')?.addEventListener('click', () => {
+    syncHomeSetupToLobbyControls();
+    document.getElementById('homeScreenModal')?.classList.add('hidden');
+    if (activeLobbyTab === 'SOLO') {
+      activeLobbyTab = 'HOST';
+      if (gameSession.mode !== 'HOST' || !gameSession.roomCode) {
+        createOnlineHostRoom();
+      }
+    }
+    renderLobbyUI();
+    document.getElementById('lobbyModal')?.classList.remove('hidden');
+  });
+  document.getElementById('btnHomeResumeGame')?.addEventListener('click', () => {
+    syncHomeSetupToLobbyControls();
+    document.getElementById('homeScreenModal')?.classList.add('hidden');
+  });
+  document.getElementById('btnHomeOpenRules')?.addEventListener('click', () => {
+    document.getElementById('rulesModal')?.classList.remove('hidden');
+  });
+  document.getElementById('btnHomeOpenGallery')?.addEventListener('click', () => {
+    renderGallery('ALL');
+    document.getElementById('galleryModal')?.classList.remove('hidden');
+  });
+  document.getElementById('btnMenuGoHome')?.addEventListener('click', () => {
+    document.getElementById('settingsMenuModal')?.classList.add('hidden');
+    renderHomeScreenUI();
+    document.getElementById('homeScreenModal')?.classList.remove('hidden');
+  });
+  document.getElementById('btnGameOverHome')?.addEventListener('click', () => {
+    document.getElementById('gameOverModal')?.classList.add('hidden');
+    renderHomeScreenUI();
+    document.getElementById('homeScreenModal')?.classList.remove('hidden');
+  });
 
   document.getElementById('btnCancelModeD').addEventListener('click', () => {
     resetSelectionState();

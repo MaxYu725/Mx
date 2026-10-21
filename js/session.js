@@ -594,6 +594,8 @@ function handleIncomingNetworkPacket(packet, transport, peerConn) {
 
 function applyClientReceivedState(newState) {
   if (!newState) return;
+  window.hasStartedActiveMatch = true;
+  document.getElementById('homeScreenModal')?.classList.add('hidden');
   gameSession.lobbyState.matchStarted = true;
   const lobbyModal = document.getElementById('lobbyModal');
   const wasInLobby = lobbyModal && !lobbyModal.classList.contains('hidden');
@@ -1280,6 +1282,8 @@ function runAIStep() {
 // === Start Match from Lobby (Solo or Host Online) ===
 function startMatchFromLobby(quickStart = false) {
   clearTimeout(aiTimer);
+  window.hasStartedActiveMatch = true;
+  document.getElementById('homeScreenModal')?.classList.add('hidden');
   syncHostLobbySettingsFromInputs();
 
   const pCount = gameSession.lobbyState.playerCount || 3;

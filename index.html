@@ -8,7 +8,7 @@
   <meta name="apple-mobile-web-app-capable" content="yes" />
   <meta name="apple-mobile-web-app-status-bar-style" content="black-translucent" />
   <meta name="apple-mobile-web-app-title" content="深淵魔王城" />
-  <title>深淵魔王城：燒魔率爭霸戰 V13.4 (PWA 全螢幕連線對戰版)</title>
+  <title>深淵魔王城：燒魔率爭霸戰 V13.6 (PWA 全螢幕連線對戰版)</title>
   <link rel="manifest" href="manifest.json" />
   <link rel="icon" type="image/png" sizes="192x192" href="icons/icon-192.png" />
   <link rel="apple-touch-icon" href="icons/icon-192.png" />
@@ -44,27 +44,23 @@
 
   <!-- ===================================================================
        MAIN 5-ZONE RESPONSIVE ARENA CONTAINER
-       - Upper Arena (Zone 1 Opponents + Zone 2 Public Talent Pool) expands (flex-1)
-       - Central Stage (Zone 3) hugs V13.2 comfortable 2:3 card size (shrink-0)
-       - Lower Status & Hand Dock (Zone 4 + Zone 5) anchored cleanly at bottom (shrink-0)
        =================================================================== -->
   <main class="flex-1 min-h-0 w-full max-w-[1480px] mx-auto px-2 py-1.5 flex flex-col justify-between gap-1.5 min-w-0 overflow-hidden">
 
     <!-- ===============================================================
-         UPPER ARENA: ENLARGED ZONE 1 (OPPONENTS) + ZONE 2 (JOB BANK)
-         Absorbs extra vertical space so upper info is spacious & readable
+         UPPER ARENA: ENLARGED ZONE 1 (OPPONENTS) + ZONE 2 (JOB BANK PURE CARDS)
          =============================================================== -->
     <section id="upperArenaSection" class="flex-1 min-h-0 w-full flex flex-col justify-between gap-1.5 min-w-0">
 
-      <!-- Optional Multi-Human Perspective Switcher Bar (Only shown when simulated local human seat is added) -->
+      <!-- Optional Multi-Human Perspective Switcher Bar -->
       <div id="hotSeatSwitcherBar" class="hidden w-full rounded-lg bg-indigo-950/90 border border-amber-400/60 px-2 py-1 min-w-0 shrink-0"></div>
 
-      <!-- Zone 1: Enlarged Opponents Row (Click any opponent seat to open Opponent Castle Detail Modal!) -->
+      <!-- Zone 1: Enlarged Opponents Row -->
       <div id="seatTabsBar" class="w-full grid grid-cols-2 gap-1.5 min-w-0 shrink-0">
         <!-- Populated dynamically with ONLY opponents -->
       </div>
 
-      <!-- Zone 2: Enlarged Public 4-Column Job Bank Portrait Cards (Expands to fill upper space) -->
+      <!-- Zone 2: Public 4-Column Job Bank Pure 2:3 Card Thumbnails -->
       <div id="talentMarketSection" class="flex-1 min-h-0 w-full flex flex-col gap-1 min-w-0">
         <div class="flex items-center justify-between px-1 min-w-0 shrink-0">
           <span class="text-[11px] font-extrabold text-amber-300 truncate">🏛️ 公共魔界人才池（點擊頂牌展開大卡檢視）</span>
@@ -72,8 +68,8 @@
             🔍 全展開 ▸
           </button>
         </div>
-        <div id="condensedJobBankPills" class="flex-1 min-h-0 grid grid-cols-4 gap-1.5 w-full min-w-0">
-          <!-- All 4 department top cards rendered as vertical portrait mini-cards -->
+        <div id="condensedJobBankPills" class="flex-1 min-h-0 grid grid-cols-4 gap-1.5 w-full min-w-0 items-center">
+          <!-- All 4 department top cards rendered directly as pure 2:3 card thumbnails -->
         </div>
       </div>
 
@@ -95,7 +91,7 @@
 
     <section id="companyStageSection" class="relative stage-25d-container self-castle-stage rounded-2xl p-1.5 sm:p-2 flex flex-col min-w-0 transition overflow-hidden shrink-0">
 
-      <!-- 4-Department 2:3 Cards Track (Horizontal Scroll at V13.2 Size) -->
+      <!-- 4-Department 2:3 Cards Track -->
       <div id="companyDepartmentsGrid" class="stage-track-scroll no-scrollbar min-w-0">
       </div>
 
@@ -175,6 +171,105 @@
        MODALS (Mobile-Responsive)
        =================================================================== -->
 
+  <!-- MODAL 00: HOME SCREEN OVERLAY (首頁 — 首次載入顯示，支援首次設定、開局與教學) -->
+  <div id="homeScreenModal" class="fixed inset-0 bg-black/90 backdrop-blur-md flex items-center justify-center z-50 p-3">
+    <div class="home-screen-card bg-slate-900 border-2 border-amber-400 rounded-2xl max-w-md w-full p-4 shadow-2xl max-h-[94vh] overflow-y-auto space-y-3">
+
+      <!-- 1. Hero Emblem, Card Fan & Game Title -->
+      <div class="text-center space-y-1.5 pt-0.5">
+        <div id="homeHeroCardsFan" class="flex items-center justify-center gap-2 py-1">
+          <!-- Populated dynamically with 3 iconic 2:3 Royal cards -->
+        </div>
+        <div class="inline-flex items-center gap-1 px-2.5 py-0.5 rounded-full bg-purple-950 border border-amber-400/60 text-[10px] font-black text-amber-300">
+          🔥 DUNGEON BURN RATE · V13.6 連線對戰版
+        </div>
+        <h2 class="text-lg sm:text-xl font-black text-amber-400 leading-tight">🏰 深淵魔王城：燒魔率爭霸戰</h2>
+        <p class="text-[11px] text-slate-300">招募四大部門魔界精英、轉嫁討伐危機，成為最後不破產的深淵霸主！</p>
+      </div>
+
+      <!-- 2. First-Time Setup & Match Configuration Panel (首次設定區) -->
+      <div class="rounded-xl bg-slate-950/90 border border-slate-700 p-3 space-y-2.5 text-xs">
+        <div class="flex items-center justify-between border-b border-slate-800 pb-1.5">
+          <span class="font-black text-amber-300">⚙️ 首次設定 ＆ 對局參數</span>
+          <span class="text-[10px] text-slate-400">設定將自動記憶</span>
+        </div>
+
+        <!-- Player Nickname -->
+        <div class="flex items-center gap-2">
+          <label for="homeInputNickname" class="text-slate-300 font-bold whitespace-nowrap shrink-0">👑 魔王尊號：</label>
+          <input id="homeInputNickname" type="text" maxlength="16" value="深淵領主" class="flex-1 bg-slate-900 border border-amber-500/50 rounded-lg px-2.5 py-1 text-white font-black text-xs min-w-0" />
+        </div>
+
+        <!-- Player Count & Play/Discard Rule -->
+        <div class="grid grid-cols-2 gap-2">
+          <div>
+            <label for="homeSelectPlayerCount" class="block text-[10px] font-bold text-slate-400 mb-1">👥 單機對戰人數：</label>
+            <select id="homeSelectPlayerCount" class="w-full bg-slate-900 border border-slate-700 rounded-lg px-2 py-1.5 text-white font-bold text-xs">
+              <option value="2">2 人對決 (1v1)</option>
+              <option value="3" selected>3 人混戰 (推薦)</option>
+              <option value="4">4 人標準局</option>
+            </select>
+          </div>
+          <div>
+            <label for="homeSelectRule" class="block text-[10px] font-bold text-slate-400 mb-1">⚖️ 出牌/棄牌規則：</label>
+            <select id="homeSelectRule" class="w-full bg-slate-900 border border-slate-700 rounded-lg px-2 py-1.5 text-amber-300 font-bold text-xs">
+              <option value="STRICT_EITHER" selected>標準二選一</option>
+              <option value="SHARED_QUOTA_4">流暢共用4額度</option>
+            </select>
+          </div>
+        </div>
+
+        <!-- Quick Device Preferences: Speed / Audio / Fullscreen -->
+        <div class="grid grid-cols-3 gap-1.5 pt-0.5">
+          <button id="btnHomeToggleSpeed" class="py-1.5 px-1.5 rounded-lg bg-slate-900 border border-amber-500/40 text-[10px] font-black text-amber-300 truncate">
+            ⏩ 1x 標準速度
+          </button>
+          <button id="btnHomeToggleMute" class="py-1.5 px-1.5 rounded-lg bg-slate-900 border border-emerald-500/40 text-[10px] font-black text-emerald-300 truncate">
+            🔊 音效開啟
+          </button>
+          <button id="btnHomeFullscreen" class="py-1.5 px-1.5 rounded-lg bg-slate-900 border border-sky-500/40 text-[10px] font-black text-sky-300 truncate">
+            ⛶ 全螢幕/PWA
+          </button>
+        </div>
+      </div>
+
+      <!-- 3. Primary Start & Multiplayer Buttons -->
+      <div class="space-y-2">
+        <div class="grid grid-cols-2 gap-2">
+          <button id="btnHomeQuickStart" class="py-2.5 px-2 rounded-xl bg-amber-500 text-slate-950 font-black text-xs shadow-lg flex flex-col items-center justify-center gap-0.5">
+            <span>⚡ 單機快速開局</span>
+            <span class="text-[10px] font-bold opacity-85">自動發牌・立即開戰</span>
+          </button>
+          <button id="btnHomeDraftStart" class="py-2.5 px-2 rounded-xl bg-indigo-600 border border-indigo-400 text-white font-black text-xs shadow-lg flex flex-col items-center justify-center gap-0.5">
+            <span>🎲 單機輪抽開局</span>
+            <span class="text-[10px] font-bold text-indigo-200">首輪輪流挑選4部下</span>
+          </button>
+        </div>
+
+        <button id="btnHomeOpenLobby" class="w-full py-2.5 px-3 rounded-xl bg-emerald-950/90 border-2 border-emerald-400 text-emerald-300 font-black text-xs shadow-lg flex items-center justify-center gap-1.5">
+          🌐 多人連線對戰大廳（建立房間 ／ 輸入房號加入）
+        </button>
+
+        <button id="btnHomeResumeGame" class="hidden w-full py-2 px-3 rounded-xl bg-slate-800 border border-slate-600 text-slate-200 font-bold text-xs">
+          ▶️ 返回目前進行中的對局
+        </button>
+      </div>
+
+      <!-- 4. Tutorial & Card Gallery Entry Buttons -->
+      <div class="grid grid-cols-2 gap-2 pt-1 border-t border-slate-800">
+        <button id="btnHomeOpenRules" class="py-2 px-2.5 rounded-xl bg-slate-800 border border-amber-400/60 text-xs font-black text-amber-300 flex items-center justify-center gap-1.5 shadow">
+          <span>📖</span>
+          <span>新手教學與規則</span>
+        </button>
+        <button id="btnHomeOpenGallery" class="py-2 px-2.5 rounded-xl bg-slate-800 border border-indigo-400/60 text-xs font-black text-indigo-200 flex items-center justify-center gap-1.5 shadow">
+          <span>🃏</span>
+          <span>144張卡牌圖鑑</span>
+        </button>
+      </div>
+
+    </div>
+  </div>
+
   <!-- MODAL 0: UNIFIED SETTINGS & TOOLS MENU (設定選單) -->
   <div id="settingsMenuModal" class="hidden fixed inset-0 bg-black/85 backdrop-blur-sm flex items-center justify-center z-50 p-3">
     <div class="bg-slate-900 border-2 border-amber-400 rounded-2xl max-w-sm w-full p-4 shadow-2xl space-y-3">
@@ -189,10 +284,15 @@
         <span id="settingsRuleText" class="text-[11px] text-indigo-300 font-bold">標準二選一</span>
       </div>
 
-      <!-- Primary Action: Open Multiplayer / Room Setup Lobby -->
-      <button id="btnOpenLobby" class="w-full py-2.5 px-3 rounded-xl bg-amber-500 text-slate-950 font-black text-xs shadow-lg flex items-center justify-center gap-1.5">
-        🌐 連線對戰大廳 ＆ 開房設定
-      </button>
+      <!-- Primary Actions: Multiplayer Lobby & Return to Home Screen -->
+      <div class="grid grid-cols-2 gap-2">
+        <button id="btnOpenLobby" class="py-2.5 px-2 rounded-xl bg-amber-500 text-slate-950 font-black text-xs shadow-lg flex items-center justify-center gap-1">
+          🌐 連線對戰大廳
+        </button>
+        <button id="btnMenuGoHome" class="py-2.5 px-2 rounded-xl bg-slate-800 border border-amber-400/60 text-amber-300 font-black text-xs shadow-lg flex items-center justify-center gap-1">
+          🏠 返回遊戲首頁
+        </button>
+      </div>
 
       <!-- Toggles Grid: PWA/Fullscreen / Speed / Audio -->
       <div class="grid grid-cols-3 gap-2">
@@ -222,18 +322,18 @@
         </button>
         <button id="btnOpenRules" class="py-2 px-1.5 rounded-xl bg-slate-800 border border-slate-600 text-[11px] font-bold text-slate-200 flex flex-col items-center gap-0.5">
           <span class="text-base">📖</span>
-          <span>遊戲規則</span>
+          <span>教學規則</span>
         </button>
       </div>
 
-      <!-- Optional Host AI Takeover Container (visible when Host can toggle AI for a remote seat) -->
+      <!-- Optional Host AI Takeover Container -->
       <div id="settingsHostTakeoverBox" class="hidden pt-1 border-t border-slate-800"></div>
     </div>
   </div>
 
-  <!-- MODAL 1: EXPANDED JOB BANK & OPPONENT CASTLE INSPECTOR (Compact Card + Enlarged Info Layout) -->
+  <!-- MODAL 1: EXPANDED JOB BANK & OPPONENT CASTLE INSPECTOR (Pure 2:3 Character Cards Layout) -->
   <div id="jobBankModal" class="hidden fixed inset-0 bg-black/85 backdrop-blur-sm flex items-center justify-center z-50 p-2.5 sm:p-3">
-    <div class="bg-slate-900 border-2 border-amber-400 rounded-2xl max-w-4xl w-full p-3 sm:p-3.5 shadow-2xl max-h-[92vh] overflow-y-auto">
+    <div class="bg-slate-900 border-2 border-amber-400 rounded-2xl max-w-3xl w-full p-3 sm:p-3.5 shadow-2xl max-h-[92vh] overflow-y-auto">
       <div class="flex items-center justify-between border-b border-slate-700 pb-2 mb-2 gap-2">
         <div class="min-w-0">
           <h3 id="jobBankModalTitle" class="text-sm sm:text-lg font-black text-amber-300 truncate">🏛️ 中央魔界人才池（四大部門翻開頂牌）</h3>
@@ -243,7 +343,7 @@
       </div>
       <!-- Enlarged Opponent Dashboard & Workforce Summary when inspecting an Opponent's Castle -->
       <div id="jobBankOpponentSummary" class="hidden mb-2.5"></div>
-      <div id="jobBankModalGrid" class="grid grid-cols-2 sm:grid-cols-4 gap-2 sm:gap-2.5"></div>
+      <div id="jobBankModalGrid" class="grid grid-cols-2 sm:grid-cols-4 gap-2.5 items-center justify-items-center"></div>
     </div>
   </div>
 
@@ -299,11 +399,11 @@
     </div>
   </div>
 
-  <!-- MODAL 5: V13.4 ONLINE MULTIPLAYER LOBBY & WAITING ROOM -->
+  <!-- MODAL 5: ONLINE MULTIPLAYER LOBBY & WAITING ROOM -->
   <div id="lobbyModal" class="hidden fixed inset-0 bg-black/85 backdrop-blur-sm flex items-center justify-center z-50 p-3">
     <div class="bg-slate-900 border-2 border-amber-400 rounded-2xl max-w-lg w-full p-3.5 shadow-2xl max-h-[90vh] overflow-y-auto">
       <div class="flex items-center justify-between border-b border-slate-700 pb-2 mb-2.5">
-        <h3 class="text-sm sm:text-base font-black text-amber-400">🌐 連線對戰大廳 ＆ 開房設定 (V13.4)</h3>
+        <h3 class="text-sm sm:text-base font-black text-amber-400">🌐 連線對戰大廳 ＆ 開房設定 (V13.6)</h3>
         <button id="btnCloseLobby" class="px-2.5 py-1 rounded-lg bg-slate-800 text-xs font-bold text-slate-300">✕ 關閉</button>
       </div>
 
@@ -423,19 +523,68 @@
     </div>
   </div>
 
-  <!-- MODAL 6: RULES QUICK REFERENCE -->
+  <!-- MODAL 6: INTERACTIVE TUTORIAL & RULES GUIDE (新手教學與規則手冊) -->
   <div id="rulesModal" class="hidden fixed inset-0 bg-black/85 backdrop-blur-sm flex items-center justify-center z-50 p-3">
-    <div class="bg-slate-900 border-2 border-slate-600 rounded-2xl max-w-2xl w-full p-4 shadow-2xl max-h-[85vh] overflow-y-auto space-y-2.5 text-xs">
+    <div class="bg-slate-900 border-2 border-amber-400 rounded-2xl max-w-2xl w-full p-4 shadow-2xl max-h-[88vh] overflow-y-auto space-y-3 text-xs">
       <div class="flex items-center justify-between border-b border-slate-700 pb-2">
-        <h3 class="text-sm sm:text-base font-black text-amber-300">📖 《深淵魔王城 V13.4》PWA 全螢幕與連線規則速查</h3>
+        <h3 class="text-sm sm:text-base font-black text-amber-300">📖 《深淵魔王城》新手教學與規則速查</h3>
         <button id="btnCloseRules" class="px-2.5 py-1 rounded-lg bg-slate-800 text-xs font-bold text-white">✕ 關閉</button>
       </div>
-      <ul class="list-disc pl-4 space-y-1.5 text-slate-200">
-        <li><strong>📲 PWA 主畫面安裝與全螢幕</strong>：點擊右上角「⛶ 全螢幕」可立即隱藏手機瀏覽器網址列；或於瀏覽器選單點選「新增至主畫面 / 安裝應用程式」，即可作為獨立全螢幕 App 啟動。</li>
-        <li><strong>🎯 點擊頂部對手彈窗檢視</strong>：中央牌桌固定顯示你自己的主城四大部門；點擊頂部任一對手席位，即可彈出「對手四大部門、資源與戰術弱點明細」視窗。</li>
-        <li><strong>⚙️ 統一設定選單</strong>：點擊右上角「⚙️ 設定」可開啟連線對戰大廳、安裝 PWA、切換 1x/2x 速度、查看卡牌圖鑑、戰況日誌與音效開關。</li>
-        <li><strong>👑 魔族皇室（副總）三大鐵律</strong>：① 進入部門即強制成為主管（0 級皇室會把部門技能壓成 0 級）；② 每部門最多 1 名皇室；③ 用「獻祭遣散」或「魅惑挖角」處理皇室須同時消耗 2 張符合技能需求的同名卡。</li>
-      </ul>
+
+      <!-- Section 1: Core Goal & Burn Rate -->
+      <div class="rounded-xl bg-slate-950/90 border border-amber-500/40 p-3 space-y-1.5">
+        <div class="font-black text-amber-300 text-xs sm:text-sm">🎯 1. 獲勝條件與核心概念（燒魔率 Burn Rate）</div>
+        <p class="text-slate-200 leading-tight">每位魔王開局擁有 <b class="text-emerald-400">💎 100 魔晶</b>、場上 4 名初始部下與 6 張法術手牌。每回合分為三步驟：</p>
+        <ul class="list-disc pl-4 space-y-1 text-slate-300">
+          <li><strong>步驟一（出牌或棄牌）</strong>：最多使用 <strong>4 張</strong>行動額度施放法術卡或棄牌換牌。</li>
+          <li><strong>步驟二（發薪燒魔）</strong>：回合結束時，必須支付所有在職部下、苦工與高利貸外包的魔力供品（<b class="text-rose-400">🔥 燒魔率</b>）。</li>
+          <li><strong>步驟三（補滿手牌）</strong>：若魔晶未跌破 0，將手牌補回 6 張。當其他魔王魔晶 <b class="text-rose-400">&lt; 0 破產倒閉</b> 時，最後存活的魔王獲勝！</li>
+        </ul>
+      </div>
+
+      <!-- Section 2: 4 Departments & Skill Checks -->
+      <div class="rounded-xl bg-slate-950/90 border border-sky-500/40 p-3 space-y-1.5">
+        <div class="font-black text-sky-300 text-xs sm:text-sm">🏛️ 2. 四大部門職能與技能檢定規則</div>
+        <p class="text-slate-300">每個部門以<strong>最上方的主管卡</strong>決定該部門的「有效技能等級（0～3級）」；若部門無人駐守（空城），等級視為 <strong>0 級</strong>：</p>
+        <div class="grid grid-cols-1 sm:grid-cols-2 gap-1.5 pt-0.5">
+          <div class="rounded-lg bg-slate-900 border border-red-500/40 p-2">
+            <div class="font-black text-red-300">🛡️ 防禦鍊金部（紅）</div>
+            <div class="text-[11px] text-slate-300 mt-0.5">檢定<strong>自己</strong>的防禦等級，打出「鎮壓危機」移除自己場上的討伐危機；亦可招募「哥布林苦工（💎-1/回）」抵銷危機人力。</div>
+          </div>
+          <div class="rounded-lg bg-slate-900 border border-amber-500/40 p-2">
+            <div class="font-black text-amber-300">📜 黑魔法情報部（黃）</div>
+            <div class="text-[11px] text-slate-300 mt-0.5">檢定<strong>對手</strong>的黑魔等級，將「討伐危機」塞給對手！對手每缺 1 名苦工，就會自動強聘 1 名每回燒 <b class="text-rose-400">💎-3</b> 的高利貸外包傭兵。</div>
+          </div>
+          <div class="rounded-lg bg-slate-900 border border-blue-500/40 p-2">
+            <div class="font-black text-blue-300">🌀 魔物召喚祭壇（藍）</div>
+            <div class="text-[11px] text-slate-300 mt-0.5">檢定<strong>自己</strong>召喚等級可「契約召喚 / 獻祭遣散」；檢定<strong>對手</strong>召喚等級可對敵方「強塞魔物 / 魅惑挖角」。</div>
+          </div>
+          <div class="rounded-lg bg-slate-900 border border-emerald-500/40 p-2">
+            <div class="font-black text-emerald-300">💎 掠奪金庫部（綠）</div>
+            <div class="text-[11px] text-slate-300 mt-0.5">檢定<strong>自己</strong>的金庫等級，打出「徵收魔晶（+5 / +10 / +15 / +20 💎）」直接補充主城魔晶儲備。</div>
+          </div>
+        </div>
+      </div>
+
+      <!-- Section 3: Royal (VP) Rules -->
+      <div class="rounded-xl bg-slate-950/90 border border-purple-500/40 p-3 space-y-1.5">
+        <div class="font-black text-purple-300 text-xs sm:text-sm">👑 3. 魔族皇室（原版：副總 VP）三大鐵律</div>
+        <ul class="list-disc pl-4 space-y-1 text-slate-200">
+          <li><strong>鐵律 ① 空降奪權</strong>：皇室進入部門後強制置頂成為主管（注意：<b class="text-rose-300">0 級廢柴皇室</b>會把整個部門的有效技能壓成 0 級，是強塞給對手的絕佳害人牌！）。</li>
+          <li><strong>鐵律 ② 同部門唯一</strong>：每個部門最多只能有 1 名皇室。</li>
+          <li><strong>鐵律 ③ 雙卡保護與皇室大招</strong>：使用「獻祭遣散」或「魅惑挖角」處理皇室時，必須<strong>同時消耗 2 張</strong>符合技能等級的同名卡；而當自己場上擁有 <strong>2 名或 3 名皇室</strong>時，即可施放強力的紫色皇室專屬大招（放逐敵方皇室、雙倍供品暴動、血祭大掃除）！</li>
+        </ul>
+      </div>
+
+      <!-- Section 4: UI & Multiplayer Tips -->
+      <div class="rounded-xl bg-slate-950/90 border border-emerald-500/40 p-3 space-y-1">
+        <div class="font-black text-emerald-300 text-xs sm:text-sm">📱 4. 手機直屏操作與連線小撇步</div>
+        <ul class="list-disc pl-4 space-y-1 text-slate-300">
+          <li><strong>點手牌自動列出合法目標</strong>：點擊底部發光手牌，中央即刻彈出所有合法目標按鈕；點選「徵收魔晶」再點一次手牌即可秒速入帳。</li>
+          <li><strong>點擊對手或人才池看大卡</strong>：點擊頂部對手席位或公共人才池縮圖，即可彈窗檢視完整角色卡牌與下屬明細。</li>
+          <li><strong>PWA 全螢幕遊玩</strong>：點擊右上角「⛶ 全螢幕」或透過瀏覽器選單「新增至主畫面」，即可永久隱藏網址列全螢幕暢玩。</li>
+        </ul>
+      </div>
     </div>
   </div>
 
@@ -445,9 +594,14 @@
       <div class="text-5xl">🏆</div>
       <h2 id="gameOverTitle" class="text-xl font-black text-amber-300">深淵霸主誕生！</h2>
       <p id="gameOverDesc" class="text-xs text-slate-300"></p>
-      <button id="btnPlayAgain" class="w-full py-2.5 rounded-xl bg-amber-500 text-slate-950 font-black text-xs shadow-lg">
-        🔄 再來一局
-      </button>
+      <div class="grid grid-cols-2 gap-2">
+        <button id="btnPlayAgain" class="py-2.5 rounded-xl bg-amber-500 text-slate-950 font-black text-xs shadow-lg">
+          🔄 再來一局
+        </button>
+        <button id="btnGameOverHome" class="py-2.5 rounded-xl bg-slate-800 border border-slate-600 text-white font-bold text-xs">
+          🏠 返回首頁
+        </button>
+      </div>
     </div>
   </div>
 

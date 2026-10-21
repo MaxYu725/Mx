@@ -969,3 +969,60 @@
       backface-visibility: hidden;
       -webkit-backface-visibility: hidden;
     }
+
+    /* === V13.6 Home Screen Card Fan + Pure 2:3 Card Thumbnails & Modals === */
+    .home-screen-card {
+      background: radial-gradient(circle at 50% 0%, rgba(88, 28, 135, 0.38) 0%, rgba(15, 23, 42, 0.98) 65%);
+      box-shadow: 0 24px 55px rgba(0, 0, 0, 0.95), 0 0 32px rgba(245, 158, 11, 0.3);
+    }
+    .home-hero-fan-card {
+      width: 62px;
+      aspect-ratio: 2 / 3;
+      border-radius: 0.55rem;
+      overflow: hidden;
+      box-shadow: 0 8px 20px rgba(0, 0, 0, 0.85);
+      flex-shrink: 0;
+    }
+    .home-hero-fan-left { transform: rotate(-8deg) translateY(4px); }
+    .home-hero-fan-center { transform: scale(1.08) translateY(-2px); z-index: 5; }
+    .home-hero-fan-right { transform: rotate(8deg) translateY(4px); }
+
+    /* Public Talent Pool Pure 2:3 Card Thumbnail (No redundant header/footer text) */
+    .jobbank-thumb-card {
+      height: 100%;
+      max-height: 132px;
+      width: auto;
+      max-width: 100%;
+      aspect-ratio: 2 / 3;
+      margin: 0 auto;
+      padding: 0;
+      border-radius: 0.65rem;
+      overflow: hidden;
+      position: relative;
+      display: block;
+      box-shadow: 0 4px 12px rgba(0, 0, 0, 0.75);
+      contain: layout paint;
+      backface-visibility: hidden;
+      -webkit-backface-visibility: hidden;
+      transition: transform 0.14s ease;
+    }
+    .jobbank-thumb-card:active {
+      transform: scale(0.96);
+    }
+
+    /* Pure 2:3 Character Card in Opponent Detail Modal & Talent Pool Modal */
+    .modal-pure-card {
+      width: 100%;
+      max-width: 136px;
+      aspect-ratio: 2 / 3;
+      margin: 0 auto;
+      display: block;
+    }
+    @media (min-width: 640px) {
+      .modal-pure-card {
+        max-width: 172px;
+      }
+      .jobbank-thumb-card {
+        max-height: 156px;
+      }
+    }
