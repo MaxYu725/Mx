@@ -427,8 +427,12 @@ function broadcastHostState() {
 
   if (gameSession.bc) {
     const viewsBySeat = {};
+    const mySeatId = getLocalPlayerId();
+    viewsBySeat[mySeatId] = gameState;
     master.players.forEach(p => {
-      viewsBySeat[p.id] = sanitizeStateForSeat(master, p.id);
+      if (p.id !== mySeatId && (!p.isAI || gameSession.hasSimulatedHotSeat)) {
+        viewsBySeat[p.id] = sanitizeStateForSeat(master, p.id);
+      }
     });
     try {
       gameSession.bc.postMessage({

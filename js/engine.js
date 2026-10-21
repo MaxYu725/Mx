@@ -505,28 +505,53 @@ function consumeHandCard(state, player, handUid, moveToDiscard = true) {
 // === Fog-of-War Sanitizer for Network State Broadcast ===
 function sanitizeStateForSeat(fullState, viewerSeatId) {
   if (!fullState) return null;
-  const clone = JSON.parse(JSON.stringify(fullState));
-  const applyFog = Boolean(clone.config && clone.config.fogOfWar && clone.phase !== 'GAME_OVER');
+  const applyFog = Boolean(fullState.config && fullState.config.fogOfWar && fullState.phase !== 'GAME_OVER');
 
-  clone.players.forEach(p => {
-    p.handCount = p.hand.length;
-    if (applyFog && p.id !== viewerSeatId) {
-      p.hand = p.hand.map(() => 'HIDDEN_ACT');
+  const players = fullState.players.map(p => ({
+    id: p.id,
+    name: p.name,
+    isAI: p.isAI,
+    isOnlineHuman: p.isOnlineHuman,
+    connected: p.connected,
+    isEliminated: p.isEliminated,
+    crystals: p.crystals,
+    doubleBurnFlag: p.doubleBurnFlag,
+    departments: {
+      RED: [...p.departments.RED],
+      YELLOW: [...p.departments.YELLOW],
+      BLUE: [...p.departments.BLUE],
+      GREEN: [...p.departments.GREEN]
+    },
+    engineers: [...p.engineers],
+    crises: [...p.crises],
+    outsourcedCount: p.outsourcedCount,
+    handCount: p.hand.length,
+    hand: (applyFog && p.id !== viewerSeatId) ? p.hand.map(() => 'HIDDEN_ACT') : [...p.hand]
+  }));
+
+  const jobBank = {};
+  ['RED', 'YELLOW', 'BLUE', 'GREEN'].forEach(d => {
+    const srcDeck = fullState.jobBank[d] || [];
+    if (applyFog && srcDeck.length > 1) {
+      jobBank[d] = [srcDeck[0], ...srcDeck.slice(1).map(() => 'HIDDEN_EMP')];
+    } else {
+      jobBank[d] = [...srcDeck];
     }
   });
 
-  if (applyFog) {
-    clone.actionDeck = clone.actionDeck.map(() => 'HIDDEN_ACT');
-    ['RED', 'YELLOW', 'BLUE', 'GREEN'].forEach(d => {
-      if (clone.jobBank[d] && clone.jobBank[d].length > 1) {
-        clone.jobBank[d] = [
-          clone.jobBank[d][0],
-          ...clone.jobBank[d].slice(1).map(() => 'HIDDEN_EMP')
-        ];
-      }
-    });
-  }
-  return clone;
+  return {
+    config: { ...fullState.config },
+    phase: fullState.phase,
+    draft: { ...fullState.draft },
+    turn: { ...fullState.turn },
+    jobBank,
+    actionDeck: applyFog ? fullState.actionDeck.map(() => 'HIDDEN_ACT') : [...fullState.actionDeck],
+    discardPile: [...fullState.discardPile],
+    players,
+    logs: [...fullState.logs],
+    vfxSeq: fullState.vfxSeq,
+    lastVfxEvent: fullState.lastVfxEvent ? { ...fullState.lastVfxEvent } : null
+  };
 }
 
 window.getLocalPlayerId = getLocalPlayerId;
