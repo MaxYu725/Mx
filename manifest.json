@@ -1,0 +1,33 @@
+{
+  "name": "深淵魔王城：燒魔率爭霸戰",
+  "short_name": "深淵魔王城",
+  "description": "深淵魔王城：燒魔率爭霸戰 V13.4 連線對戰 PWA 版 — 全螢幕直式戰術卡牌對決",
+  "lang": "zh-HK",
+  "start_url": "./index.html",
+  "scope": "./",
+  "display": "standalone",
+  "display_override": ["fullscreen", "standalone"],
+  "orientation": "portrait",
+  "background_color": "#090712",
+  "theme_color": "#090712",
+  "icons": [
+    {
+      "src": "icons/icon-192.png",
+      "sizes": "192x192",
+      "type": "image/png",
+      "purpose": "any maskable"
+    },
+    {
+      "src": "icons/icon-512.png",
+      "sizes": "512x512",
+      "type": "image/png",
+      "purpose": "any maskable"
+    },
+    {
+      "src": "icons/icon.svg",
+      "sizes": "any",
+      "type": "image/svg+xml",
+      "purpose": "any"
+    }
+  ]
+}

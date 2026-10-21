@@ -4,7 +4,6 @@
 
 let gameState = null;
 let viewedPlayerId = 'p1';
-let deptLayoutMode = 'SCROLL'; // 'SCROLL' | 'GRID2X2'
 let uiSelection = {
   mode: 'IDLE', // 'IDLE' | 'MODE_D_SELECT' | 'DISCARD_SELECT'
   sourceCardUid: null,

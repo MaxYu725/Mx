@@ -4,6 +4,74 @@
 
 window.lastFlippedDeptKey = null;
 let animSpeedMultiplier = 1; // 1 = 1x, 2 = 2x
+let deferredPwaPrompt = null;
+
+function isRunningStandalonePWA() {
+  return Boolean(
+    (window.matchMedia && window.matchMedia("(display-mode: standalone)").matches) ||
+    (window.matchMedia && window.matchMedia("(display-mode: fullscreen)").matches) ||
+    window.navigator.standalone === true
+  );
+}
+
+function registerPwaServiceWorker() {
+  if ("serviceWorker" in navigator && (location.protocol === "https:" || location.hostname === "localhost" || location.hostname === "127.0.0.1")) {
+    navigator.serviceWorker.register("./sw.js").catch(() => {});
+  }
+  window.addEventListener("beforeinstallprompt", (e) => {
+    e.preventDefault();
+    deferredPwaPrompt = e;
+    updateSettingsMenuUI();
+  });
+  window.addEventListener("appinstalled", () => {
+    deferredPwaPrompt = null;
+    updateSettingsMenuUI();
+    if (typeof showToast === "function") {
+      showToast("🎉 已成功安裝「深淵魔王城」PWA！從主畫面開啟即可永久隱藏網址列全螢幕遊玩。");
+    }
+  });
+  document.addEventListener("fullscreenchange", () => {
+    updateSettingsMenuUI();
+  });
+}
+
+function toggleFullscreenMode() {
+  const docEl = document.documentElement;
+  const isFs = Boolean(document.fullscreenElement || document.webkitFullscreenElement);
+  if (!isFs) {
+    const req = docEl.requestFullscreen || docEl.webkitRequestFullscreen;
+    if (req) {
+      req.call(docEl).then(() => {
+        updateSettingsMenuUI();
+      }).catch(() => {
+        if (typeof showToast === "function") {
+          showToast("📲 若瀏覽器限制全螢幕，請點選瀏覽器選單「新增至主畫面 / 安裝應用程式」以 PWA 全螢幕啟動！");
+        }
+      });
+    } else if (typeof showToast === "function") {
+      showToast("📲 請點選 Safari/瀏覽器下方「分享 ➔ 加入主畫面」，即可永久隱藏網址列全螢幕遊玩！");
+    }
+  } else {
+    const exit = document.exitFullscreen || document.webkitExitFullscreen;
+    if (exit) exit.call(document).catch(() => {});
+  }
+}
+
+function triggerPwaInstallOrFullscreen() {
+  if (deferredPwaPrompt) {
+    deferredPwaPrompt.prompt();
+    deferredPwaPrompt.userChoice.then(() => {
+      deferredPwaPrompt = null;
+      updateSettingsMenuUI();
+    }).catch(() => {});
+    return;
+  }
+  toggleFullscreenMode();
+  if (!isRunningStandalonePWA() && typeof showToast === "function") {
+    showToast("📲 已切換全螢幕！亦可點選瀏覽器選單「新增至手機 / 加入主畫面」安裝為獨立 PWA 應用。");
+  }
+}
+
 
 function getPlayerAnchorSelector(playerId) {
   return playerId === getLocalPlayerId() ? '#myHeroStatusBar' : `[data-seat-tab="${playerId}"]`;
@@ -558,13 +626,19 @@ function resetSelectionState() {
 }
 
 function updateSettingsMenuUI() {
-  const layoutLabel = document.getElementById('menuLayoutLabel');
-  if (layoutLabel) {
-    layoutLabel.textContent = deptLayoutMode === 'SCROLL' ? '田四宮格' : '↔大卡滑動';
+  const isFs = Boolean(document.fullscreenElement || document.webkitFullscreenElement);
+  const pwaLabel = document.getElementById('menuPwaLabel');
+  if (pwaLabel) {
+    pwaLabel.textContent = deferredPwaPrompt ? '📲 安裝PWA' : isRunningStandalonePWA() ? '✔ PWA全螢幕' : isFs ? '✕ 退出全螢幕' : '⛶ 全螢幕/PWA';
   }
-  const topLayoutBtn = document.getElementById('btnToggleDeptLayout');
-  if (topLayoutBtn) {
-    topLayoutBtn.textContent = deptLayoutMode === 'SCROLL' ? '田四宮格' : '↔大卡滑動';
+  const topFsBtn = document.getElementById('btnHeaderFullscreen');
+  if (topFsBtn) {
+    if (isRunningStandalonePWA()) {
+      topFsBtn.classList.add('hidden');
+    } else {
+      topFsBtn.classList.remove('hidden');
+      topFsBtn.textContent = deferredPwaPrompt ? '📲 安裝App' : isFs ? '✕ 退出全螢幕' : '⛶ 全螢幕';
+    }
   }
   const speedLabel = document.getElementById('menuSpeedLabel');
   if (speedLabel) {
@@ -680,11 +754,11 @@ function renderAll() {
     tickerEl.innerHTML = line1 + line2;
   }
 
-  // 2. ZONE 1 (TOP): Render Opponents in Clockwise Order (Click opens Opponent Castle Popup Modal!)
+  // 2. ZONE 1 (TOP): Enlarged Opponents Row (Click opens Opponent Castle Popup Modal!)
   const seatTabsBar = document.getElementById('seatTabsBar');
   const opponents = getClockwiseOpponents(state);
   const oppCount = opponents.length;
-  seatTabsBar.className = `w-full grid ${oppCount === 1 ? 'grid-cols-1' : oppCount === 3 ? 'grid-cols-3' : 'grid-cols-2'} gap-1.5 min-w-0`;
+  seatTabsBar.className = `w-full grid ${oppCount === 1 ? 'grid-cols-1' : oppCount === 3 ? 'grid-cols-3' : 'grid-cols-2'} gap-1.5 min-w-0 shrink-0`;
 
   seatTabsBar.innerHTML = opponents.map((pl) => {
     const idx = state.players.findIndex(p => p.id === pl.id);
@@ -694,12 +768,13 @@ function renderAll() {
     const cleanShortName = getShortPlayerName(pl.name).replace(/\s*\(AI.*?\)/g, '');
     const totalCrisisReq = getCrisisTotalEngineerReq(pl);
     const handCnt = typeof pl.handCount === 'number' ? pl.handCount : pl.hand.length;
+    const vpCnt = getTotalVPCount(pl);
 
     const skillDots = ['RED', 'YELLOW', 'BLUE', 'GREEN'].map(d => {
       const meta = DEPT_META[d];
       const sk = getEffectiveSkill(pl, d);
       const vp = hasVPInDept(pl, d);
-      return `<span class="rounded ${meta.badgeBg} border ${meta.border} text-[9px] font-black text-white text-center py-0.5 whitespace-nowrap">${meta.icon}${sk}${vp ? '👑' : ''}</span>`;
+      return `<span class="rounded-md ${meta.badgeBg} border ${meta.border} text-[10px] sm:text-xs font-black text-white text-center py-0.5 whitespace-nowrap shadow">${meta.icon}${sk}級${vp ? '👑' : ''}</span>`;
     }).join('');
 
     let modeDSeatState = null;
@@ -712,36 +787,46 @@ function renderAll() {
     }
 
     const turnBadge = pl.isEliminated
-      ? `<span class="px-1.5 py-0.5 rounded bg-slate-800 text-slate-400 text-[9px] font-bold">💀破產</span>`
+      ? `<span class="px-1.5 py-0.5 rounded bg-slate-800 text-slate-400 text-[10px] font-bold">💀破產</span>`
       : modeDSeatState === 'VALID_TARGET'
-      ? `<span class="px-1.5 py-0.5 rounded bg-rose-600 text-white border border-white text-[9px] font-black shadow">🎯點此直擊</span>`
+      ? `<span class="px-2 py-0.5 rounded bg-rose-600 text-white border border-white text-[10px] font-black shadow">🎯點此直擊</span>`
       : modeDSeatState === 'IMMUNE_TARGET'
-      ? `<span class="px-1.5 py-0.5 rounded bg-slate-800 text-sky-300 border border-sky-500/50 text-[9px] font-bold">🛡️免疫</span>`
+      ? `<span class="px-1.5 py-0.5 rounded bg-slate-800 text-sky-300 border border-sky-500/50 text-[10px] font-bold">🛡️免疫</span>`
       : isTurn
-      ? `<span class="px-1.5 py-0.5 rounded bg-amber-400 text-slate-950 text-[9px] font-black shadow">⚡${state.phase === 'INITIAL_DRAFT' ? '選牌' : `${state.turn.actionsUsed}/4`}</span>`
-      : `<span class="px-1.5 py-0.5 rounded bg-slate-800 text-sky-300 border border-slate-700 text-[9px] font-bold">🔍🎴${handCnt}</span>`;
+      ? `<span class="px-2 py-0.5 rounded bg-amber-400 text-slate-950 text-[10px] font-black shadow">⚡${state.phase === 'INITIAL_DRAFT' ? '選牌' : `${state.turn.actionsUsed}/4`}</span>`
+      : `<span class="px-2 py-0.5 rounded-md bg-slate-800 text-sky-300 border border-sky-500/40 text-[10px] font-extrabold">🔍偵察·🎴${handCnt}</span>`;
 
     const activeTurnNotMe = !isMyTurnNow && !isTurn && state.phase !== 'INITIAL_DRAFT';
     const roleIcon = pl.isAI ? '😈' : '👤';
 
     return `
-      <button data-seat-tab="${pl.id}" data-mode-d-seat="${modeDSeatState || ''}" class="rounded-xl px-2.5 py-2 text-left transition flex flex-col justify-between border ${pl.isEliminated ? 'bg-slate-950/80 border-slate-800 opacity-40' : modeDSeatState === 'VALID_TARGET' ? 'bg-rose-950/90 border-2 border-rose-400 targetable-seat-glow' : modeDSeatState === 'IMMUNE_TARGET' ? 'bg-slate-950/80 border-slate-700 opacity-60' : isTurn ? 'bg-indigo-950/90 border-2 border-amber-400 active-turn-seat' : 'bg-slate-900/90 border-slate-700'} ${activeTurnNotMe ? 'opacity-75' : ''} ${isNearBankrupt ? 'danger-pulse' : ''} min-w-0">
+      <button data-seat-tab="${pl.id}" data-mode-d-seat="${modeDSeatState || ''}" class="rounded-xl p-2 text-left transition flex flex-col justify-between gap-1 border ${pl.isEliminated ? 'bg-slate-950/80 border-slate-800 opacity-40' : modeDSeatState === 'VALID_TARGET' ? 'bg-rose-950/90 border-2 border-rose-400 targetable-seat-glow' : modeDSeatState === 'IMMUNE_TARGET' ? 'bg-slate-950/80 border-slate-700 opacity-60' : isTurn ? 'bg-indigo-950/90 border-2 border-amber-400 active-turn-seat' : 'bg-slate-900/95 border-slate-700'} ${activeTurnNotMe ? 'opacity-80' : ''} ${isNearBankrupt ? 'danger-pulse' : ''} min-w-0 shadow-lg">
+        <!-- Row 1: Demon Name + Inspect/Hand Badge -->
         <div class="flex items-center justify-between w-full gap-1 min-w-0">
-          <span class="text-xs font-black ${isTurn ? 'text-amber-300' : 'text-white'} truncate">${roleIcon}${cleanShortName}</span>
+          <span class="text-xs sm:text-sm font-black ${isTurn ? 'text-amber-300' : 'text-white'} truncate">${roleIcon} ${cleanShortName}</span>
           ${turnBadge}
         </div>
-        <div class="flex items-center justify-between w-full text-[10px] mt-0.5 gap-1 min-w-0">
-          <span class="font-black whitespace-nowrap"><b class="text-emerald-400">💎${pl.crystals}</b> <b class="text-rose-400">🔥-${burn}</b></span>
-          <span class="text-[9px] text-slate-300 whitespace-nowrap">⚒${pl.engineers.length} ⚠️${pl.crises.length}${totalCrisisReq > 0 ? `(${totalCrisisReq})` : ''} 👹${pl.outsourcedCount}</span>
+        <!-- Row 2: Enlarged Economy & Royal Pills -->
+        <div class="grid grid-cols-3 gap-1 w-full min-w-0">
+          <span class="rounded bg-emerald-950/85 border border-emerald-500/40 px-1 py-0.5 text-[11px] font-black text-emerald-400 text-center whitespace-nowrap">💎${pl.crystals}</span>
+          <span class="rounded bg-rose-950/85 border border-rose-500/40 px-1 py-0.5 text-[11px] font-black text-rose-400 text-center whitespace-nowrap">🔥-${burn}/回</span>
+          <span class="rounded bg-purple-950/85 border border-purple-500/40 px-1 py-0.5 text-[10px] font-black text-purple-200 text-center whitespace-nowrap">👑皇室:${vpCnt}</span>
         </div>
-        <div class="grid grid-cols-4 gap-0.5 mt-1 w-full min-w-0">
+        <!-- Row 3: Clear Workforce & Crisis Strip -->
+        <div class="grid grid-cols-3 gap-1 w-full bg-slate-950/90 border border-slate-800 rounded-md px-1.5 py-0.5 text-[10px] font-bold text-center min-w-0">
+          <span class="text-red-200 whitespace-nowrap">⚒苦工 <b>${pl.engineers.length}</b></span>
+          <span class="${pl.crises.length > 0 ? 'text-amber-300 font-black' : 'text-slate-400'} whitespace-nowrap">⚠️危機 <b>${pl.crises.length}</b>${totalCrisisReq > 0 ? `(${totalCrisisReq})` : ''}</span>
+          <span class="${pl.outsourcedCount > 0 ? 'text-rose-300 font-black' : 'text-slate-400'} whitespace-nowrap">👹外包 <b>${pl.outsourcedCount}</b></span>
+        </div>
+        <!-- Row 4: 4-Department Skill Badges -->
+        <div class="grid grid-cols-4 gap-1 w-full min-w-0">
           ${skillDots}
         </div>
       </button>
     `;
   }).join('');
 
-  // 3. ZONE 2: Top 4-Column All-Visible Job Bank Mini-Grid
+  // 3. ZONE 2: Enlarged Public 4-Column Job Bank Portrait Cards (Expands to fill upper space!)
   const condensedStrip = document.getElementById('condensedJobBankPills');
   condensedStrip.innerHTML = ['RED', 'YELLOW', 'BLUE', 'GREEN'].map(d => {
     const meta = DEPT_META[d];
@@ -749,25 +834,29 @@ function renderAll() {
     const topUid = deck[0];
     if (!topUid) {
       return `
-        <div class="rounded-lg bg-slate-950 border border-slate-800 px-1.5 py-1 text-center min-w-0">
-          <div class="text-[9px] font-bold text-slate-500 truncate">${meta.icon}${meta.short}(0)</div>
-          <div class="text-[9px] text-slate-500">已抽乾</div>
+        <div class="jobbank-portrait-card bg-slate-950 border border-slate-800 text-center min-w-0">
+          <div class="text-[10px] font-bold text-slate-500 truncate">${meta.icon}${meta.short}(0)</div>
+          <div class="text-[10px] text-slate-500 my-auto">已抽乾</div>
         </div>
       `;
     }
     const topCard = CARDS_BY_ID[topUid];
-    const avSrc = GPT_MINI_AVATAR[topCard.tplId] || '';
-    const skillTag = topCard.role === 'ENGINEER' ? '⚒$1' : `${topCard.isVP ? '👑' : ''}${topCard.skill}級$${topCard.salary}`;
+    const avSrc = GPT_MINI_AVATAR[topCard.tplId] || GPT_FULLCARD_ART[topCard.tplId] || '';
+    const skillTag = topCard.role === 'ENGINEER' ? '⚒苦工·$1' : `${topCard.isVP ? '👑' : ''}${topCard.skill}級·$${topCard.salary}`;
     return `
-      <button data-open-bank-dept="${d}" class="rounded-xl ${meta.panelBg} border ${meta.border} px-1.5 py-1.5 text-left flex items-center gap-1.5 transition shadow min-w-0">
-        ${avSrc ? `<img src="${avSrc}" alt="${topCard.title}" class="art-jobbank-avatar shrink-0" />` : `<span class="text-xs shrink-0">${meta.icon}</span>`}
-        <div class="flex flex-col justify-between min-w-0 flex-1">
-          <div class="flex items-center justify-between w-full gap-0.5 min-w-0">
-            <span class="text-[9px] font-extrabold ${meta.text} whitespace-nowrap">${meta.short}</span>
-            <span class="text-[9px] px-1 rounded bg-slate-950 text-amber-300 font-black whitespace-nowrap">${skillTag}</span>
-          </div>
-          <div class="text-[9px] sm:text-[10px] font-black text-white truncate w-full">${topCard.title}</div>
+      <button data-open-bank-dept="${d}" class="jobbank-portrait-card ${meta.panelBg} border ${meta.border} text-left shadow-md min-w-0">
+        <!-- Top Header: Dept Name + Remaining Deck Count -->
+        <div class="flex items-center justify-between w-full gap-0.5 min-w-0 shrink-0 mb-0.5">
+          <span class="text-[10px] font-black ${meta.text} whitespace-nowrap">${meta.icon}${meta.short}</span>
+          <span class="text-[9px] font-bold text-slate-300 whitespace-nowrap">剩${deck.length}</span>
         </div>
+        <!-- Middle Portrait Window (Flex-1 expands cleanly to eliminate vertical voids) -->
+        <div class="jobbank-portrait-art-wrap">
+          ${avSrc ? `<img src="${avSrc}" alt="${topCard.title}" class="jobbank-portrait-art-img" />` : `<div class="w-full h-full flex items-center justify-center text-base">${meta.icon}</div>`}
+          <span class="absolute bottom-0.5 right-0.5 px-1 py-0.5 rounded bg-slate-950/90 border border-amber-400/60 text-[9px] font-black text-amber-300 leading-none whitespace-nowrap shadow">${skillTag}</span>
+        </div>
+        <!-- Bottom Full-Width Character Title (Never clipped by side avatar!) -->
+        <div class="text-[10px] sm:text-xs font-black text-white truncate w-full text-center mt-1 shrink-0">${topCard.title}</div>
       </button>
     `;
   }).join('');
@@ -788,14 +877,12 @@ function renderAll() {
       const emp = CARDS_BY_ID[topUid];
       const canPick = isMyTurnNow && !(emp.isVP && hasVPInDept(localPlayer, d));
       return `
-        <div data-draft-dept="${d}" class="h-full shrink-0 snap-start flex flex-col gap-1 min-w-0">
+        <div data-draft-dept="${d}" class="shrink-0 snap-start flex flex-col gap-1 min-w-0">
           <div class="flex items-center justify-between text-[10px] px-1 shrink-0">
             <span class="font-black ${meta.text} truncate">${meta.icon}${meta.short}</span>
             <span class="text-slate-400 whitespace-nowrap">剩${state.jobBank[d].length}張</span>
           </div>
-          <div class="flex-1 min-h-0 flex">
-            ${renderEmployeeCardHTML(topUid, (canPick ? 'cursor-pointer ' : 'opacity-60 ') + 'dept-card-scroll', canPick ? '點擊招募' : '')}
-          </div>
+          ${renderEmployeeCardHTML(topUid, (canPick ? 'cursor-pointer ' : 'opacity-60 ') + 'dept-card-scroll', canPick ? '點擊招募' : '')}
         </div>
       `;
     }).join('');
@@ -804,16 +891,10 @@ function renderAll() {
     companyStage.classList.remove('hidden');
   }
 
-  // 5. ZONE 3 (CENTER): Render Local Player's 4-Department Castle Stage
-  // - SCROLL mode: cards stretch to 100% of stage height (zero blank space above/below!)
-  // - GRID2X2 mode: 2x2 grid where each card shrinks to 50% stage height so all 4 fit without pushing hand dock!
+  // 5. ZONE 3 (CENTER): Render Local Player's 4-Department Castle Stage (V13.2 Comfortable Scroll Card Size)
   recalcPlayerStats(localPlayer);
   const deptGrid = document.getElementById('companyDepartmentsGrid');
-  const isGrid2x2 = deptLayoutMode === 'GRID2X2';
-  deptGrid.className = isGrid2x2
-    ? 'stage-track-grid2x2 no-scrollbar min-w-0'
-    : 'stage-track-scroll no-scrollbar min-w-0';
-  const cardSizeCls = isGrid2x2 ? 'dept-card-grid2x2' : 'dept-card-scroll';
+  deptGrid.className = 'stage-track-scroll no-scrollbar min-w-0';
 
   deptGrid.innerHTML = ['RED', 'YELLOW', 'BLUE', 'GREEN'].map(d => {
     const meta = DEPT_META[d];
@@ -821,20 +902,20 @@ function renderAll() {
 
     if (deptArr.length === 0) {
       return `
-        <div data-empty-dept="${d}" class="${cardSizeCls} empty-rune-slot rounded-xl border-2 border-dashed ${meta.border} overflow-hidden flex flex-col justify-between ${isGrid2x2 ? 'p-1.5' : 'p-2.5'} min-w-0 relative cursor-pointer transition">
+        <div data-empty-dept="${d}" class="dept-card-scroll empty-rune-slot rounded-xl border-2 border-dashed ${meta.border} overflow-hidden flex flex-col justify-between p-2.5 min-w-0 relative cursor-pointer transition">
           <div class="flex items-center justify-between w-full gap-1">
-            <span class="${isGrid2x2 ? 'w-4 h-4 text-[9px]' : 'w-5 h-5 text-[10px]'} rounded-full bg-slate-950 border border-slate-600 text-slate-400 flex items-center justify-center font-black shadow shrink-0">0</span>
-            <span class="${isGrid2x2 ? 'text-[9px]' : 'text-[11px]'} font-black ${meta.text} truncate">${meta.icon}${isGrid2x2 ? meta.short : meta.name}</span>
+            <span class="w-5 h-5 text-[10px] rounded-full bg-slate-950 border border-slate-600 text-slate-400 flex items-center justify-center font-black shadow shrink-0">0</span>
+            <span class="text-[11px] font-black ${meta.text} truncate">${meta.icon}${meta.name}</span>
             <span class="px-1 py-0.5 rounded bg-slate-900 border border-slate-700 text-[9px] font-bold text-slate-400 shrink-0">空城</span>
           </div>
           <div class="flex flex-col items-center justify-center text-center my-auto px-1">
-            <div class="${isGrid2x2 ? 'w-8 h-8 text-base' : 'w-12 h-12 text-2xl'} rounded-full ${meta.panelBg} border ${meta.border} flex items-center justify-center opacity-60 shadow-lg">${meta.icon}</div>
-            <span class="${isGrid2x2 ? 'text-[10px] mt-1' : 'text-xs mt-2'} font-black text-slate-300">缺工空城 (0級)</span>
-            ${isGrid2x2 ? '' : '<span class="text-[10px] text-slate-400 mt-0.5 leading-tight">無主管駐守，檢定視為 0 級</span>'}
+            <div class="w-11 h-11 text-xl rounded-full ${meta.panelBg} border ${meta.border} flex items-center justify-center opacity-60 shadow-lg">${meta.icon}</div>
+            <span class="text-xs mt-1.5 font-black text-slate-300">缺工空城 (0級)</span>
+            <span class="text-[10px] text-slate-400 mt-0.5 leading-tight">無主管駐守，檢定視為 0 級</span>
           </div>
           <div class="bg-slate-950/90 border border-slate-800 rounded-lg py-0.5 px-1.5 flex items-center justify-between text-[9px] text-slate-400">
             <span>💎0</span>
-            <span class="text-sky-300 font-bold truncate">${isGrid2x2 ? '招募▸' : '點人才池招募 ▸'}</span>
+            <span class="text-sky-300 font-bold truncate">點人才池招募 ▸</span>
           </div>
         </div>
       `;
@@ -846,7 +927,7 @@ function renderAll() {
     const isNewlyFlipped = window.lastFlippedDeptKey === `${localPlayer.id}_${d}`;
 
     return `
-      <div data-inspect-dept="${d}" data-inspect-player="${localPlayer.id}" class="${cardSizeCls} tilt-card-3d ${isNewlyFlipped ? 'anim-flip-in' : ''} rounded-xl bg-slate-950 border-2 ${meta.border} ${hCard.isVP ? 'vp-card-frame' : ''} overflow-hidden cursor-pointer shadow-xl min-w-0 relative">
+      <div data-inspect-dept="${d}" data-inspect-player="${localPlayer.id}" class="dept-card-scroll tilt-card-3d ${isNewlyFlipped ? 'anim-flip-in' : ''} rounded-xl bg-slate-950 border-2 ${meta.border} ${hCard.isVP ? 'vp-card-frame' : ''} overflow-hidden cursor-pointer shadow-xl min-w-0 relative">
         ${getCardImgTag(hCard.tplId, hCard.title, 'w-full h-full object-cover block')}
         <div class="holo-sheen-layer"></div>
         <span class="absolute bottom-1 left-1/2 -translate-x-1/2 px-1.5 py-0.5 rounded-full text-[9px] font-black shadow-lg whitespace-nowrap z-20 bg-slate-950/90 border border-amber-400 text-amber-300">👑我方${subordinates.length > 0 ? ` +${subordinates.length}下屬` : ''}</span>
@@ -1526,7 +1607,7 @@ function attachDynamicBoardListeners() {
   });
 }
 
-// === Job Bank Modal (2x2 Full-Card Layout) ===
+// === Job Bank Modal (Compact 2:3 Card + Enlarged Info Panel) ===
 function openJobBankModal() {
   document.getElementById('jobBankModalTitle').textContent = '🏛️ 中央魔界人才池（四大部門翻開頂牌）';
   document.getElementById('jobBankModalSub').textContent = '打出「契約召喚」或「強塞魔物」時可選取此處翻開的部下。';
@@ -1544,20 +1625,32 @@ function openJobBankModal() {
     if (!topUid) {
       return `<div class="rounded-xl bg-slate-950 border border-slate-800 p-4 text-center text-slate-500">${meta.name} 已抽乾</div>`;
     }
+    const c = CARDS_BY_ID[topUid];
+    const roleLabel = c.role === 'ENGINEER' ? '⚒ 哥布林苦工 (抵1危機)' : c.isVP ? `👑 魔族皇室 (${c.skill}級主管)` : `⚡ 部門統領 (技能 ${c.skill}級)`;
     return `
-      <div class="flex flex-col gap-1 min-w-0">
-        <div class="flex items-center justify-between text-xs px-1">
-          <span class="font-black ${meta.text} truncate">${meta.icon}${meta.short}</span>
-          <span class="text-slate-400">剩${deck.length}張</span>
+      <div class="rounded-xl bg-slate-950/90 border-2 ${meta.border} p-2 flex flex-col justify-between gap-1.5 min-w-0 shadow-lg">
+        <div class="flex items-center justify-between text-xs px-0.5">
+          <span class="font-black ${meta.text} truncate">${meta.icon}${meta.name}</span>
+          <span class="px-1.5 py-0.5 rounded bg-slate-900 border border-slate-700 text-[10px] font-bold text-slate-300">剩 ${deck.length} 張</span>
         </div>
-        ${renderEmployeeCardHTML(topUid, '', '頂牌')}
+        <div class="bank-modal-card-wrap">
+          ${renderEmployeeCardHTML(topUid, 'w-full', '頂牌')}
+        </div>
+        <div class="rounded-lg bg-slate-900/95 border border-slate-800 p-1.5 text-left space-y-0.5">
+          <div class="text-xs font-black text-white truncate">${c.isVP ? '👑 ' : ''}${c.title}</div>
+          <div class="text-[11px] font-bold text-amber-300 truncate">${roleLabel}</div>
+          <div class="flex items-center justify-between text-[11px] font-extrabold pt-0.5 border-t border-slate-800">
+            <span class="text-rose-400">每回供品：💎-${c.salary}</span>
+            <span class="text-sky-300">${c.role === 'ENGINEER' ? '苦工池' : `${meta.short}${c.skill}級`}</span>
+          </div>
+        </div>
       </div>
     `;
   }).join('');
   document.getElementById('jobBankModal').classList.remove('hidden');
 }
 
-// === Point 1: Opponent Castle Popup Modal (Identical 2x2 Full-Card Layout as Job Bank Modal!) ===
+// === Opponent Castle Popup Modal: Shrunk 2:3 Character Cards + Enlarged Opponent & Department Info! ===
 function openOpponentCastleModal(oppId) {
   const opp = gameState.players.find(p => p.id === oppId);
   if (!opp) return;
@@ -1565,28 +1658,80 @@ function openOpponentCastleModal(oppId) {
   const burn = getPlayerBurnRate(opp);
   const crisisReq = getCrisisTotalEngineerReq(opp);
   const handCnt = typeof opp.handCount === 'number' ? opp.handCount : opp.hand.length;
+  const vpCount = getTotalVPCount(opp);
+  const totalEmps = getAllPlayerEmployeeUids(opp).length;
+  const roundsLeft = burn > 0 ? Math.max(0, Math.ceil(opp.crystals / burn)) : 99;
 
-  document.getElementById('jobBankModalTitle').textContent = `🎯 【對手偵察：${opp.name}】四大部門編制`;
-  document.getElementById('jobBankModalSub').textContent =
-    `💎 魔晶 ${opp.crystals} ｜ 🔥 燒魔 -${burn}/回 ｜ 👑 皇室 ${getTotalVPCount(opp)} 名 ｜ 🎴 手牌 ${handCnt} 張`;
+  document.getElementById('jobBankModalTitle').textContent = `🎯 對手偵察：【${opp.name}】主城編制`;
+  document.getElementById('jobBankModalSub').textContent = '點擊苦工、危機、外包或任一部門可查看完整卡牌清單';
 
   const summaryEl = document.getElementById('jobBankOpponentSummary');
   if (summaryEl) {
     summaryEl.classList.remove('hidden');
     summaryEl.innerHTML = `
-      <div class="grid grid-cols-3 gap-1.5 w-full">
-        <button data-opp-modal-eng="${opp.id}" class="rounded-xl bg-red-950/70 border border-red-500/50 px-2 py-1.5 text-left flex items-center justify-between">
-          <span class="text-[11px] font-bold text-red-200">⚒ 苦工:${opp.engineers.length}人</span>
-          <span class="text-[10px] font-black text-rose-300">💎-${opp.engineers.length} 🔍</span>
-        </button>
-        <button data-opp-modal-crises="${opp.id}" class="rounded-xl ${opp.crises.length > 0 ? 'bg-amber-950/80 border border-amber-400' : 'bg-slate-950 border border-slate-700'} px-2 py-1.5 text-left flex items-center justify-between">
-          <span class="text-[11px] font-bold ${opp.crises.length > 0 ? 'text-amber-200' : 'text-slate-400'}">⚠️ 危機:${opp.crises.length}張</span>
-          <span class="text-[10px] font-black ${opp.crises.length > 0 ? 'text-amber-300' : 'text-slate-500'}">需${crisisReq} 🔍</span>
-        </button>
-        <button data-opp-modal-outsourced="${opp.id}" class="rounded-xl ${opp.outsourcedCount > 0 ? 'bg-rose-950/90 border border-rose-400' : 'bg-slate-950 border border-slate-700'} px-2 py-1.5 text-left flex items-center justify-between">
-          <span class="text-[11px] font-bold ${opp.outsourcedCount > 0 ? 'text-rose-200' : 'text-slate-400'}">👹 外包:${opp.outsourcedCount}人</span>
-          <span class="text-[10px] font-black ${opp.outsourcedCount > 0 ? 'text-rose-300' : 'text-slate-500'}">💎-${opp.outsourcedCount * 3} 🔍</span>
-        </button>
+      <div class="space-y-2 w-full">
+        <!-- Part 1: Enlarged 4-Column Core Economy & Status Dashboard -->
+        <div class="grid grid-cols-4 gap-1.5 w-full">
+          <div class="rounded-xl bg-emerald-950/75 border border-emerald-500/50 p-2 text-center">
+            <div class="text-[10px] sm:text-xs font-bold text-emerald-200">💎 魔晶儲備</div>
+            <div class="text-sm sm:text-lg font-black text-emerald-400 mt-0.5">${opp.crystals}</div>
+            <div class="text-[10px] font-bold text-slate-300">${burn > 0 ? `約撐 ${roundsLeft} 回` : '零消耗'}</div>
+          </div>
+          <div class="rounded-xl bg-rose-950/75 border border-rose-500/50 p-2 text-center">
+            <div class="text-[10px] sm:text-xs font-bold text-rose-200">🔥 每回燒魔</div>
+            <div class="text-sm sm:text-lg font-black text-rose-400 mt-0.5">-${burn}/回</div>
+            <div class="text-[10px] font-bold ${opp.doubleBurnFlag ? 'text-amber-300 font-black' : 'text-slate-300'}">${opp.doubleBurnFlag ? '⚠️下回雙倍!' : '正常供品'}</div>
+          </div>
+          <div class="rounded-xl bg-purple-950/75 border border-purple-500/50 p-2 text-center">
+            <div class="text-[10px] sm:text-xs font-bold text-purple-200">👑 在職皇室</div>
+            <div class="text-sm sm:text-lg font-black text-purple-300 mt-0.5">${vpCount} 名</div>
+            <div class="text-[10px] font-bold text-slate-300">${vpCount >= 2 ? '⚡可放紫卡' : `差${2 - vpCount}名開大招`}</div>
+          </div>
+          <div class="rounded-xl bg-slate-950 border border-sky-500/40 p-2 text-center">
+            <div class="text-[10px] sm:text-xs font-bold text-sky-200">🎴 手牌數量</div>
+            <div class="text-sm sm:text-lg font-black text-sky-300 mt-0.5">${handCnt} 張</div>
+            <div class="text-[10px] font-bold text-slate-300">總部下 ${totalEmps}人</div>
+          </div>
+        </div>
+
+        <!-- Part 2: Enlarged 3-Column Workforce & Crisis Inspection Cards (Zero awkward line wrapping!) -->
+        <div class="grid grid-cols-3 gap-1.5 w-full">
+          <button data-opp-modal-eng="${opp.id}" class="rounded-xl bg-red-950/75 border border-red-500/50 p-2 text-left flex flex-col justify-between gap-0.5 shadow">
+            <div class="flex items-center justify-between w-full">
+              <span class="text-[11px] sm:text-xs font-extrabold text-red-200 whitespace-nowrap">⚒️ 哥布林苦工</span>
+              <span class="text-[10px] font-black text-sky-300">🔍</span>
+            </div>
+            <div class="flex items-baseline justify-between w-full mt-0.5">
+              <span class="text-xs sm:text-sm font-black text-white whitespace-nowrap">${opp.engineers.length} 人</span>
+              <span class="text-[11px] font-black text-rose-300 whitespace-nowrap">💎-${opp.engineers.length}/回</span>
+            </div>
+            <div class="text-[10px] text-slate-300 font-semibold truncate">可抵銷 ${opp.engineers.length} 點危機</div>
+          </button>
+
+          <button data-opp-modal-crises="${opp.id}" class="rounded-xl ${opp.crises.length > 0 ? 'bg-amber-950/85 border border-amber-400' : 'bg-slate-950 border border-slate-700'} p-2 text-left flex flex-col justify-between gap-0.5 shadow">
+            <div class="flex items-center justify-between w-full">
+              <span class="text-[11px] sm:text-xs font-extrabold ${opp.crises.length > 0 ? 'text-amber-200' : 'text-slate-300'} whitespace-nowrap">⚠️ 討伐危機</span>
+              <span class="text-[10px] font-black text-sky-300">🔍</span>
+            </div>
+            <div class="flex items-baseline justify-between w-full mt-0.5">
+              <span class="text-xs sm:text-sm font-black text-white whitespace-nowrap">${opp.crises.length} 張</span>
+              <span class="text-[11px] font-black ${opp.crises.length > 0 ? 'text-amber-300' : 'text-slate-400'} whitespace-nowrap">需苦工 ${crisisReq}</span>
+            </div>
+            <div class="text-[10px] text-slate-300 font-semibold truncate">${opp.crises.length > 0 ? '點擊檢視危機卡' : '場上無討伐危機'}</div>
+          </button>
+
+          <button data-opp-modal-outsourced="${opp.id}" class="rounded-xl ${opp.outsourcedCount > 0 ? 'bg-rose-950/90 border border-rose-400' : 'bg-slate-950 border border-slate-700'} p-2 text-left flex flex-col justify-between gap-0.5 shadow">
+            <div class="flex items-center justify-between w-full">
+              <span class="text-[11px] sm:text-xs font-extrabold ${opp.outsourcedCount > 0 ? 'text-rose-200' : 'text-slate-300'} whitespace-nowrap">👹 高利貸外包</span>
+              <span class="text-[10px] font-black text-sky-300">🔍</span>
+            </div>
+            <div class="flex items-baseline justify-between w-full mt-0.5">
+              <span class="text-xs sm:text-sm font-black text-white whitespace-nowrap">${opp.outsourcedCount} 人</span>
+              <span class="text-[11px] font-black ${opp.outsourcedCount > 0 ? 'text-rose-400' : 'text-slate-400'} whitespace-nowrap">💎-${opp.outsourcedCount * 3}/回</span>
+            </div>
+            <div class="text-[10px] text-slate-300 font-semibold truncate">${opp.outsourcedCount > 0 ? '每名每回燒3魔晶!' : '無外包赤字'}</div>
+          </button>
+        </div>
       </div>
     `;
     summaryEl.querySelector('[data-opp-modal-eng]')?.addEventListener('click', () => openEngineersInspectorModal(opp.id));
@@ -1594,39 +1739,72 @@ function openOpponentCastleModal(oppId) {
     summaryEl.querySelector('[data-opp-modal-outsourced]')?.addEventListener('click', () => openOutsourcedInspectorModal(opp.id));
   }
 
+  // Part 3: 4 Departments with Shrunk Character Card (.opp-modal-card-wrap) + Enlarged Tactical & Subordinate Info
   const grid = document.getElementById('jobBankModalGrid');
   grid.innerHTML = ['RED', 'YELLOW', 'BLUE', 'GREEN'].map(d => {
     const meta = DEPT_META[d];
     const deptArr = opp.departments[d];
     const effSkill = getEffectiveSkill(opp, d);
+    const deptSalary = deptArr.reduce((s, uid) => s + ((CARDS_BY_ID[uid] && CARDS_BY_ID[uid].salary) || 0), 0);
+
+    const tacticalNote =
+      d === 'YELLOW' ? `🎯 弱點：吃 [${effSkill}級] 討伐危機` :
+      d === 'BLUE' ? `🎯 弱點：吃 [${effSkill}級] 強塞/挖角` :
+      d === 'RED' ? `🛡️ 可鎮壓 [${effSkill}級] 討伐危機` :
+      `💰 可徵收 [${effSkill}級] 金庫魔晶`;
 
     if (deptArr.length === 0) {
       return `
-        <div class="flex flex-col gap-1 min-w-0">
-          <div class="flex items-center justify-between text-xs px-1">
-            <span class="font-black ${meta.text} truncate">${meta.icon}${meta.short} (0級)</span>
-            <span class="text-slate-500">空城</span>
+        <div class="rounded-xl bg-slate-950/90 border-2 border-dashed ${meta.border} p-2 flex flex-col justify-between gap-1.5 min-w-0">
+          <div class="flex items-center justify-between px-0.5">
+            <span class="text-xs sm:text-sm font-black ${meta.text} truncate">${meta.icon}${meta.name}</span>
+            <span class="px-2 py-0.5 rounded bg-slate-900 border border-slate-700 text-xs font-black text-slate-400">0 級</span>
           </div>
-          <div class="aspect-card-2-3 empty-rune-slot rounded-xl border-2 border-dashed ${meta.border} p-3 flex flex-col items-center justify-center text-center">
-            <div class="w-12 h-12 rounded-full ${meta.panelBg} border ${meta.border} flex items-center justify-center text-xl opacity-60">${meta.icon}</div>
-            <div class="text-xs font-black text-slate-400 mt-2">缺工空城 (0級)</div>
-            <div class="text-[10px] text-slate-500 mt-0.5">無主管駐守</div>
+          <div class="opp-modal-card-wrap empty-rune-slot rounded-xl border border-dashed ${meta.border} p-2 flex flex-col items-center justify-center text-center">
+            <div class="w-9 h-9 rounded-full ${meta.panelBg} border ${meta.border} flex items-center justify-center text-base opacity-60">${meta.icon}</div>
+            <div class="text-[11px] font-black text-slate-400 mt-1">缺工空城</div>
+          </div>
+          <div class="rounded-lg bg-slate-900/95 border border-slate-800 p-1.5 text-left space-y-0.5">
+            <div class="text-xs font-black text-slate-400">無主管駐守 (視為 0 級)</div>
+            <div class="flex items-center justify-between text-[11px] font-bold">
+              <span class="text-slate-400">編制 0 人</span>
+              <span class="text-emerald-400">💎-0/回</span>
+            </div>
+            <div class="text-[10px] font-extrabold text-amber-300 truncate pt-0.5 border-t border-slate-800">${tacticalNote}</div>
           </div>
         </div>
       `;
     }
 
     const headUid = deptArr[0];
+    const hCard = CARDS_BY_ID[headUid];
     const subordinates = deptArr.slice(1);
-    const badgeText = subordinates.length > 0 ? `👑主管 (+${subordinates.length}下屬)` : '👑現任主管';
+    const subNames = subordinates.map(u => CARDS_BY_ID[u]?.title).filter(Boolean).join('、');
 
     return `
-      <div data-opp-dept-detail="${d}" data-opp-id="${opp.id}" class="flex flex-col gap-1 min-w-0 cursor-pointer">
-        <div class="flex items-center justify-between text-xs px-1">
-          <span class="font-black ${meta.text} truncate">${meta.icon}${meta.short} (${effSkill}級)</span>
-          <span class="text-amber-300 font-bold">${deptArr.length}人${subordinates.length > 0 ? ' 🔍' : ''}</span>
+      <div data-opp-dept-detail="${d}" data-opp-id="${opp.id}" class="rounded-xl bg-slate-950/95 border-2 ${meta.border} p-2 flex flex-col justify-between gap-1.5 min-w-0 cursor-pointer shadow-lg">
+        <!-- Enlarged Dept Title & Skill Level Header -->
+        <div class="flex items-center justify-between gap-1 px-0.5">
+          <span class="text-xs sm:text-sm font-black ${meta.text} truncate">${meta.icon}${meta.name}</span>
+          <span class="px-2 py-0.5 rounded-md ${meta.badgeBg} border ${meta.border} text-xs font-black text-white whitespace-nowrap shrink-0">⚡ ${effSkill} 級</span>
         </div>
-        ${renderEmployeeCardHTML(headUid, '', badgeText)}
+
+        <!-- Shrunk 2:3 Character Card (.opp-modal-card-wrap: 88px wide on mobile) -->
+        <div class="opp-modal-card-wrap">
+          ${renderEmployeeCardHTML(headUid, 'w-full', hCard.isVP ? '👑皇室主管' : '👑主管')}
+        </div>
+
+        <!-- Enlarged Department Details Footer -->
+        <div class="rounded-lg bg-slate-900/95 border border-slate-700 p-1.5 text-left space-y-0.5">
+          <div class="flex items-center justify-between gap-1">
+            <span class="text-xs font-black text-white truncate">${hCard.isVP ? '👑 ' : ''}${hCard.title}</span>
+            <span class="text-[11px] font-black text-rose-400 whitespace-nowrap shrink-0">💎-${deptSalary}/回</span>
+          </div>
+          <div class="text-[11px] font-bold ${subordinates.length > 0 ? 'text-amber-300' : 'text-slate-400'} truncate">
+            ${subordinates.length > 0 ? `➕ 下屬(${subordinates.length})：${subNames} 🔍` : `編制 1 人（無下屬·點此放大🔍）`}
+          </div>
+          <div class="text-[10px] font-extrabold text-sky-300 truncate pt-0.5 border-t border-slate-800">${tacticalNote}</div>
+        </div>
       </div>
     `;
   }).join('');
@@ -2012,13 +2190,13 @@ function initAppOnLoad() {
     renderAll();
   });
 
-  const toggleLayoutFn = () => {
-    deptLayoutMode = deptLayoutMode === 'SCROLL' ? 'GRID2X2' : 'SCROLL';
-    updateSettingsMenuUI();
-    renderAll();
-  };
-  document.getElementById('btnToggleDeptLayout')?.addEventListener('click', toggleLayoutFn);
-  document.getElementById('btnMenuToggleLayout')?.addEventListener('click', toggleLayoutFn);
+  registerPwaServiceWorker();
+  document.getElementById('btnHeaderFullscreen')?.addEventListener('click', () => {
+    triggerPwaInstallOrFullscreen();
+  });
+  document.getElementById('btnMenuInstallPwa')?.addEventListener('click', () => {
+    triggerPwaInstallOrFullscreen();
+  });
 
   // Settings Menu Modal
   const settingsModal = document.getElementById('settingsMenuModal');
