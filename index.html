@@ -8,7 +8,7 @@
   <!-- PeerJS WebRTC DataChannel CDN for Cross-Device Room Code Multiplayer -->
   <script src="https://unpkg.com/peerjs@1.5.4/dist/peerjs.min.js" async></script>
 </head>
-<body class="flex flex-col min-h-screen w-full max-w-full overflow-x-hidden">
+<body class="flex flex-col h-full w-full max-w-full overflow-hidden">
 
   <!-- ===================================================================
        1. COMPACT SINGLE-LINE HEADER BAR (View Toggle + Unified Settings Button)
@@ -68,25 +68,25 @@
        + ZONE 4 (LOWER-MIDDLE): MY PERMANENT HERO STATUS BAR
        + ZONE 5 (BOTTOM): COMPACT HAND DOCK
        =================================================================== -->
-  <main class="flex-1 w-full max-w-[1480px] mx-auto px-2 py-1 flex flex-col justify-between gap-1.5 min-w-0">
+  <main class="flex-1 min-h-0 w-full max-w-[1480px] mx-auto px-2 py-1 flex flex-col gap-1.5 min-w-0">
 
     <!-- INITIAL DRAFT STAGE -->
-    <section id="draftStageSection" class="hidden stage-25d-container border border-amber-400 rounded-xl p-2.5 flex flex-col gap-1.5 min-w-0">
+    <section id="draftStageSection" class="hidden flex-1 min-h-0 stage-25d-container border border-amber-400 rounded-xl p-2 flex flex-col gap-1.5 min-w-0">
       <div class="flex items-center justify-between border-b border-slate-800 pb-1 gap-2 min-w-0">
         <div class="min-w-0 flex-1">
           <h2 class="text-xs sm:text-base font-black text-amber-300 truncate">🎲 首輪召喚：點選下方頂牌招募 (左右滑動看4部門)</h2>
           <p id="draftProgressSub" class="text-[10px] text-slate-300 truncate">每位魔王輪流挑選 1 張，直到每人召滿 4 名部下。</p>
         </div>
       </div>
-      <div id="draftBankCardsGrid" class="w-full flex items-stretch gap-2.5 overflow-x-auto no-scrollbar snap-x pb-0.5 min-w-0">
+      <div id="draftBankCardsGrid" class="flex-1 min-h-0 w-full flex items-stretch gap-2.5 overflow-x-auto no-scrollbar snap-x pb-0.5 min-w-0">
       </div>
     </section>
 
     <!-- ZONE 3: MY CASTLE STAGE (Always shows Local Player's Castle; hugs card height without top/bottom dead voids!) -->
-    <section id="companyStageSection" class="relative stage-25d-container self-castle-stage rounded-2xl p-2 flex flex-col justify-center min-w-0 transition overflow-hidden">
+    <section id="companyStageSection" class="relative flex-1 min-h-0 stage-25d-container self-castle-stage rounded-2xl p-2 flex flex-col min-w-0 transition overflow-hidden">
 
       <!-- 4-Department 2:3 Cards Track -->
-      <div id="companyDepartmentsGrid" class="w-full flex items-center gap-2.5 overflow-x-auto no-scrollbar snap-x min-w-0">
+      <div id="companyDepartmentsGrid" class="stage-track-scroll no-scrollbar min-w-0">
       </div>
 
       <!-- MODE D FROSTED-GLASS TACTICAL OVERLAY -->
