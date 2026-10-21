@@ -525,11 +525,12 @@
 
   <!-- MODAL 6: INTERACTIVE TUTORIAL & RULES GUIDE (新手教學與規則手冊) -->
   <div id="rulesModal" class="hidden fixed inset-0 bg-black/85 backdrop-blur-sm flex items-center justify-center z-50 p-3">
-    <div class="bg-slate-900 border-2 border-amber-400 rounded-2xl max-w-2xl w-full p-4 shadow-2xl max-h-[88vh] overflow-y-auto space-y-3 text-xs">
-      <div class="flex items-center justify-between border-b border-slate-700 pb-2">
-        <h3 class="text-sm sm:text-base font-black text-amber-300">📖 《深淵魔王城》新手教學與規則速查</h3>
-        <button id="btnCloseRules" class="px-2.5 py-1 rounded-lg bg-slate-800 text-xs font-bold text-white">✕ 關閉</button>
+    <div class="bg-slate-900 border-2 border-amber-400 rounded-2xl max-w-2xl w-full p-3.5 sm:p-4 shadow-2xl flex flex-col max-h-[85vh] overflow-hidden text-xs">
+      <div class="flex items-center justify-between border-b border-slate-700 pb-2 mb-2.5 shrink-0 gap-2">
+        <h3 class="text-sm sm:text-base font-black text-amber-300 truncate">📖 《深淵魔王城》新手教學與規則速查</h3>
+        <button id="btnCloseRules" class="px-3 py-1 rounded-lg bg-rose-600 border border-rose-400 text-xs font-black text-white shrink-0 shadow">✕ 關閉</button>
       </div>
+      <div class="flex-1 min-h-0 overflow-y-auto touch-pan-y space-y-2.5 pr-0.5">
 
       <!-- Section 1: Core Goal & Burn Rate -->
       <div class="rounded-xl bg-slate-950/90 border border-amber-500/40 p-3 space-y-1.5">
@@ -584,6 +585,12 @@
           <li><strong>點擊對手或人才池看大卡</strong>：點擊頂部對手席位或公共人才池縮圖，即可彈窗檢視完整角色卡牌與下屬明細。</li>
           <li><strong>PWA 全螢幕遊玩</strong>：點擊右上角「⛶ 全螢幕」或透過瀏覽器選單「新增至主畫面」，即可永久隱藏網址列全螢幕暢玩。</li>
         </ul>
+      </div>
+      </div>
+      <div class="pt-2.5 mt-2 border-t border-slate-700 shrink-0">
+        <button id="btnCloseRulesBottom" class="w-full py-2 rounded-xl bg-amber-500 text-slate-950 font-black text-xs shadow-lg">
+          ✔ 我明白了，關閉教學
+        </button>
       </div>
     </div>
   </div>

@@ -2494,8 +2494,20 @@ function initAppOnLoad() {
     document.getElementById('settingsMenuModal')?.classList.add('hidden');
     document.getElementById('rulesModal').classList.remove('hidden');
   });
-  document.getElementById('btnCloseRules').addEventListener('click', () => {
-    document.getElementById('rulesModal').classList.add('hidden');
+  const closeRulesFn = () => {
+    document.getElementById('rulesModal')?.classList.add('hidden');
+  };
+  document.getElementById('btnCloseRules')?.addEventListener('click', closeRulesFn);
+  document.getElementById('btnCloseRulesBottom')?.addEventListener('click', closeRulesFn);
+
+  // Backdrop click-to-close for all reference/inspector modals
+  ['rulesModal', 'jobBankModal', 'inspectorModal', 'galleryModal', 'logModal', 'lobbyModal'].forEach(modalId => {
+    const mEl = document.getElementById(modalId);
+    if (mEl) {
+      mEl.addEventListener('click', (e) => {
+        if (e.target === mEl) mEl.classList.add('hidden');
+      });
+    }
   });
 
   document.getElementById('btnToggleMute').addEventListener('click', () => {

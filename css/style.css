@@ -1026,3 +1026,23 @@
         max-height: 156px;
       }
     }
+
+    /* === V13.6.1 Modal Scroll & Viewport Height Fixes === */
+    .max-h-\[85vh\] { max-height: 85vh !important; max-height: 85dvh !important; }
+    .max-h-\[88vh\] { max-height: 88vh !important; max-height: 88dvh !important; }
+    .max-h-\[90vh\] { max-height: 90vh !important; max-height: 90dvh !important; }
+    .max-h-\[92vh\] { max-height: 92vh !important; max-height: 92dvh !important; }
+    .max-h-\[94vh\] { max-height: 94vh !important; max-height: 94dvh !important; }
+    .overflow-y-auto {
+      overflow-y: auto !important;
+      -webkit-overflow-scrolling: touch;
+      touch-action: pan-y;
+      overscroll-behavior: contain;
+    }
+    .touch-pan-y {
+      touch-action: pan-y;
+      -webkit-overflow-scrolling: touch;
+      overscroll-behavior: contain;
+    }
+    .pr-0\.5 { padding-right: 0.125rem; }
+    .pt-2\.5 { padding-top: 0.625rem; }
