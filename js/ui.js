@@ -525,7 +525,7 @@ function renderActionCardHTML(actUid, extraClasses = '', playStatus = null, isSe
        </div>`;
 
   return `
-    <div data-act-uid="${c.uid}" class="w-[92px] sm:w-[128px] h-[118px] sm:h-[164px] rounded-xl ${isAttack ? 'spell-card-sigil-atk' : 'spell-card-sigil'} border-2 ${meta.border} ${c.dept === 'PURPLE' ? 'vp-card-frame' : ''} ${(playStatus && playStatus.playable && uiSelection.mode !== 'DISCARD_SELECT') ? 'playable-card-glow' : ''} overflow-hidden flex flex-col justify-between text-left shadow-xl cursor-pointer relative shrink-0 snap-start ${extraClasses} ${isSelected ? 'selected-card' : ''}">
+    <div data-act-uid="${c.uid}" class="w-[96px] sm:w-[128px] h-[128px] sm:h-[164px] rounded-xl ${isAttack ? 'spell-card-sigil-atk' : 'spell-card-sigil'} border-2 ${meta.border} ${c.dept === 'PURPLE' ? 'vp-card-frame' : ''} ${(playStatus && playStatus.playable && uiSelection.mode !== 'DISCARD_SELECT') ? 'playable-card-glow' : ''} overflow-hidden flex flex-col justify-between text-left shadow-xl cursor-pointer relative shrink-0 snap-start ${extraClasses} ${isSelected ? 'selected-card' : ''}">
       <div class="${meta.color} px-1 py-0.5 flex flex-col items-center gap-0.5 relative min-w-0">
         <div class="w-full flex items-center justify-between text-[9px] font-extrabold text-white gap-0.5 min-w-0 leading-none">
           <span class="truncate">${meta.icon}${meta.short}</span>
@@ -725,7 +725,7 @@ function renderAll() {
     const roleIcon = pl.isAI ? '😈' : '👤';
 
     return `
-      <button data-seat-tab="${pl.id}" data-mode-d-seat="${modeDSeatState || ''}" class="rounded-xl px-2 py-1.5 text-left transition flex flex-col justify-between border ${pl.isEliminated ? 'bg-slate-950/80 border-slate-800 opacity-40' : modeDSeatState === 'VALID_TARGET' ? 'bg-rose-950/90 border-2 border-rose-400 targetable-seat-glow' : modeDSeatState === 'IMMUNE_TARGET' ? 'bg-slate-950/80 border-slate-700 opacity-60' : isTurn ? 'bg-indigo-950/90 border-2 border-amber-400 active-turn-seat' : 'bg-slate-900/90 border-slate-700'} ${activeTurnNotMe ? 'opacity-75' : ''} ${isNearBankrupt ? 'danger-pulse' : ''} min-w-0">
+      <button data-seat-tab="${pl.id}" data-mode-d-seat="${modeDSeatState || ''}" class="rounded-xl px-2.5 py-2 text-left transition flex flex-col justify-between border ${pl.isEliminated ? 'bg-slate-950/80 border-slate-800 opacity-40' : modeDSeatState === 'VALID_TARGET' ? 'bg-rose-950/90 border-2 border-rose-400 targetable-seat-glow' : modeDSeatState === 'IMMUNE_TARGET' ? 'bg-slate-950/80 border-slate-700 opacity-60' : isTurn ? 'bg-indigo-950/90 border-2 border-amber-400 active-turn-seat' : 'bg-slate-900/90 border-slate-700'} ${activeTurnNotMe ? 'opacity-75' : ''} ${isNearBankrupt ? 'danger-pulse' : ''} min-w-0">
         <div class="flex items-center justify-between w-full gap-1 min-w-0">
           <span class="text-xs font-black ${isTurn ? 'text-amber-300' : 'text-white'} truncate">${roleIcon}${cleanShortName}</span>
           ${turnBadge}
@@ -759,8 +759,8 @@ function renderAll() {
     const avSrc = GPT_MINI_AVATAR[topCard.tplId] || '';
     const skillTag = topCard.role === 'ENGINEER' ? '⚒$1' : `${topCard.isVP ? '👑' : ''}${topCard.skill}級$${topCard.salary}`;
     return `
-      <button data-open-bank-dept="${d}" class="rounded-lg ${meta.panelBg} border ${meta.border} p-1 text-left flex items-center gap-1 transition shadow min-w-0">
-        ${avSrc ? `<img src="${avSrc}" alt="${topCard.title}" class="art-mini-avatar shrink-0" />` : `<span class="text-xs shrink-0">${meta.icon}</span>`}
+      <button data-open-bank-dept="${d}" class="rounded-xl ${meta.panelBg} border ${meta.border} px-1.5 py-1.5 text-left flex items-center gap-1.5 transition shadow min-w-0">
+        ${avSrc ? `<img src="${avSrc}" alt="${topCard.title}" class="art-jobbank-avatar shrink-0" />` : `<span class="text-xs shrink-0">${meta.icon}</span>`}
         <div class="flex flex-col justify-between min-w-0 flex-1">
           <div class="flex items-center justify-between w-full gap-0.5 min-w-0">
             <span class="text-[9px] font-extrabold ${meta.text} whitespace-nowrap">${meta.short}</span>
@@ -784,16 +784,18 @@ function renderAll() {
     document.getElementById('draftBankCardsGrid').innerHTML = ['RED', 'YELLOW', 'BLUE', 'GREEN'].map(d => {
       const topUid = state.jobBank[d][0];
       const meta = DEPT_META[d];
-      if (!topUid) return `<div class="w-[152px] shrink-0 p-4 text-center text-slate-500">已抽乾</div>`;
+      if (!topUid) return `<div class="dept-card-scroll p-4 text-center text-slate-500">已抽乾</div>`;
       const emp = CARDS_BY_ID[topUid];
       const canPick = isMyTurnNow && !(emp.isVP && hasVPInDept(localPlayer, d));
       return `
-        <div data-draft-dept="${d}" class="w-[152px] sm:w-[200px] lg:flex-1 shrink-0 snap-start flex flex-col gap-1 min-w-0">
-          <div class="flex items-center justify-between text-[10px] px-1">
+        <div data-draft-dept="${d}" class="h-full shrink-0 snap-start flex flex-col gap-1 min-w-0">
+          <div class="flex items-center justify-between text-[10px] px-1 shrink-0">
             <span class="font-black ${meta.text} truncate">${meta.icon}${meta.short}</span>
             <span class="text-slate-400 whitespace-nowrap">剩${state.jobBank[d].length}張</span>
           </div>
-          ${renderEmployeeCardHTML(topUid, canPick ? 'cursor-pointer' : 'opacity-60', canPick ? '點擊招募' : '')}
+          <div class="flex-1 min-h-0 flex">
+            ${renderEmployeeCardHTML(topUid, (canPick ? 'cursor-pointer ' : 'opacity-60 ') + 'dept-card-scroll', canPick ? '點擊招募' : '')}
+          </div>
         </div>
       `;
     }).join('');
@@ -802,14 +804,16 @@ function renderAll() {
     companyStage.classList.remove('hidden');
   }
 
-  // 5. ZONE 3 (CENTER): Render Local Player's 4-Department Castle Stage (Tightly hugs card height, zero top/bottom voids!)
+  // 5. ZONE 3 (CENTER): Render Local Player's 4-Department Castle Stage
+  // - SCROLL mode: cards stretch to 100% of stage height (zero blank space above/below!)
+  // - GRID2X2 mode: 2x2 grid where each card shrinks to 50% stage height so all 4 fit without pushing hand dock!
   recalcPlayerStats(localPlayer);
   const deptGrid = document.getElementById('companyDepartmentsGrid');
   const isGrid2x2 = deptLayoutMode === 'GRID2X2';
   deptGrid.className = isGrid2x2
-    ? 'w-full grid grid-cols-2 lg:grid-cols-4 gap-2 min-w-0'
-    : 'w-full flex items-center gap-2.5 overflow-x-auto no-scrollbar snap-x min-w-0';
-  const colWidthCls = isGrid2x2 ? 'w-full' : 'w-[152px] sm:w-[200px] lg:flex-1 shrink-0 snap-start';
+    ? 'stage-track-grid2x2 no-scrollbar min-w-0'
+    : 'stage-track-scroll no-scrollbar min-w-0';
+  const cardSizeCls = isGrid2x2 ? 'dept-card-grid2x2' : 'dept-card-scroll';
 
   deptGrid.innerHTML = ['RED', 'YELLOW', 'BLUE', 'GREEN'].map(d => {
     const meta = DEPT_META[d];
@@ -817,20 +821,20 @@ function renderAll() {
 
     if (deptArr.length === 0) {
       return `
-        <div data-empty-dept="${d}" class="${colWidthCls} aspect-card-2-3 empty-rune-slot rounded-xl border-2 border-dashed ${meta.border} overflow-hidden flex flex-col justify-between p-2 min-w-0 relative cursor-pointer transition">
+        <div data-empty-dept="${d}" class="${cardSizeCls} empty-rune-slot rounded-xl border-2 border-dashed ${meta.border} overflow-hidden flex flex-col justify-between ${isGrid2x2 ? 'p-1.5' : 'p-2.5'} min-w-0 relative cursor-pointer transition">
           <div class="flex items-center justify-between w-full gap-1">
-            <span class="w-5 h-5 rounded-full bg-slate-950 border border-slate-600 text-slate-400 flex items-center justify-center text-[10px] font-black shadow">0</span>
-            <span class="text-[10px] font-black ${meta.text} truncate">${meta.icon}${meta.name}</span>
-            <span class="px-1 py-0.5 rounded bg-slate-900 border border-slate-700 text-[9px] font-bold text-slate-400">空城</span>
+            <span class="${isGrid2x2 ? 'w-4 h-4 text-[9px]' : 'w-5 h-5 text-[10px]'} rounded-full bg-slate-950 border border-slate-600 text-slate-400 flex items-center justify-center font-black shadow shrink-0">0</span>
+            <span class="${isGrid2x2 ? 'text-[9px]' : 'text-[11px]'} font-black ${meta.text} truncate">${meta.icon}${isGrid2x2 ? meta.short : meta.name}</span>
+            <span class="px-1 py-0.5 rounded bg-slate-900 border border-slate-700 text-[9px] font-bold text-slate-400 shrink-0">空城</span>
           </div>
           <div class="flex flex-col items-center justify-center text-center my-auto px-1">
-            <div class="w-12 h-12 rounded-full ${meta.panelBg} border ${meta.border} flex items-center justify-center text-xl opacity-60 shadow-lg">${meta.icon}</div>
-            <span class="text-[11px] font-black text-slate-300 mt-1.5">缺工空城 (0級)</span>
-            <span class="text-[9px] text-slate-400 mt-0.5 leading-tight">無主管駐守，檢定視為 0 級</span>
+            <div class="${isGrid2x2 ? 'w-8 h-8 text-base' : 'w-12 h-12 text-2xl'} rounded-full ${meta.panelBg} border ${meta.border} flex items-center justify-center opacity-60 shadow-lg">${meta.icon}</div>
+            <span class="${isGrid2x2 ? 'text-[10px] mt-1' : 'text-xs mt-2'} font-black text-slate-300">缺工空城 (0級)</span>
+            ${isGrid2x2 ? '' : '<span class="text-[10px] text-slate-400 mt-0.5 leading-tight">無主管駐守，檢定視為 0 級</span>'}
           </div>
           <div class="bg-slate-950/90 border border-slate-800 rounded-lg py-0.5 px-1.5 flex items-center justify-between text-[9px] text-slate-400">
-            <span>💎 0</span>
-            <span class="text-sky-300 font-bold">點人才池招募 ▸</span>
+            <span>💎0</span>
+            <span class="text-sky-300 font-bold truncate">${isGrid2x2 ? '招募▸' : '點人才池招募 ▸'}</span>
           </div>
         </div>
       `;
@@ -842,10 +846,10 @@ function renderAll() {
     const isNewlyFlipped = window.lastFlippedDeptKey === `${localPlayer.id}_${d}`;
 
     return `
-      <div data-inspect-dept="${d}" data-inspect-player="${localPlayer.id}" class="${colWidthCls} aspect-card-2-3 tilt-card-3d ${isNewlyFlipped ? 'anim-flip-in' : ''} rounded-xl bg-slate-950 border-2 ${meta.border} ${hCard.isVP ? 'vp-card-frame' : ''} overflow-hidden cursor-pointer shadow-xl min-w-0 relative">
+      <div data-inspect-dept="${d}" data-inspect-player="${localPlayer.id}" class="${cardSizeCls} tilt-card-3d ${isNewlyFlipped ? 'anim-flip-in' : ''} rounded-xl bg-slate-950 border-2 ${meta.border} ${hCard.isVP ? 'vp-card-frame' : ''} overflow-hidden cursor-pointer shadow-xl min-w-0 relative">
         ${getCardImgTag(hCard.tplId, hCard.title, 'w-full h-full object-cover block')}
         <div class="holo-sheen-layer"></div>
-        <span class="absolute bottom-1.5 left-1/2 -translate-x-1/2 px-2 py-0.5 rounded-full text-[9px] font-black shadow-lg whitespace-nowrap z-20 bg-slate-950/90 border border-amber-400 text-amber-300">👑我方${subordinates.length > 0 ? ` · ➕${subordinates.length}下屬` : ''}</span>
+        <span class="absolute bottom-1 left-1/2 -translate-x-1/2 px-1.5 py-0.5 rounded-full text-[9px] font-black shadow-lg whitespace-nowrap z-20 bg-slate-950/90 border border-amber-400 text-amber-300">👑我方${subordinates.length > 0 ? ` +${subordinates.length}下屬` : ''}</span>
       </div>
     `;
   }).join('');

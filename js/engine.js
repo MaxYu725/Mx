@@ -148,7 +148,8 @@ function createInitialGameState(
       recalcPlayerStats(pl);
       drawCardsForPlayer(state, pl, 6);
     });
-    addLog(state, '⚡ 快速開局完成：左右滑動檢視四部門；點手牌列目標(D)；點頂部切換看對手(B)！');
+    addLog(state, '🏛️ 點擊中央人才池或場上部門卡牌，可放大檢視完整卡面與下屬明細。');
+    addLog(state, '⚡ 快速開局完成：點手牌列目標施放；點頂部對手席位彈窗查看敵城！');
   } else {
     addLog(state, '🎲 進入「首輪召喚」階段：請從中央魔界人才池輪流挑選 1 名部下，直到每人召滿 4 名！');
   }
@@ -196,7 +197,7 @@ function formatLogItemToTickerHTML(rawMsg, isLatest = true) {
     .replace(/（需苦工×\d+）/g, '')
     .replace(/對(<span[^>]+>.*?<\/span>)施放/g, '➔ $1 施放')
     .replace(/對(<span[^>]+>.*?<\/span>)打出/g, '➔ $1 打出')
-    .replace(/快速開局完成：.*/g, '<span class="text-emerald-300 font-black">[就緒]</span> 點手牌列目標(D)；點頂部切換看對手(B)')
+    .replace(/快速開局完成：.*/g, '<span class="text-emerald-300 font-black">[就緒]</span> 點手牌列目標施放；點頂部對手彈窗看敵城')
     .replace(/進入「首輪召喚」階段：.*/g, '<span class="text-amber-300 font-black">[首輪召喚]</span> 請點選中央人才池頂牌招募 4 名部下')
     .replace(/「([^」]+)」/g, '<b class="text-amber-300">「$1」</b>');
 
