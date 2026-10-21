@@ -1046,3 +1046,75 @@
     }
     .pr-0\.5 { padding-right: 0.125rem; }
     .pt-2\.5 { padding-top: 0.625rem; }
+
+    /* === V13.7 Classic Burn Rate Dynamic CSS 2:3 Card Architecture === */
+    .burnrate-css-card {
+      background:
+        radial-gradient(circle at 50% 35%, rgba(30, 41, 59, 0.92) 0%, rgba(9, 13, 26, 0.99) 80%),
+        repeating-linear-gradient(135deg, rgba(255, 255, 255, 0.02) 0px, rgba(255, 255, 255, 0.02) 2px, transparent 2px, transparent 10px);
+      display: flex;
+      flex-direction: column;
+      justify-content: space-between;
+      overflow: hidden;
+      position: relative;
+      box-shadow: 0 10px 24px rgba(0, 0, 0, 0.85), inset 0 0 16px rgba(255, 255, 255, 0.05);
+    }
+    .burnrate-skill-orb {
+      width: 28px;
+      height: 28px;
+      border-radius: 9999px;
+      background: radial-gradient(circle at 35% 30%, #1e293b 0%, #020617 100%);
+      border: 2px solid #f8fafc;
+      box-shadow: 0 3px 8px rgba(0, 0, 0, 0.85);
+      display: flex;
+      align-items: center;
+      justify-content: center;
+      font-weight: 900;
+      font-size: 14px;
+      line-height: 1;
+      color: #ffffff;
+    }
+    .burnrate-skill-orb-vp {
+      border-color: #fbbf24;
+      color: #fde68a;
+      box-shadow: 0 0 10px rgba(251, 191, 36, 0.65), 0 3px 8px rgba(0, 0, 0, 0.85);
+    }
+    .burnrate-emblem-circle {
+      width: 52px;
+      height: 52px;
+      border-radius: 9999px;
+      background: radial-gradient(circle at 50% 35%, rgba(51, 65, 85, 0.85) 0%, rgba(15, 23, 42, 0.98) 100%);
+      border: 2px solid rgba(251, 191, 36, 0.65);
+      box-shadow: 0 6px 14px rgba(0, 0, 0, 0.75), inset 0 0 10px rgba(251, 191, 36, 0.18);
+      display: flex;
+      align-items: center;
+      justify-content: center;
+      font-size: 26px;
+      line-height: 1;
+    }
+    .burnrate-thumb-orb {
+      width: 18px;
+      height: 18px;
+      border-radius: 9999px;
+      background: #020617;
+      border: 1.5px solid #f8fafc;
+      display: flex;
+      align-items: center;
+      justify-content: center;
+      font-weight: 900;
+      font-size: 10px;
+      line-height: 1;
+      color: #ffffff;
+    }
+    .burnrate-thumb-emblem {
+      width: 32px;
+      height: 32px;
+      border-radius: 9999px;
+      background: rgba(15, 23, 42, 0.92);
+      border: 1.5px solid rgba(251, 191, 36, 0.6);
+      display: flex;
+      align-items: center;
+      justify-content: center;
+      font-size: 17px;
+      line-height: 1;
+    }

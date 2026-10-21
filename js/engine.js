@@ -77,7 +77,8 @@ function createInitialGameState(
     const seatId = `p${i + 1}`;
     const custom = Array.isArray(customSeats) ? customSeats.find(s => s.id === seatId) : null;
     const isAI = custom ? Boolean(custom.isAI) : (i !== 0);
-    const defaultName = i === 0 ? '深淵領主 (你)' : DEFAULT_AI_NAMES[i - 1];
+    const tTerms = typeof getThemeTerms === 'function' ? getThemeTerms() : { defaultPlayerName: '深淵領主', aiNames: DEFAULT_AI_NAMES };
+    const defaultName = i === 0 ? `${tTerms.defaultPlayerName} (你)` : (tTerms.aiNames[i - 1] || DEFAULT_AI_NAMES[i - 1]);
     players.push({
       id: seatId,
       name: (custom && custom.name) ? custom.name : defaultName,
@@ -99,7 +100,8 @@ function createInitialGameState(
     config: {
       playerCount,
       playDiscardMode,
-      fogOfWar: Boolean(fogOfWar)
+      fogOfWar: Boolean(fogOfWar),
+      themeId: (typeof getActiveTheme === 'function') ? getActiveTheme().id : 'CLASSIC_BURN_RATE'
     },
     phase: quickStart ? 'STEP1_PLAY_OR_DISCARD' : 'INITIAL_DRAFT',
     draft: {

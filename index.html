@@ -24,8 +24,8 @@
   <header class="w-full bg-slate-950/95 border-b border-amber-500/40 px-2.5 py-1.5 flex items-center justify-between gap-1.5 z-30 shrink-0">
     <!-- Left: Game Title + Round Pill + Turn/Mode Pill -->
     <div class="flex items-center gap-1.5 min-w-0 flex-1 overflow-hidden">
-      <span class="text-sm shrink-0">🏰</span>
-      <h1 class="text-xs sm:text-sm font-black text-amber-400 whitespace-nowrap shrink-0">深淵魔王城</h1>
+      <span id="headerAppIcon" class="text-sm shrink-0">💼</span>
+      <h1 id="headerAppTitle" class="text-xs sm:text-sm font-black text-amber-400 whitespace-nowrap shrink-0">Burn Rate 燒錢戰</h1>
       <span id="phaseBadge" class="px-1.5 py-0.5 rounded-full bg-purple-950 border border-purple-500/50 text-[10px] font-extrabold text-amber-300 whitespace-nowrap shrink-0">R1</span>
       <span id="activePlayerBadge" class="px-1.5 py-0.5 rounded bg-emerald-950/90 border border-emerald-500/40 text-[10px] font-black text-emerald-300 truncate">👑我方回合</span>
       <span id="modeIndicatorTag" class="hidden sm:inline-flex px-1.5 py-0.5 rounded bg-slate-900 border border-slate-700 text-[10px] font-bold text-indigo-300 whitespace-nowrap shrink-0">單機·二選一</span>
@@ -63,7 +63,7 @@
       <!-- Zone 2: Public 4-Column Job Bank Pure 2:3 Card Thumbnails -->
       <div id="talentMarketSection" class="flex-1 min-h-0 w-full flex flex-col gap-1 min-w-0">
         <div class="flex items-center justify-between px-1 min-w-0 shrink-0">
-          <span class="text-[11px] font-extrabold text-amber-300 truncate">🏛️ 公共魔界人才池（點擊頂牌展開大卡檢視）</span>
+          <span id="jobBankSectionTitle" class="text-[11px] font-extrabold text-amber-300 truncate">🏢 公共人力銀行（點擊頂牌檢視應徵者）</span>
           <button id="btnExpandJobBankModal" class="px-2 py-0.5 rounded-md bg-slate-900 border border-sky-500/40 text-[10px] font-black text-sky-300 whitespace-nowrap shrink-0">
             🔍 全展開 ▸
           </button>
@@ -137,7 +137,7 @@
       <!-- Hand Header Bar -->
       <div class="flex items-center justify-between gap-1 px-0.5 min-w-0">
         <div class="flex items-center gap-1.5 min-w-0">
-          <span class="text-xs font-black text-amber-300 truncate">✋ 法術手牌</span>
+          <span id="handSectionTitle" class="text-xs font-black text-amber-300 truncate">📁 商業行動手牌</span>
           <span id="playableCountBadge" class="px-1.5 py-0.5 rounded bg-emerald-950/80 border border-emerald-500/40 text-[10px] font-black text-emerald-300 whitespace-nowrap shrink-0">可出 0 張</span>
         </div>
         <div class="flex items-center gap-1.5 text-[10px] font-extrabold shrink-0">
@@ -181,10 +181,10 @@
           <!-- Populated dynamically with 3 iconic 2:3 Royal cards -->
         </div>
         <div class="inline-flex items-center gap-1 px-2.5 py-0.5 rounded-full bg-purple-950 border border-amber-400/60 text-[10px] font-black text-amber-300">
-          🔥 DUNGEON BURN RATE · V13.6 連線對戰版
+          🔥 BURN RATE MULTI-THEME · V13.7 連線對戰版
         </div>
-        <h2 class="text-lg sm:text-xl font-black text-amber-400 leading-tight">🏰 深淵魔王城：燒魔率爭霸戰</h2>
-        <p class="text-[11px] text-slate-300">招募四大部門魔界精英、轉嫁討伐危機，成為最後不破產的深淵霸主！</p>
+        <h2 id="homeAppTitle" class="text-lg sm:text-xl font-black text-amber-400 leading-tight">💼 Burn Rate：矽谷新創燒錢爭霸戰</h2>
+        <p id="homeAppSubtitle" class="text-[11px] text-slate-300">經營四大企業部門、高薪挖角人才、把爛點子塞給對手，撐到最後不破產！</p>
       </div>
 
       <!-- 2. First-Time Setup & Match Configuration Panel (首次設定區) -->
@@ -194,10 +194,19 @@
           <span class="text-[10px] text-slate-400">設定將自動記憶</span>
         </div>
 
+        <!-- Theme Switcher -->
+        <div class="flex items-center gap-2">
+          <label for="homeSelectTheme" class="text-amber-300 font-black whitespace-nowrap shrink-0">🎨 遊戲主題：</label>
+          <select id="homeSelectTheme" class="flex-1 bg-slate-900 border-2 border-amber-400 rounded-lg px-2 py-1 text-amber-300 font-black text-xs min-w-0">
+            <option value="CLASSIC_BURN_RATE" selected>💼 原版 Burn Rate (矽谷新創·動態CSS)</option>
+            <option value="DEMON_CASTLE">🏰 深淵魔王城 (魔界奇幻·全卡插畫)</option>
+          </select>
+        </div>
+
         <!-- Player Nickname -->
         <div class="flex items-center gap-2">
-          <label for="homeInputNickname" class="text-slate-300 font-bold whitespace-nowrap shrink-0">👑 魔王尊號：</label>
-          <input id="homeInputNickname" type="text" maxlength="16" value="深淵領主" class="flex-1 bg-slate-900 border border-amber-500/50 rounded-lg px-2.5 py-1 text-white font-black text-xs min-w-0" />
+          <label id="homeLordLabel" for="homeInputNickname" class="text-slate-300 font-bold whitespace-nowrap shrink-0">👔 執行長名號：</label>
+          <input id="homeInputNickname" type="text" maxlength="16" value="新創執行長" class="flex-1 bg-slate-900 border border-amber-500/50 rounded-lg px-2.5 py-1 text-white font-black text-xs min-w-0" />
         </div>
 
         <!-- Player Count & Play/Discard Rule -->
@@ -283,6 +292,12 @@
         <span>目前模式：<b id="settingsModeText" class="text-amber-300">單機挑戰 AI</b></span>
         <span id="settingsRuleText" class="text-[11px] text-indigo-300 font-bold">標準二選一</span>
       </div>
+
+      <!-- Quick Theme Switcher in Settings Menu -->
+      <button id="btnMenuSwitchTheme" class="w-full py-2 px-3 rounded-xl bg-indigo-950/90 border border-amber-400/70 text-xs font-black text-amber-300 flex items-center justify-between shadow">
+        <span>🎨 目前主題：<b id="menuCurrentThemeText" class="text-white">💼 原版 Burn Rate</b></span>
+        <span class="px-2 py-0.5 rounded bg-amber-500 text-slate-950 text-[10px] font-black">點擊切換 ▸</span>
+      </button>
 
       <!-- Primary Actions: Multiplayer Lobby & Return to Home Screen -->
       <div class="grid grid-cols-2 gap-2">
@@ -480,6 +495,13 @@
 
         <!-- HOST / SOLO MATCH RULES & START BUTTONS -->
         <div id="lobbyHostStartControls" class="space-y-2.5 pt-1">
+          <div>
+            <label for="selectLobbyTheme" class="block font-bold text-amber-300 mb-1">🎨 房間主題風格 (房主切換將同步全房)：</label>
+            <select id="selectLobbyTheme" class="w-full bg-slate-950 border-2 border-amber-400/70 rounded-lg px-3 py-1.5 text-amber-300 font-black">
+              <option value="CLASSIC_BURN_RATE" selected>💼 原版 Burn Rate (矽谷新創·動態CSS)</option>
+              <option value="DEMON_CASTLE">🏰 深淵魔王城 (魔界奇幻·全卡插畫)</option>
+            </select>
+          </div>
           <div>
             <label class="block font-bold text-slate-200 mb-1">1. 對戰總人數 (支援 2–4 人)：</label>
             <select id="selectPlayerCount" class="w-full bg-slate-950 border border-slate-700 rounded-lg px-3 py-1.5 text-white font-semibold">

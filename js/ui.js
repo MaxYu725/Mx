@@ -524,16 +524,93 @@ function renderEmployeeCardHTML(empUid, extraClasses = '', badgeLabel = '') {
   const c = CARDS_BY_ID[empUid];
   if (!c) return '';
   const meta = DEPT_META[c.dept] || DEPT_META.RED;
-  const fullCardSrc = getCardArtSrc(c.tplId);
+  const theme = typeof getActiveTheme === 'function' ? getActiveTheme() : { useFullCardArt: true };
+  const terms = typeof getThemeTerms === 'function' ? getThemeTerms() : { currencyIcon: '💎', vpIcon: '👑', vpName: '皇室', mgrName: '主管', engName: '苦工', crisisName: '危機' };
+  const fullCardSrc = theme.useFullCardArt ? getCardArtSrc(c.tplId) : '';
 
   if (fullCardSrc) {
     return `
       <div data-emp-uid="${c.uid}" class="relative rounded-xl bg-slate-950 border-2 ${meta.border} ${c.isVP ? 'vp-card-frame' : ''} overflow-hidden shadow-xl transition min-w-0 ${extraClasses}">
         ${getCardImgTag(c.tplId, c.title, "full-gpt-card-img")}
-        ${badgeLabel ? `<span class="absolute top-1 right-1 px-1.5 py-0.5 rounded bg-sky-500 text-slate-950 text-[10px] font-black shadow-lg">${badgeLabel}</span>` : ''}
+        ${badgeLabel ? `<span class="absolute top-1 right-1 px-1.5 py-0.5 rounded bg-sky-500 text-slate-950 text-[10px] font-black shadow-lg z-20">${badgeLabel}</span>` : ''}
       </div>
     `;
   }
+
+  // Dynamic CSS 2:3 Card (Used for Classic Burn Rate & any CSS-driven theme)
+  const roleTag = c.role === 'ENGINEER'
+    ? `<span class="text-[9px] font-black bg-slate-950/90 text-amber-300 px-1.5 py-0.5 rounded border border-amber-400/50 whitespace-nowrap">${terms.engIcon || '⚒️'}${terms.engName}</span>`
+    : c.isVP
+    ? `<span class="text-[9px] font-black bg-amber-400 text-slate-950 px-1.5 py-0.5 rounded whitespace-nowrap shadow">${terms.vpIcon}${terms.vpName}</span>`
+    : `<span class="text-[9px] font-bold bg-slate-950/75 text-white px-1.5 py-0.5 rounded whitespace-nowrap">${terms.mgrName}</span>`;
+
+  const orbHTML = c.role === 'ENGINEER'
+    ? `<div class="burnrate-skill-orb text-xs text-amber-300">🔧</div>`
+    : `<div class="burnrate-skill-orb ${c.isVP ? 'burnrate-skill-orb-vp' : ''}">${c.skill}</div>`;
+
+  return `
+    <div data-emp-uid="${c.uid}" class="burnrate-css-card aspect-card-2-3 rounded-xl border-2 ${meta.border} ${c.isVP ? 'vp-card-frame' : ''} text-left transition min-w-0 ${extraClasses}">
+      <!-- Top Department Color Header -->
+      <div class="${meta.color} px-2 py-1 flex items-center justify-between gap-1 border-b border-white/20 shrink-0 min-w-0">
+        <span class="text-[10px] font-black text-white truncate">${meta.icon}${meta.short}</span>
+        ${roleTag}
+      </div>
+
+      <!-- Center Skill Orb + Corporate Portrait Medallion + Titles -->
+      <div class="flex-1 flex flex-col items-center justify-center p-2 relative min-w-0">
+        <div class="absolute top-1.5 left-1.5">${orbHTML}</div>
+        ${badgeLabel ? `<span class="absolute top-1.5 right-1.5 px-1.5 py-0.5 rounded bg-sky-400 text-slate-950 text-[9px] font-black shadow z-20 whitespace-nowrap">${badgeLabel}</span>` : ''}
+        <div class="burnrate-emblem-circle">${c.svg}</div>
+        <div class="text-xs sm:text-sm font-black text-white mt-1.5 text-center leading-tight truncate w-full px-1">${c.title}</div>
+        <div class="text-[9px] sm:text-[10px] font-bold text-amber-300/90 truncate w-full text-center mt-0.5 px-1">${c.origTitle}</div>
+      </div>
+
+      <!-- Bottom Salary & Skill Bar -->
+      <div class="bg-slate-950/95 border-t border-slate-800 px-2 py-1.5 flex items-center justify-between text-[10px] shrink-0">
+        <span class="font-black text-rose-400 whitespace-nowrap">${terms.currencyIcon}-${c.salary}/回</span>
+        <span class="font-extrabold text-sky-300 whitespace-nowrap">${c.role === 'ENGINEER' ? `抵1${terms.crisisName}` : `技能 ${c.skill}級`}</span>
+      </div>
+    </div>
+  `;
+}
+
+function renderTalentPoolThumbCardHTML(topCard, d, deckLen) {
+  const meta = DEPT_META[d];
+  const theme = typeof getActiveTheme === 'function' ? getActiveTheme() : { useFullCardArt: true };
+  const terms = typeof getThemeTerms === 'function' ? getThemeTerms() : { currencyIcon: '💎', vpIcon: '👑' };
+
+  if (theme.useFullCardArt && getCardArtSrc(topCard.tplId)) {
+    return `
+      <button data-open-bank-dept="${d}" class="jobbank-thumb-card border-2 ${meta.border} ${topCard.isVP ? 'vp-card-frame' : ''} bg-slate-950">
+        ${getCardImgTag(topCard.tplId, topCard.title, 'w-full h-full object-cover block')}
+        <span class="absolute top-0.5 right-0.5 px-1 py-0.5 rounded bg-slate-950/90 border border-slate-600 text-[8px] font-black text-amber-300 leading-none shadow">剩${deckLen}</span>
+      </button>
+    `;
+  }
+
+  const orbText = topCard.role === 'ENGINEER' ? '🔧' : topCard.skill;
+  return `
+    <button data-open-bank-dept="${d}" class="jobbank-thumb-card burnrate-css-card border-2 ${meta.border} ${topCard.isVP ? 'vp-card-frame' : ''} text-left">
+      <div class="${meta.color} px-1 py-0.5 flex items-center justify-between gap-0.5 border-b border-white/20 shrink-0 w-full">
+        <span class="text-[8px] font-black text-white truncate">${meta.icon}${meta.short}</span>
+        <span class="px-1 rounded bg-slate-950/90 text-[8px] font-black text-amber-300 leading-none">剩${deckLen}</span>
+      </div>
+      <div class="flex-1 flex flex-col items-center justify-center px-1 py-0.5 relative w-full min-w-0">
+        <div class="burnrate-thumb-orb ${topCard.isVP ? 'burnrate-skill-orb-vp' : ''} absolute top-1 left-1">${orbText}</div>
+        ${topCard.isVP ? `<span class="absolute top-1 right-1 text-[8px] font-black bg-amber-400 text-slate-950 px-1 rounded leading-none">${terms.vpIcon}</span>` : ''}
+        <div class="burnrate-thumb-emblem">${topCard.svg}</div>
+        <div class="text-[9px] font-black text-white text-center leading-tight truncate w-full mt-0.5">${topCard.title}</div>
+      </div>
+      <div class="bg-slate-950/95 border-t border-slate-800 px-1 py-0.5 flex items-center justify-between text-[8px] w-full shrink-0">
+        <span class="font-black text-rose-400">${terms.currencyIcon}-${topCard.salary}</span>
+        <span class="font-bold text-sky-300">${topCard.role === 'ENGINEER' ? '工程' : `${topCard.skill}級`}</span>
+      </div>
+    </button>
+  `;
+}
+
+function skipOldFallbackBlock() {
+  if (false) {
 
   const skillBadge = c.role === 'ENGINEER'
     ? `<span class="px-1.5 py-0.5 rounded bg-slate-800 text-amber-300 text-[10px] font-bold">⚒苦工</span>`
@@ -561,6 +638,7 @@ function renderEmployeeCardHTML(empUid, extraClasses = '', badgeLabel = '') {
     </div>
   `;
 }
+}
 
 // V13.2 Ultra-Compact Hand Card (w-[92px] h-[118px] on mobile -> fits ~3.8 cards horizontally, saves vertical space!)
 function renderActionCardHTML(actUid, extraClasses = '', playStatus = null, isSelected = false, isDiscardChecked = false) {
@@ -571,7 +649,8 @@ function renderActionCardHTML(actUid, extraClasses = '', playStatus = null, isSe
 
   let reqBarHTML = '';
   if (c.dept === 'PURPLE') {
-    reqBarHTML = `<div class="text-[9px] font-black text-amber-300 bg-purple-950/90 px-1 py-0.5 rounded-full border border-amber-400 whitespace-nowrap leading-none">👑皇室≥${c.reqVPs || 2}</div>`;
+    const terms = typeof getThemeTerms === 'function' ? getThemeTerms() : { vpIcon: '👑', vpName: '皇室', currencyIcon: '💎', engIcon: '⚒' };
+    reqBarHTML = `<div class="text-[9px] font-black text-amber-300 bg-purple-950/90 px-1 py-0.5 rounded-full border border-amber-400 whitespace-nowrap leading-none">${terms.vpIcon}${terms.vpName}≥${c.reqVPs || 2}</div>`;
   } else {
     const pills = [0, 1, 2, 3].map(num => {
       const active = c.reqSkills.includes(num);
@@ -583,7 +662,7 @@ function renderActionCardHTML(actUid, extraClasses = '', playStatus = null, isSe
   }
 
   const valueBadge = c.effect === 'GAIN_FUNDS'
-    ? `<span class="px-1 py-0.5 rounded bg-emerald-950 border border-emerald-400 text-[9px] font-black text-emerald-300 leading-none">+${c.val}💎</span>`
+    ? `<span class="px-1 py-0.5 rounded bg-emerald-950 border border-emerald-400 text-[9px] font-black text-emerald-300 leading-none">+${c.val}${(typeof getThemeTerms === 'function' ? getThemeTerms().currencyIcon : '💎')}</span>`
     : c.effect === 'BAD_IDEA'
     ? `<span class="text-[9px] font-black text-amber-300 bg-rose-950/90 px-1 py-0.5 rounded border border-rose-500/50 leading-none">⚒×${c.val}</span>`
     : '';
@@ -666,6 +745,15 @@ function updateSettingsMenuUI() {
   if (homeFsBtn) {
     homeFsBtn.textContent = deferredPwaPrompt ? '📲 安裝PWA' : isRunningStandalonePWA() ? '✔ PWA全螢幕' : isFs ? '✕ 退出全螢幕' : '⛶ 全螢幕/PWA';
   }
+  const curTheme = typeof getActiveTheme === 'function' ? getActiveTheme() : null;
+  if (curTheme) {
+    const menuThemeText = document.getElementById('menuCurrentThemeText');
+    if (menuThemeText) menuThemeText.textContent = curTheme.shortLabel;
+    const homeThemeSel = document.getElementById('homeSelectTheme');
+    if (homeThemeSel && homeThemeSel.value !== curTheme.id) homeThemeSel.value = curTheme.id;
+    const lobbyThemeSel = document.getElementById('selectLobbyTheme');
+    if (lobbyThemeSel && lobbyThemeSel.value !== curTheme.id) lobbyThemeSel.value = curTheme.id;
+  }
   if (gameState) {
     const modeText = document.getElementById('settingsModeText');
     const ruleText = document.getElementById('settingsRuleText');
@@ -715,6 +803,17 @@ function renderAll() {
 
   // Keep viewedPlayerId locked to localPlayer so Central Zone 3 ALWAYS shows our own castle!
   viewedPlayerId = myId;
+  const activeTheme = typeof getActiveTheme === 'function' ? getActiveTheme() : { id: 'CLASSIC_BURN_RATE', useFullCardArt: false };
+  const terms = typeof getThemeTerms === 'function' ? getThemeTerms() : {};
+
+  const hIconEl = document.getElementById('headerAppIcon');
+  if (hIconEl && terms.appIcon && hIconEl.textContent !== terms.appIcon) hIconEl.textContent = terms.appIcon;
+  const hTitleEl = document.getElementById('headerAppTitle');
+  if (hTitleEl && terms.shortTitle && hTitleEl.textContent !== terms.shortTitle) hTitleEl.textContent = terms.shortTitle;
+  const jbTitleEl = document.getElementById('jobBankSectionTitle');
+  if (jbTitleEl && terms.jobBankTitle && jbTitleEl.textContent !== terms.jobBankTitle) jbTitleEl.textContent = terms.jobBankTitle;
+  const handTitleEl = document.getElementById('handSectionTitle');
+  if (handTitleEl && terms.handTitle && handTitleEl.textContent !== terms.handTitle) handTitleEl.textContent = terms.handTitle;
 
   // 1. Compact Top Header Status
   const phaseBadgeEl = document.getElementById('phaseBadge');
@@ -803,7 +902,7 @@ function renderAll() {
     const handCnt = typeof pl.handCount === 'number' ? pl.handCount : pl.hand.length;
     const deptSkills = ['RED', 'YELLOW', 'BLUE', 'GREEN'].map(d => `${getEffectiveSkill(pl, d)}${hasVPInDept(pl, d) ? 'V' : ''}`).join(',');
     return `${pl.id}:${pl.name}:${pl.crystals}:${getPlayerBurnRate(pl)}:${pl.engineers.length}:${pl.crises.length}:${pl.outsourcedCount}:${handCnt}:${isTurn ? state.turn.actionsUsed : -1}:${pl.isEliminated}:${deptSkills}`;
-  }).join('|') + `|modeD:${uiSelection.mode}:${uiSelection.sourceCardUid || ''}:${uiSelection.step2OpponentId || ''}|myTurn:${isMyTurnNow}`;
+  }).join('|') + `|modeD:${uiSelection.mode}:${uiSelection.sourceCardUid || ''}:${uiSelection.step2OpponentId || ''}|myTurn:${isMyTurnNow}|theme:${activeTheme.id}`;
 
   if (seatTabsBar.getAttribute('data-render-sig') !== oppSig) {
     seatTabsBar.setAttribute('data-render-sig', oppSig);
@@ -853,14 +952,14 @@ function renderAll() {
             ${turnBadge}
           </div>
           <div class="grid grid-cols-3 gap-1 w-full min-w-0">
-            <span class="rounded bg-emerald-950/85 border border-emerald-500/40 px-1 py-0.5 text-[11px] font-black text-emerald-400 text-center whitespace-nowrap">💎${pl.crystals}</span>
+            <span class="rounded bg-emerald-950/85 border border-emerald-500/40 px-1 py-0.5 text-[11px] font-black text-emerald-400 text-center whitespace-nowrap">${terms.currencyIcon || '💎'}${pl.crystals}</span>
             <span class="rounded bg-rose-950/85 border border-rose-500/40 px-1 py-0.5 text-[11px] font-black text-rose-400 text-center whitespace-nowrap">🔥-${burn}/回</span>
-            <span class="rounded bg-purple-950/85 border border-purple-500/40 px-1 py-0.5 text-[10px] font-black text-purple-200 text-center whitespace-nowrap">👑皇室:${vpCnt}</span>
+            <span class="rounded bg-purple-950/85 border border-purple-500/40 px-1 py-0.5 text-[10px] font-black text-purple-200 text-center whitespace-nowrap">${terms.vpIcon || '👑'}${terms.vpName || '皇室'}:${vpCnt}</span>
           </div>
           <div class="grid grid-cols-3 gap-1 w-full bg-slate-950/90 border border-slate-800 rounded-md px-1.5 py-0.5 text-[10px] font-bold text-center min-w-0">
-            <span class="text-red-200 whitespace-nowrap">⚒苦工 <b>${pl.engineers.length}</b></span>
-            <span class="${pl.crises.length > 0 ? 'text-amber-300 font-black' : 'text-slate-400'} whitespace-nowrap">⚠️危機 <b>${pl.crises.length}</b>${totalCrisisReq > 0 ? `(${totalCrisisReq})` : ''}</span>
-            <span class="${pl.outsourcedCount > 0 ? 'text-rose-300 font-black' : 'text-slate-400'} whitespace-nowrap">👹外包 <b>${pl.outsourcedCount}</b></span>
+            <span class="text-red-200 whitespace-nowrap">${terms.engIcon || '⚒'}${terms.engName || '苦工'} <b>${pl.engineers.length}</b></span>
+            <span class="${pl.crises.length > 0 ? 'text-amber-300 font-black' : 'text-slate-400'} whitespace-nowrap">${terms.crisisIcon || '⚠️'}${terms.crisisName || '危機'} <b>${pl.crises.length}</b>${totalCrisisReq > 0 ? `(${totalCrisisReq})` : ''}</span>
+            <span class="${pl.outsourcedCount > 0 ? 'text-rose-300 font-black' : 'text-slate-400'} whitespace-nowrap">${terms.outIcon || '👹'}${terms.outName || '外包'} <b>${pl.outsourcedCount}</b></span>
           </div>
           <div class="grid grid-cols-4 gap-1 w-full min-w-0">
             ${skillDots}
@@ -885,7 +984,7 @@ function renderAll() {
       const meta = DEPT_META[d];
       const deck = state.jobBank[d];
       const topUid = deck[0];
-      const bankSig = `${topUid || 'EMPTY'}:${deck.length}`;
+      const bankSig = `${activeTheme.id}:${topUid || 'EMPTY'}:${deck.length}`;
       if (slotEl.getAttribute('data-bank-sig') === bankSig) return;
       slotEl.setAttribute('data-bank-sig', bankSig);
 
@@ -899,12 +998,7 @@ function renderAll() {
         return;
       }
       const topCard = CARDS_BY_ID[topUid];
-      slotEl.innerHTML = `
-        <button data-open-bank-dept="${d}" class="jobbank-thumb-card border-2 ${meta.border} ${topCard.isVP ? 'vp-card-frame' : ''} bg-slate-950">
-          ${getCardImgTag(topCard.tplId, topCard.title, 'w-full h-full object-cover block')}
-          <span class="absolute top-0.5 right-0.5 px-1 py-0.5 rounded bg-slate-950/90 border border-slate-600 text-[8px] font-black text-amber-300 leading-none shadow">剩${deck.length}</span>
-        </button>
-      `;
+      slotEl.innerHTML = renderTalentPoolThumbCardHTML(topCard, d, deck.length);
     });
   }
 
@@ -966,7 +1060,7 @@ function renderAll() {
       const deptArr = localPlayer.departments[d];
       const headUid = deptArr[0] || 'EMPTY';
       const subCount = Math.max(0, deptArr.length - 1);
-      const slotSig = `${localPlayer.id}:${headUid}:${subCount}`;
+      const slotSig = `${activeTheme.id}:${localPlayer.id}:${headUid}:${subCount}`;
 
       const flipKey = `${localPlayer.id}_${d}`;
       const isNewlyFlipped = window.lastFlippedDeptKey === flipKey;
@@ -986,16 +1080,16 @@ function renderAll() {
             <div class="flex items-center justify-between w-full gap-1">
               <span class="w-5 h-5 text-[10px] rounded-full bg-slate-950 border border-slate-600 text-slate-400 flex items-center justify-center font-black shadow shrink-0">0</span>
               <span class="text-[11px] font-black ${meta.text} truncate">${meta.icon}${meta.name}</span>
-              <span class="px-1 py-0.5 rounded bg-slate-900 border border-slate-700 text-[9px] font-bold text-slate-400 shrink-0">空城</span>
+              <span class="px-1 py-0.5 rounded bg-slate-900 border border-slate-700 text-[9px] font-bold text-slate-400 shrink-0">0級</span>
             </div>
             <div class="flex flex-col items-center justify-center text-center my-auto px-1">
               <div class="w-11 h-11 text-xl rounded-full ${meta.panelBg} border ${meta.border} flex items-center justify-center opacity-60 shadow-lg">${meta.icon}</div>
-              <span class="text-xs mt-1.5 font-black text-slate-300">缺工空城 (0級)</span>
-              <span class="text-[10px] text-slate-400 mt-0.5 leading-tight">無主管駐守，檢定視為 0 級</span>
+              <span class="text-xs mt-1.5 font-black text-slate-300">${terms.emptySlotTitle || '部門懸缺 (0級)'}</span>
+              <span class="text-[10px] text-slate-400 mt-0.5 leading-tight">${terms.emptySlotSub || '無主管駐守，檢定視為 0 級'}</span>
             </div>
             <div class="bg-slate-950/90 border border-slate-800 rounded-lg py-0.5 px-1.5 flex items-center justify-between text-[9px] text-slate-400">
-              <span>💎0</span>
-              <span class="text-sky-300 font-bold truncate">點人才池招募 ▸</span>
+              <span>${terms.currencyIcon || '💵'}0</span>
+              <span class="text-sky-300 font-bold truncate">點擊招募 ▸</span>
             </div>
           </div>
         `;
@@ -1003,13 +1097,22 @@ function renderAll() {
       }
 
       const hCard = CARDS_BY_ID[headUid];
-      slotEl.innerHTML = `
-        <div data-inspect-dept="${d}" data-inspect-player="${localPlayer.id}" class="dept-card-scroll tilt-card-3d ${isNewlyFlipped ? 'anim-flip-in' : ''} rounded-xl bg-slate-950 border-2 ${meta.border} ${hCard.isVP ? 'vp-card-frame' : ''} overflow-hidden cursor-pointer shadow-xl min-w-0 relative">
-          ${getCardImgTag(hCard.tplId, hCard.title, 'w-full h-full object-cover block')}
-          <div class="holo-sheen-layer"></div>
-          <span class="absolute bottom-1 left-1/2 -translate-x-1/2 px-1.5 py-0.5 rounded-full text-[9px] font-black shadow-lg whitespace-nowrap z-20 bg-slate-950/90 border border-amber-400 text-amber-300">👑我方${subCount > 0 ? ` +${subCount}下屬` : ''}</span>
-        </div>
-      `;
+      const badgeStr = `👑我方${subCount > 0 ? ` +${subCount}${terms.empName || '下屬'}` : ''}`;
+      if (activeTheme.useFullCardArt && getCardArtSrc(hCard.tplId)) {
+        slotEl.innerHTML = `
+          <div data-inspect-dept="${d}" data-inspect-player="${localPlayer.id}" class="dept-card-scroll tilt-card-3d ${isNewlyFlipped ? 'anim-flip-in' : ''} rounded-xl bg-slate-950 border-2 ${meta.border} ${hCard.isVP ? 'vp-card-frame' : ''} overflow-hidden cursor-pointer shadow-xl min-w-0 relative">
+            ${getCardImgTag(hCard.tplId, hCard.title, 'w-full h-full object-cover block')}
+            <div class="holo-sheen-layer"></div>
+            <span class="absolute bottom-1 left-1/2 -translate-x-1/2 px-1.5 py-0.5 rounded-full text-[9px] font-black shadow-lg whitespace-nowrap z-20 bg-slate-950/90 border border-amber-400 text-amber-300">${badgeStr}</span>
+          </div>
+        `;
+      } else {
+        slotEl.innerHTML = `
+          <div data-inspect-dept="${d}" data-inspect-player="${localPlayer.id}" class="dept-card-scroll tilt-card-3d ${isNewlyFlipped ? 'anim-flip-in' : ''} cursor-pointer min-w-0 relative">
+            ${renderEmployeeCardHTML(headUid, 'w-full h-full', subCount > 0 ? `+${subCount}${terms.empName || '下屬'}` : '')}
+          </div>
+        `;
+      }
       const insertedCard = slotEl.firstElementChild;
       if (insertedCard && isNewlyFlipped) {
         insertedCard.addEventListener('animationend', () => {
@@ -1032,7 +1135,7 @@ function renderAll() {
     if (myHeroBar.className !== heroCls && !myHeroBar.classList.contains('anim-hit-shake')) {
       myHeroBar.className = heroCls;
     }
-    const heroSig = `${myId}:${localPlayer.name}:${isMyTurnNow}:${getTotalVPCount(localPlayer)}:${localPlayer.crystals}:${myBurn}:${localPlayer.engineers.length}:${myCrisisCnt}:${myCrisisReq}:${localPlayer.outsourcedCount}`;
+    const heroSig = `${activeTheme.id}:${myId}:${localPlayer.name}:${isMyTurnNow}:${getTotalVPCount(localPlayer)}:${localPlayer.crystals}:${myBurn}:${localPlayer.engineers.length}:${myCrisisCnt}:${myCrisisReq}:${localPlayer.outsourcedCount}`;
     if (myHeroBar.getAttribute('data-render-sig') !== heroSig) {
       myHeroBar.setAttribute('data-render-sig', heroSig);
       myHeroBar.innerHTML = `
@@ -1040,25 +1143,25 @@ function renderAll() {
           <div class="flex items-center gap-1.5 min-w-0 flex-1">
             <span class="px-1.5 py-0.5 rounded text-[10px] font-black whitespace-nowrap shrink-0 ${isMyTurnNow ? 'bg-amber-400 text-slate-950' : 'bg-slate-800 text-amber-300'}">👑 我方 (${myId.toUpperCase()})</span>
             <span class="text-xs font-black text-white truncate">${getShortPlayerName(localPlayer.name)}</span>
-            <span class="px-1.5 py-0.5 rounded bg-purple-950 border border-purple-400 text-[9px] font-black text-purple-200 whitespace-nowrap shrink-0">👑皇室:${getTotalVPCount(localPlayer)}</span>
+            <span class="px-1.5 py-0.5 rounded bg-purple-950 border border-purple-400 text-[9px] font-black text-purple-200 whitespace-nowrap shrink-0">${terms.vpIcon || '👑'}${terms.vpName || '皇室'}:${getTotalVPCount(localPlayer)}</span>
           </div>
           <div class="flex items-center gap-1.5 shrink-0">
-            <span class="px-2 py-0.5 rounded-lg bg-emerald-950/80 border border-emerald-500/40 text-xs font-black text-emerald-400 whitespace-nowrap">💎${localPlayer.crystals}</span>
+            <span class="px-2 py-0.5 rounded-lg bg-emerald-950/80 border border-emerald-500/40 text-xs font-black text-emerald-400 whitespace-nowrap">${terms.currencyIcon || '💎'}${localPlayer.crystals}</span>
             <span class="px-2 py-0.5 rounded-lg bg-rose-950/70 border border-rose-500/50 text-xs font-black text-rose-400 whitespace-nowrap">🔥-${myBurn}/回</span>
           </div>
         </div>
         <div class="grid grid-cols-3 gap-1.5 w-full min-w-0">
           <button data-inspect-eng="${myId}" class="rounded-lg bg-red-950/60 border border-red-500/40 px-2 py-0.5 text-left flex items-center justify-between min-w-0">
-            <span class="text-[10px] font-bold text-red-200 truncate">⚒苦工:${localPlayer.engineers.length}</span>
-            <span class="text-[10px] font-black text-rose-300 whitespace-nowrap shrink-0">💎-${localPlayer.engineers.length} 🔍</span>
+            <span class="text-[10px] font-bold text-red-200 truncate">${terms.engIcon || '⚒'}${terms.engName || '苦工'}:${localPlayer.engineers.length}</span>
+            <span class="text-[10px] font-black text-rose-300 whitespace-nowrap shrink-0">${terms.currencyIcon || '💎'}-${localPlayer.engineers.length} 🔍</span>
           </button>
           <button data-inspect-crises="${myId}" class="rounded-lg ${myCrisisCnt > 0 ? 'bg-amber-950/80 border border-amber-400' : 'bg-slate-900 border border-slate-700'} px-2 py-0.5 text-left flex items-center justify-between min-w-0">
-            <span class="text-[10px] font-bold ${myCrisisCnt > 0 ? 'text-amber-200' : 'text-slate-400'} whitespace-nowrap">⚠️危機:${myCrisisCnt}</span>
+            <span class="text-[10px] font-bold ${myCrisisCnt > 0 ? 'text-amber-200' : 'text-slate-400'} whitespace-nowrap">${terms.crisisIcon || '⚠️'}${terms.crisisName || '危機'}:${myCrisisCnt}</span>
             <span class="text-[10px] font-black ${myCrisisCnt > 0 ? 'text-amber-300' : 'text-slate-500'} whitespace-nowrap shrink-0">需${myCrisisReq} 🔍</span>
           </button>
           <button data-inspect-outsourced="${myId}" class="rounded-lg ${localPlayer.outsourcedCount > 0 ? 'bg-rose-950/90 border border-rose-400' : 'bg-slate-900 border border-slate-700'} px-2 py-0.5 text-left flex items-center justify-between min-w-0">
-            <span class="text-[10px] font-bold ${localPlayer.outsourcedCount > 0 ? 'text-rose-200' : 'text-slate-400'} truncate">👹外包:${localPlayer.outsourcedCount}</span>
-            <span class="text-[10px] font-black ${localPlayer.outsourcedCount > 0 ? 'text-rose-300' : 'text-slate-500'} whitespace-nowrap shrink-0">💎-${localPlayer.outsourcedCount * 3} 🔍</span>
+            <span class="text-[10px] font-bold ${localPlayer.outsourcedCount > 0 ? 'text-rose-200' : 'text-slate-400'} truncate">${terms.outIcon || '👹'}${terms.outName || '外包'}:${localPlayer.outsourcedCount}</span>
+            <span class="text-[10px] font-black ${localPlayer.outsourcedCount > 0 ? 'text-rose-300' : 'text-slate-500'} whitespace-nowrap shrink-0">${terms.currencyIcon || '💎'}-${localPlayer.outsourcedCount * 3} 🔍</span>
           </button>
         </div>
       `;
@@ -1097,7 +1200,7 @@ function renderAll() {
     }
     evaluatedHand.sort((a, b) => (b.status.playable ? 1 : 0) - (a.status.playable ? 1 : 0));
 
-    const handSig = evaluatedHand.map(({ hUid, status }) =>
+    const handSig = activeTheme.id + '||' + evaluatedHand.map(({ hUid, status }) =>
       `${hUid}:${status.playable ? 1 : 0}:${status.shortReason || ''}:${uiSelection.sourceCardUid === hUid ? 1 : 0}:${uiSelection.discardSet.has(hUid) ? 1 : 0}:${uiSelection.mode}`
     ).join('|');
 
@@ -1730,8 +1833,9 @@ function attachDynamicBoardListeners() {
 
 // === Job Bank Modal (Pure 2:3 Character Cards Only — No Redundant Text Boxes) ===
 function openJobBankModal() {
-  document.getElementById('jobBankModalTitle').textContent = '🏛️ 中央魔界人才池（四大部門翻開頂牌）';
-  document.getElementById('jobBankModalSub').textContent = '打出「契約召喚」或「強塞魔物」時可選取此處翻開的部下。';
+  const terms = typeof getThemeTerms === 'function' ? getThemeTerms() : {};
+  document.getElementById('jobBankModalTitle').textContent = terms.jobBankModalTitle || '🏢 中央人力銀行（四大部門翻開頂牌）';
+  document.getElementById('jobBankModalSub').textContent = terms.jobBankModalSub || '打出聘僱卡時可選取此處翻開的人員。';
   const summaryEl = document.getElementById('jobBankOpponentSummary');
   if (summaryEl) {
     summaryEl.classList.add('hidden');
@@ -1784,24 +1888,24 @@ function openOpponentCastleModal(oppId) {
         <!-- Part 1: Enlarged 4-Column Core Economy & Status Dashboard -->
         <div class="grid grid-cols-4 gap-1.5 w-full">
           <div class="rounded-xl bg-emerald-950/75 border border-emerald-500/50 p-2 text-center">
-            <div class="text-[10px] sm:text-xs font-bold text-emerald-200">💎 魔晶儲備</div>
+            <div class="text-[10px] sm:text-xs font-bold text-emerald-200">${(typeof getThemeTerms === 'function' ? getThemeTerms().currencyIcon : '💎')} ${(typeof getThemeTerms === 'function' ? getThemeTerms().currencyName : '魔晶')}儲備</div>
             <div class="text-sm sm:text-lg font-black text-emerald-400 mt-0.5">${opp.crystals}</div>
             <div class="text-[10px] font-bold text-slate-300">${burn > 0 ? `約撐 ${roundsLeft} 回` : '零消耗'}</div>
           </div>
           <div class="rounded-xl bg-rose-950/75 border border-rose-500/50 p-2 text-center">
-            <div class="text-[10px] sm:text-xs font-bold text-rose-200">🔥 每回燒魔</div>
+            <div class="text-[10px] sm:text-xs font-bold text-rose-200">🔥 每回${(typeof getThemeTerms === 'function' ? getThemeTerms().burnName : '燒魔')}</div>
             <div class="text-sm sm:text-lg font-black text-rose-400 mt-0.5">-${burn}/回</div>
-            <div class="text-[10px] font-bold ${opp.doubleBurnFlag ? 'text-amber-300 font-black' : 'text-slate-300'}">${opp.doubleBurnFlag ? '⚠️下回雙倍!' : '正常供品'}</div>
+            <div class="text-[10px] font-bold ${opp.doubleBurnFlag ? 'text-amber-300 font-black' : 'text-slate-300'}">${opp.doubleBurnFlag ? '⚠️下回雙倍!' : '正常支出'}</div>
           </div>
           <div class="rounded-xl bg-purple-950/75 border border-purple-500/50 p-2 text-center">
-            <div class="text-[10px] sm:text-xs font-bold text-purple-200">👑 在職皇室</div>
+            <div class="text-[10px] sm:text-xs font-bold text-purple-200">${(typeof getThemeTerms === 'function' ? getThemeTerms().vpIcon : '👑')} 在職${(typeof getThemeTerms === 'function' ? getThemeTerms().vpName : '皇室')}</div>
             <div class="text-sm sm:text-lg font-black text-purple-300 mt-0.5">${vpCount} 名</div>
-            <div class="text-[10px] font-bold text-slate-300">${vpCount >= 2 ? '⚡可放紫卡' : `差${2 - vpCount}名開大招`}</div>
+            <div class="text-[10px] font-bold text-slate-300">${vpCount >= 2 ? '⚡可放大招' : `差${2 - vpCount}名開大招`}</div>
           </div>
           <div class="rounded-xl bg-slate-950 border border-sky-500/40 p-2 text-center">
             <div class="text-[10px] sm:text-xs font-bold text-sky-200">🎴 手牌數量</div>
             <div class="text-sm sm:text-lg font-black text-sky-300 mt-0.5">${handCnt} 張</div>
-            <div class="text-[10px] font-bold text-slate-300">總部下 ${totalEmps}人</div>
+            <div class="text-[10px] font-bold text-slate-300">總人員 ${totalEmps}人</div>
           </div>
         </div>
 
@@ -1809,38 +1913,38 @@ function openOpponentCastleModal(oppId) {
         <div class="grid grid-cols-3 gap-1.5 w-full">
           <button data-opp-modal-eng="${opp.id}" class="rounded-xl bg-red-950/75 border border-red-500/50 p-2 text-left flex flex-col justify-between gap-0.5 shadow">
             <div class="flex items-center justify-between w-full">
-              <span class="text-[11px] sm:text-xs font-extrabold text-red-200 whitespace-nowrap">⚒️ 哥布林苦工</span>
+              <span class="text-[11px] sm:text-xs font-extrabold text-red-200 whitespace-nowrap">${(typeof getThemeTerms === 'function' ? getThemeTerms().engIcon : '⚒️')} ${(typeof getThemeTerms === 'function' ? getThemeTerms().engFull : '工程師')}</span>
               <span class="text-[10px] font-black text-sky-300">🔍</span>
             </div>
             <div class="flex items-baseline justify-between w-full mt-0.5">
               <span class="text-xs sm:text-sm font-black text-white whitespace-nowrap">${opp.engineers.length} 人</span>
-              <span class="text-[11px] font-black text-rose-300 whitespace-nowrap">💎-${opp.engineers.length}/回</span>
+              <span class="text-[11px] font-black text-rose-300 whitespace-nowrap">${(typeof getThemeTerms === 'function' ? getThemeTerms().currencyIcon : '💵')}-${opp.engineers.length}/回</span>
             </div>
-            <div class="text-[10px] text-slate-300 font-semibold truncate">可抵銷 ${opp.engineers.length} 點危機</div>
+            <div class="text-[10px] text-slate-300 font-semibold truncate">可抵銷 ${opp.engineers.length} 點${(typeof getThemeTerms === 'function' ? getThemeTerms().crisisName : '爛點子')}</div>
           </button>
 
           <button data-opp-modal-crises="${opp.id}" class="rounded-xl ${opp.crises.length > 0 ? 'bg-amber-950/85 border border-amber-400' : 'bg-slate-950 border border-slate-700'} p-2 text-left flex flex-col justify-between gap-0.5 shadow">
             <div class="flex items-center justify-between w-full">
-              <span class="text-[11px] sm:text-xs font-extrabold ${opp.crises.length > 0 ? 'text-amber-200' : 'text-slate-300'} whitespace-nowrap">⚠️ 討伐危機</span>
+              <span class="text-[11px] sm:text-xs font-extrabold ${opp.crises.length > 0 ? 'text-amber-200' : 'text-slate-300'} whitespace-nowrap">${(typeof getThemeTerms === 'function' ? getThemeTerms().crisisIcon : '💥')} ${(typeof getThemeTerms === 'function' ? getThemeTerms().crisisFull : '爛點子專案')}</span>
               <span class="text-[10px] font-black text-sky-300">🔍</span>
             </div>
             <div class="flex items-baseline justify-between w-full mt-0.5">
               <span class="text-xs sm:text-sm font-black text-white whitespace-nowrap">${opp.crises.length} 張</span>
-              <span class="text-[11px] font-black ${opp.crises.length > 0 ? 'text-amber-300' : 'text-slate-400'} whitespace-nowrap">需苦工 ${crisisReq}</span>
+              <span class="text-[11px] font-black ${opp.crises.length > 0 ? 'text-amber-300' : 'text-slate-400'} whitespace-nowrap">需人力 ${crisisReq}</span>
             </div>
-            <div class="text-[10px] text-slate-300 font-semibold truncate">${opp.crises.length > 0 ? '點擊檢視危機卡' : '場上無討伐危機'}</div>
+            <div class="text-[10px] text-slate-300 font-semibold truncate">${opp.crises.length > 0 ? '點擊檢視明細' : '場上無危機專案'}</div>
           </button>
 
           <button data-opp-modal-outsourced="${opp.id}" class="rounded-xl ${opp.outsourcedCount > 0 ? 'bg-rose-950/90 border border-rose-400' : 'bg-slate-950 border border-slate-700'} p-2 text-left flex flex-col justify-between gap-0.5 shadow">
             <div class="flex items-center justify-between w-full">
-              <span class="text-[11px] sm:text-xs font-extrabold ${opp.outsourcedCount > 0 ? 'text-rose-200' : 'text-slate-300'} whitespace-nowrap">👹 高利貸外包</span>
+              <span class="text-[11px] sm:text-xs font-extrabold ${opp.outsourcedCount > 0 ? 'text-rose-200' : 'text-slate-300'} whitespace-nowrap">${(typeof getThemeTerms === 'function' ? getThemeTerms().outIcon : '💸')} ${(typeof getThemeTerms === 'function' ? getThemeTerms().outFull : '高價外包顧問')}</span>
               <span class="text-[10px] font-black text-sky-300">🔍</span>
             </div>
             <div class="flex items-baseline justify-between w-full mt-0.5">
               <span class="text-xs sm:text-sm font-black text-white whitespace-nowrap">${opp.outsourcedCount} 人</span>
-              <span class="text-[11px] font-black ${opp.outsourcedCount > 0 ? 'text-rose-400' : 'text-slate-400'} whitespace-nowrap">💎-${opp.outsourcedCount * 3}/回</span>
+              <span class="text-[11px] font-black ${opp.outsourcedCount > 0 ? 'text-rose-400' : 'text-slate-400'} whitespace-nowrap">${(typeof getThemeTerms === 'function' ? getThemeTerms().currencyIcon : '💵')}-${opp.outsourcedCount * 3}/回</span>
             </div>
-            <div class="text-[10px] text-slate-300 font-semibold truncate">${opp.outsourcedCount > 0 ? '每名每回燒3魔晶!' : '無外包赤字'}</div>
+            <div class="text-[10px] text-slate-300 font-semibold truncate">${opp.outsourcedCount > 0 ? '每名每回耗3資金!' : '無外包赤字'}</div>
           </button>
         </div>
       </div>
@@ -1894,12 +1998,37 @@ function openOutsourcedInspectorModal(playerId) {
   document.getElementById('inspectorModalSubtitle').textContent = '當場上「討伐危機」所需苦工總數大於在職哥布林苦工時，差額將自動雇傭深淵惡魔高利貸傭兵（每名每回合索取 3 魔晶，不可被遣散，僅能透過招募苦工或鎮壓危機退回）。';
   document.getElementById('inspectorModalFooter').classList.add('hidden');
   const count = Math.max(1, player.outsourcedCount);
-  document.getElementById('inspectorCardsGrid').innerHTML = Array.from({ length: count }).map((_, i) => `
-    <div class="relative rounded-xl bg-slate-950 border-2 border-slate-500 overflow-hidden shadow-xl">
-      ${getCardImgTag("OUTSOURCED", "深淵惡魔高利貸傭兵", "full-gpt-card-img")}
-      <span class="absolute top-1 right-1 px-1.5 py-0.5 rounded bg-rose-600 text-white text-[10px] font-black shadow-lg">${player.outsourcedCount > 0 ? `外包 #${i+1} (💎-3)` : '外包卡預覽'}</span>
-    </div>
-  `).join('');
+  const theme = typeof getActiveTheme === 'function' ? getActiveTheme() : { useFullCardArt: true };
+  const terms = typeof getThemeTerms === 'function' ? getThemeTerms() : { currencyIcon: '💵', outFull: '高價外包顧問', outIcon: '💸' };
+  document.getElementById('inspectorCardsGrid').innerHTML = Array.from({ length: count }).map((_, i) => {
+    const badge = player.outsourcedCount > 0 ? `外包 #${i+1} (${terms.currencyIcon}-3)` : '外包卡預覽';
+    if (theme.useFullCardArt && getCardArtSrc('OUTSOURCED')) {
+      return `
+        <div class="relative rounded-xl bg-slate-950 border-2 border-slate-500 overflow-hidden shadow-xl modal-pure-card">
+          ${getCardImgTag("OUTSOURCED", terms.outFull, "full-gpt-card-img")}
+          <span class="absolute top-1 right-1 px-1.5 py-0.5 rounded bg-rose-600 text-white text-[10px] font-black shadow-lg">${badge}</span>
+        </div>
+      `;
+    }
+    return `
+      <div class="burnrate-css-card aspect-card-2-3 rounded-xl border-2 border-rose-500 modal-pure-card text-left">
+        <div class="bg-rose-700 px-2 py-1 flex items-center justify-between gap-1 border-b border-white/20">
+          <span class="text-[10px] font-black text-white truncate">${terms.outIcon} 外部緊急人力</span>
+          <span class="text-[9px] font-black bg-slate-950/90 text-rose-300 px-1.5 py-0.5 rounded">外包</span>
+        </div>
+        <div class="flex-1 flex flex-col items-center justify-center p-2 relative">
+          <span class="absolute top-1.5 right-1.5 px-1.5 py-0.5 rounded bg-rose-600 text-white text-[9px] font-black shadow">${badge}</span>
+          <div class="burnrate-emblem-circle">${terms.outIcon}</div>
+          <div class="text-xs sm:text-sm font-black text-white mt-1.5 text-center">${terms.outFull}</div>
+          <div class="text-[9px] font-bold text-rose-300 text-center mt-0.5">Outsourced Consultant</div>
+        </div>
+        <div class="bg-slate-950/95 border-t border-slate-800 px-2 py-1.5 flex items-center justify-between text-[10px]">
+          <span class="font-black text-rose-400">${terms.currencyIcon}-3/回</span>
+          <span class="font-bold text-amber-300">自動填補人力缺口</span>
+        </div>
+      </div>
+    `;
+  }).join('');
   document.getElementById('inspectorModal').classList.remove('hidden');
 }
 
@@ -2228,17 +2357,84 @@ function renderLobbyUI() {
 
 window.hasStartedActiveMatch = false;
 
+function switchGameTheme(newThemeId) {
+  if (typeof applyThemeToRegistry !== 'function') return;
+  applyThemeToRegistry(newThemeId);
+  const terms = getThemeTerms();
+
+  // Update player default name if still on a theme default
+  if (gameSession.playerName === '深淵領主' || gameSession.playerName === '新創執行長') {
+    gameSession.playerName = terms.defaultPlayerName;
+    const homeNick = document.getElementById('homeInputNickname');
+    if (homeNick) homeNick.value = gameSession.playerName;
+    const lobbyNick = document.getElementById('inputPlayerNickname');
+    if (lobbyNick) lobbyNick.value = gameSession.playerName;
+  }
+
+  // Update AI names in current gameState if in SOLO or HOST
+  if (gameState && gameState.players && gameSession.mode !== 'CLIENT') {
+    if (gameState.config) gameState.config.themeId = newThemeId;
+    gameState.players.forEach((p, idx) => {
+      if (idx === 0 && !p.isAI) {
+        p.name = `${gameSession.playerName} (你)`;
+      } else if (p.isAI && terms.aiNames[idx - 1]) {
+        p.name = terms.aiNames[idx - 1];
+      }
+    });
+  }
+
+  if (gameSession.mode === 'HOST') {
+    gameSession.lobbyState.themeId = newThemeId;
+    if (gameSession.hostMasterState && gameSession.hostMasterState.config) {
+      gameSession.hostMasterState.config.themeId = newThemeId;
+    }
+    broadcastLobbyState();
+    if (gameSession.lobbyState.matchStarted) {
+      broadcastHostState();
+    }
+  }
+
+  renderHomeScreenUI();
+  renderLobbyUI();
+  renderAll();
+}
+
 function renderHomeScreenUI() {
+  const theme = typeof getActiveTheme === 'function' ? getActiveTheme() : { id: 'CLASSIC_BURN_RATE', useFullCardArt: false };
+  const terms = typeof getThemeTerms === 'function' ? getThemeTerms() : {};
+
+  const titleEl = document.getElementById('homeAppTitle');
+  if (titleEl && terms.appTitle) titleEl.textContent = `${terms.appIcon || '💼'} ${terms.appTitle}`;
+  const subEl = document.getElementById('homeAppSubtitle');
+  if (subEl && terms.subtitle) subEl.textContent = terms.subtitle;
+  const lordLabelEl = document.getElementById('homeLordLabel');
+  if (lordLabelEl && terms.lordTitle) lordLabelEl.textContent = `${terms.vpIcon || '👔'} ${terms.lordTitle}：`;
+
   const fanContainer = document.getElementById('homeHeroCardsFan');
-  if (fanContainer && !fanContainer.hasChildNodes()) {
-    const heroTpls = [
-      { tplId: 'E_R_VP3', cls: 'home-hero-fan-card home-hero-fan-left border-2 border-red-400' },
-      { tplId: 'E_G_VP3', cls: 'home-hero-fan-card home-hero-fan-center border-2 border-amber-400' },
-      { tplId: 'E_B_VP3', cls: 'home-hero-fan-card home-hero-fan-right border-2 border-blue-400' }
+  if (fanContainer && fanContainer.getAttribute('data-theme-sig') !== theme.id) {
+    fanContainer.setAttribute('data-theme-sig', theme.id);
+    const heroSamples = [
+      { tplId: 'E_R_VP3', dept: 'RED', cls: 'home-hero-fan-card home-hero-fan-left border-2 border-red-400' },
+      { tplId: 'E_G_VP3', dept: 'GREEN', cls: 'home-hero-fan-card home-hero-fan-center border-2 border-amber-400' },
+      { tplId: 'E_B_VP3', dept: 'BLUE', cls: 'home-hero-fan-card home-hero-fan-right border-2 border-blue-400' }
     ];
-    fanContainer.innerHTML = heroTpls.map(item =>
-      `<div class="${item.cls}">${getCardImgTag(item.tplId, item.tplId, 'w-full h-full object-cover block')}</div>`
-    ).join('');
+    fanContainer.innerHTML = heroSamples.map(item => {
+      if (theme.useFullCardArt && getCardArtSrc(item.tplId)) {
+        return `<div class="${item.cls} bg-slate-950">${getCardImgTag(item.tplId, item.tplId, 'w-full h-full object-cover block')}</div>`;
+      }
+      const empRecipe = EMPLOYEE_RECIPES.find(r => r.tplId === item.tplId);
+      const meta = DEPT_META[item.dept];
+      return `
+        <div class="${item.cls} burnrate-css-card">
+          <div class="${meta.color} px-1 py-0.5 text-[7px] font-black text-white truncate text-center">${meta.icon}${meta.short}</div>
+          <div class="flex-1 flex flex-col items-center justify-center p-0.5">
+            <div class="text-base leading-none">${empRecipe ? empRecipe.svg : meta.icon}</div>
+            <div class="text-[8px] font-black text-white text-center leading-tight truncate w-full mt-0.5">${empRecipe ? empRecipe.title : ''}</div>
+          </div>
+          <div class="bg-slate-950 text-[7px] font-black text-amber-300 text-center py-0.5 border-t border-slate-800">3級 · ${terms.currencyIcon || '💵'}-2</div>
+        </div>
+      `;
+    }).join('');
   }
 
   const homeNick = document.getElementById('homeInputNickname');
@@ -2314,7 +2510,21 @@ function initAppOnLoad() {
     document.getElementById('homeScreenModal')?.classList.remove('hidden');
   }
 
-  // Home Screen Controls
+  // Home Screen & Theme Switcher Controls
+  document.getElementById('homeSelectTheme')?.addEventListener('change', (e) => {
+    switchGameTheme(e.target.value);
+  });
+  document.getElementById('selectLobbyTheme')?.addEventListener('change', (e) => {
+    switchGameTheme(e.target.value);
+  });
+  document.getElementById('btnMenuSwitchTheme')?.addEventListener('click', () => {
+    const curId = (typeof getActiveTheme === 'function') ? getActiveTheme().id : 'CLASSIC_BURN_RATE';
+    const nextId = curId === 'CLASSIC_BURN_RATE' ? 'DEMON_CASTLE' : 'CLASSIC_BURN_RATE';
+    switchGameTheme(nextId);
+    if (typeof showToast === 'function') {
+      showToast(`🎨 已切換主題為【${getActiveTheme().shortLabel}】！`);
+    }
+  });
   document.getElementById('homeInputNickname')?.addEventListener('input', () => {
     syncHomeSetupToLobbyControls();
   });

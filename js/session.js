@@ -61,6 +61,7 @@ const gameSession = {
     playerCount: 3,
     playDiscardMode: 'STRICT_EITHER',
     fogOfWar: true,
+    themeId: (typeof getActiveTheme === 'function') ? getActiveTheme().id : 'CLASSIC_BURN_RATE',
     matchStarted: false,
     seats: [
       { id: 'p1', name: initialPlayerName + ' (房主)', role: 'HOST', isAI: false, connected: true, clientToken: initialClientToken },
@@ -152,6 +153,11 @@ function syncHostLobbySettingsFromInputs() {
     if (fogChk) {
       gameSession.lobbyState.fogOfWar = fogChk.checked;
     }
+    const lobbyThemeEl = document.getElementById('selectLobbyTheme');
+    if (lobbyThemeEl && lobbyThemeEl.value) {
+      gameSession.lobbyState.themeId = lobbyThemeEl.value;
+      if (typeof applyThemeToRegistry === 'function') applyThemeToRegistry(lobbyThemeEl.value);
+    }
     broadcastLobbyState();
   }
 }
@@ -182,6 +188,7 @@ function createOnlineHostRoom(customCode = null) {
     playerCount: pCount,
     playDiscardMode: ruleRadio ? ruleRadio.value : 'STRICT_EITHER',
     fogOfWar: fogChk ? fogChk.checked : true,
+    themeId: (typeof getActiveTheme === 'function') ? getActiveTheme().id : 'CLASSIC_BURN_RATE',
     matchStarted: false,
     seats: [
       { id: 'p1', name: `${gameSession.playerName} (房主)`, role: 'HOST', isAI: false, connected: true, clientToken: gameSession.clientToken },
@@ -546,6 +553,9 @@ function handleIncomingNetworkPacket(packet, transport, peerConn) {
       gameSession.localSeatId = packet.assignedSeatId;
       viewedPlayerId = packet.assignedSeatId;
       gameSession.lobbyState = packet.lobbyState;
+      if (packet.lobbyState && packet.lobbyState.themeId && typeof applyThemeToRegistry === 'function') {
+        applyThemeToRegistry(packet.lobbyState.themeId);
+      }
       gameSession.peerStatus = transport === 'PEER' ? 'ONLINE' : 'BC_READY';
 
       // Only transition to board if the match has ALREADY started; otherwise stay in the Lobby Waiting Room!
@@ -570,6 +580,10 @@ function handleIncomingNetworkPacket(packet, transport, peerConn) {
 
     if (packet.msgType === 'LOBBY_SYNC') {
       gameSession.lobbyState = packet.lobbyState;
+      if (packet.lobbyState && packet.lobbyState.themeId && typeof applyThemeToRegistry === 'function') {
+        applyThemeToRegistry(packet.lobbyState.themeId);
+        if (typeof renderAll === 'function') renderAll();
+      }
       if (!gameSession.lobbyState.matchStarted) {
         document.getElementById('lobbyModal')?.classList.remove('hidden');
       }
@@ -603,6 +617,9 @@ function applyClientReceivedState(newState) {
     lobbyModal.classList.add('hidden');
     viewedPlayerId = gameSession.localSeatId;
     showToast(`⚔️ 房主已啟動對局！你的座位為 ${gameSession.localSeatId.toUpperCase()}`);
+  }
+  if (newState.config && newState.config.themeId && typeof applyThemeToRegistry === 'function') {
+    applyThemeToRegistry(newState.config.themeId);
   }
   gameState = newState;
 
@@ -1324,11 +1341,12 @@ function startMatchFromLobby(quickStart = false) {
     gameSession.mode = 'SOLO';
     gameSession.localSeatId = 'p1';
     gameSession.hasSimulatedHotSeat = false;
+    const aiPool = (typeof getThemeTerms === 'function' && getThemeTerms().aiNames) ? getThemeTerms().aiNames : DEFAULT_AI_NAMES;
     const soloSeats = [
       { id: 'p1', name: `${gameSession.playerName} (你)`, isAI: false, connected: true },
-      { id: 'p2', name: DEFAULT_AI_NAMES[0], isAI: true, connected: true },
-      { id: 'p3', name: DEFAULT_AI_NAMES[1], isAI: true, connected: true },
-      { id: 'p4', name: DEFAULT_AI_NAMES[2], isAI: true, connected: true }
+      { id: 'p2', name: aiPool[0], isAI: true, connected: true },
+      { id: 'p3', name: aiPool[1], isAI: true, connected: true },
+      { id: 'p4', name: aiPool[2], isAI: true, connected: true }
     ].slice(0, pCount);
     gameState = createInitialGameState(pCount, mode, quickStart, soloSeats, false);
     gameSession.hostMasterState = null;
