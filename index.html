@@ -21,7 +21,7 @@
   <!-- ===================================================================
        1. COMPACT SINGLE-LINE HEADER BAR (Fullscreen / PWA + Unified Settings)
        =================================================================== -->
-  <header class="w-full bg-slate-950/95 border-b border-amber-500/40 px-2.5 py-1.5 flex items-center justify-between gap-1.5 z-30 shrink-0">
+  <header id="portraitHeaderBar" class="w-full bg-slate-950/95 border-b border-amber-500/40 px-2.5 py-1.5 flex items-center justify-between gap-1.5 z-30 shrink-0">
     <!-- Left: Game Title + Round Pill + Turn/Mode Pill -->
     <div class="flex items-center gap-1.5 min-w-0 flex-1 overflow-hidden">
       <span id="headerAppIcon" class="text-sm shrink-0">💼</span>
@@ -33,6 +33,9 @@
 
     <!-- Right: Fullscreen / PWA Quick Button + Unified Settings Button -->
     <div class="flex items-center gap-1.5 shrink-0">
+      <button id="btnHeaderLandscape" class="px-2 py-1 rounded-lg bg-amber-950/90 border border-amber-400/70 text-[11px] font-black text-amber-300 whitespace-nowrap shadow" title="切換橫屏圓桌模式">
+        🖥️ 橫屏
+      </button>
       <button id="btnHeaderFullscreen" class="px-2 py-1 rounded-lg bg-slate-800 border border-sky-500/50 text-[11px] font-black text-sky-300 whitespace-nowrap shadow" title="切換全螢幕隱藏網址列">
         ⛶ 全螢幕
       </button>
@@ -45,7 +48,7 @@
   <!-- ===================================================================
        MAIN 5-ZONE RESPONSIVE ARENA CONTAINER
        =================================================================== -->
-  <main class="flex-1 min-h-0 w-full max-w-[1480px] mx-auto px-2 py-1.5 flex flex-col justify-between gap-1.5 min-w-0 overflow-hidden">
+  <main id="portraitMainArena" class="flex-1 min-h-0 w-full max-w-[1480px] mx-auto px-2 py-1.5 flex flex-col justify-between gap-1.5 min-w-0 overflow-hidden">
 
     <!-- ===============================================================
          UPPER ARENA: ENLARGED ZONE 1 (OPPONENTS) + ZONE 2 (JOB BANK PURE CARDS)
@@ -95,22 +98,7 @@
       <div id="companyDepartmentsGrid" class="stage-track-scroll no-scrollbar min-w-0">
       </div>
 
-      <!-- MODE D FROSTED-GLASS TACTICAL OVERLAY -->
-      <div id="modeDTargetDrawer" class="hidden mode-d-overlay-backdrop">
-        <div id="modeDSheetCard" class="mode-d-sheet-card flex flex-col gap-1.5 min-w-0">
-          <div class="flex items-center justify-between border-b border-slate-700 pb-1 gap-1.5 min-w-0">
-            <div class="flex items-center gap-1.5 min-w-0 flex-1">
-              <span id="modeDPillTag" class="px-1.5 py-0.5 rounded bg-sky-400 text-slate-950 font-black text-[10px] whitespace-nowrap shrink-0">🎯 戰術施放</span>
-              <h3 id="modeDTitle" class="text-xs sm:text-sm font-black text-white truncate">請點選目標</h3>
-            </div>
-            <button id="btnCancelModeD" class="px-2 py-0.5 rounded-lg bg-rose-600 text-[11px] font-black text-white whitespace-nowrap shrink-0 shadow">
-              ✖ 取消
-            </button>
-          </div>
-          <div id="modeDTargetsContainer" class="w-full min-w-0">
-          </div>
-        </div>
-      </div>
+
 
     </section>
 
@@ -166,6 +154,91 @@
     </section>
 
   </main>
+
+  <!-- ===================================================================
+       LANDSCAPE TABLETOP ARENA ROOT (橫屏圓桌模式 V13.9)
+       =================================================================== -->
+  <div id="landscapeArenaRoot" class="hidden flex-1 min-h-0 w-full h-full flex flex-col justify-between px-2.5 py-1.5 gap-1.5 overflow-hidden select-none ls-tabletop-bg">
+
+    <!-- ROW 1 (TOP): [Left: 3-Line Live Log] + [Center: 12 o'clock Opponent] + [Right: Top Controls & 1x4 Talent Pool] -->
+    <div class="ls-row-top w-full min-h-0 flex items-stretch justify-between gap-2">
+      <!-- Top-Left: Live 3-Line Log & Turn Status -->
+      <div id="lsLogPanel" class="w-[26%] min-w-0 flex flex-col justify-between py-0.5 pr-1 cursor-pointer group" title="點擊展開完整歷史戰況日誌">
+        <div class="flex items-center gap-1.5 min-w-0 shrink-0">
+          <span id="lsPhaseBadge" class="px-1.5 py-0.5 rounded-full bg-amber-500/20 border border-amber-400/50 text-[10px] font-black text-amber-300 whitespace-nowrap">R1</span>
+          <span id="lsActiveTurnBadge" class="px-1.5 py-0.5 rounded bg-emerald-950/90 border border-emerald-500/40 text-[10px] font-black text-emerald-300 truncate">👑 我方回合</span>
+          <span class="text-[10px] text-amber-400/80 font-bold whitespace-nowrap ml-auto group-hover:underline">📜日誌 ▸</span>
+        </div>
+        <div id="lsLiveLogLines" class="flex-1 min-h-0 flex flex-col justify-center gap-0.5 overflow-hidden mt-0.5">
+        </div>
+      </div>
+
+      <!-- Top-Center: 12 o'clock Opponent Seat -->
+      <div id="lsSeatTop" class="w-[41%] min-w-0 h-full flex items-stretch justify-center">
+      </div>
+
+      <!-- Top-Right: Pill Controls + 1x4 Talent Pool -->
+      <div id="lsTopRightPanel" class="w-[33%] min-w-0 h-full flex flex-col justify-between items-end gap-1">
+        <div class="flex items-center justify-end gap-1.5 shrink-0 w-full">
+          <span id="lsTalentPoolLabel" class="text-[11px] font-black text-amber-300/90 mr-auto truncate">🏢 人才池</span>
+          <button id="btnLsFullscreen" class="ls-pill-btn">全屏</button>
+          <button id="btnLsRoomMenu" class="ls-pill-btn">房間</button>
+          <button id="btnLsToPortrait" class="ls-pill-btn ls-pill-btn-gold">直向</button>
+        </div>
+        <div id="lsJobBankGrid" class="flex-1 min-h-0 w-full grid grid-cols-4 gap-1.5 items-center justify-items-center">
+        </div>
+      </div>
+    </div>
+
+    <!-- ROW 2 (MIDDLE): [Left: 9 o'clock Opponent] + [Center: Oval Board-Game Table] + [Right: 3 o'clock Opponent] -->
+    <div class="ls-row-mid w-full min-h-0 flex items-center justify-between gap-2">
+      <!-- Middle-Left: 9 o'clock Opponent Seat -->
+      <div id="lsSeatLeft" class="w-[29%] min-w-0 h-full flex items-stretch">
+      </div>
+
+      <!-- Middle-Center: Oval Board-Game Table (Discard / Just Played / Draw Deck, or Initial Draft) -->
+      <div id="lsCenterOvalTable" class="flex-1 min-w-0 h-full flex items-center justify-center px-1">
+      </div>
+
+      <!-- Middle-Right: 3 o'clock Opponent Seat -->
+      <div id="lsSeatRight" class="w-[29%] min-w-0 h-full flex items-stretch justify-end">
+      </div>
+    </div>
+
+    <!-- ROW 3 (BOTTOM): [Bottom-Left: My Company 1x4 Board] + [Bottom-Right: 6 Vertical Hand Cards + Action Controls] -->
+    <div class="ls-row-bot w-full min-h-0 flex items-stretch justify-between gap-2">
+      <!-- Bottom-Left: My Company Panel -->
+      <div id="lsMyCompanyPanel" class="w-[39%] min-w-0 h-full flex flex-col justify-between">
+      </div>
+
+      <!-- Bottom-Right: My 6 Hand Cards + Right-Side Quota/Discard/End Controls -->
+      <div id="lsMyHandDock" class="w-[61%] min-w-0 h-full rounded-2xl bg-stone-950/90 border border-amber-500/35 px-2.5 py-1.5 flex items-stretch justify-between gap-2 shadow-2xl">
+        <div id="lsHandContainer" class="flex-1 min-w-0 h-full flex items-center gap-1.5 overflow-x-auto no-scrollbar py-0.5">
+        </div>
+        <div id="lsActionControlsCol" class="w-[84px] sm:w-[96px] shrink-0 h-full flex flex-col justify-between items-center border-l border-amber-500/20 pl-2 py-0.5">
+        </div>
+      </div>
+    </div>
+
+  </div>
+
+  <!-- UNIFIED MODE D TACTICAL OVERLAY (Works in both Portrait & Landscape Tabletop Mode) -->
+  <div id="modeDTargetDrawer" class="hidden mode-d-overlay-backdrop">
+    <div id="modeDSheetCard" class="mode-d-sheet-card flex flex-col gap-1.5 min-w-0">
+      <div class="flex items-center justify-between border-b border-slate-700 pb-1 gap-1.5 min-w-0">
+        <div class="flex items-center gap-1.5 min-w-0 flex-1">
+          <span id="modeDPillTag" class="px-1.5 py-0.5 rounded bg-sky-400 text-slate-950 font-black text-[10px] whitespace-nowrap shrink-0">🎯 戰術施放</span>
+          <h3 id="modeDTitle" class="text-xs sm:text-sm font-black text-white truncate">請點選目標</h3>
+        </div>
+        <button id="btnCancelModeD" class="px-2.5 py-0.5 rounded-full bg-slate-800 border border-slate-600 text-xs font-black text-white whitespace-nowrap shrink-0 shadow hover:bg-rose-600">
+          ✕
+        </button>
+      </div>
+      <div id="modeDTargetsContainer" class="w-full min-w-0">
+      </div>
+    </div>
+  </div>
+
 
   <!-- ===================================================================
        MODALS (Mobile-Responsive)
@@ -228,16 +301,19 @@
           </div>
         </div>
 
-        <!-- Quick Device Preferences: Speed / Audio / Fullscreen -->
-        <div class="grid grid-cols-3 gap-1.5 pt-0.5">
-          <button id="btnHomeToggleSpeed" class="py-1.5 px-1.5 rounded-lg bg-slate-900 border border-amber-500/40 text-[10px] font-black text-amber-300 truncate">
+        <!-- Quick Device Preferences: Orientation / Speed / Audio / Fullscreen -->
+        <div class="grid grid-cols-2 gap-1.5 pt-0.5">
+          <button id="btnHomeToggleOrientation" class="py-1.5 px-2 rounded-lg bg-amber-950/80 border border-amber-400/70 text-[10px] font-black text-amber-300 truncate">
+            🖥️ 切換橫屏牌桌模式
+          </button>
+          <button id="btnHomeFullscreen" class="py-1.5 px-2 rounded-lg bg-slate-900 border border-sky-500/40 text-[10px] font-black text-sky-300 truncate">
+            ⛶ 全螢幕 / 安裝PWA
+          </button>
+          <button id="btnHomeToggleSpeed" class="py-1.5 px-2 rounded-lg bg-slate-900 border border-amber-500/40 text-[10px] font-black text-amber-300 truncate">
             ⏩ 1x 標準速度
           </button>
-          <button id="btnHomeToggleMute" class="py-1.5 px-1.5 rounded-lg bg-slate-900 border border-emerald-500/40 text-[10px] font-black text-emerald-300 truncate">
+          <button id="btnHomeToggleMute" class="py-1.5 px-2 rounded-lg bg-slate-900 border border-emerald-500/40 text-[10px] font-black text-emerald-300 truncate">
             🔊 音效開啟
-          </button>
-          <button id="btnHomeFullscreen" class="py-1.5 px-1.5 rounded-lg bg-slate-900 border border-sky-500/40 text-[10px] font-black text-sky-300 truncate">
-            ⛶ 全螢幕/PWA
           </button>
         </div>
       </div>
@@ -293,11 +369,17 @@
         <span id="settingsRuleText" class="text-[11px] text-indigo-300 font-bold">標準二選一</span>
       </div>
 
-      <!-- Quick Theme Switcher in Settings Menu -->
-      <button id="btnMenuSwitchTheme" class="w-full py-2 px-3 rounded-xl bg-indigo-950/90 border border-amber-400/70 text-xs font-black text-amber-300 flex items-center justify-between shadow">
-        <span>🎨 目前主題：<b id="menuCurrentThemeText" class="text-white">💼 原版 Burn Rate</b></span>
-        <span class="px-2 py-0.5 rounded bg-amber-500 text-slate-950 text-[10px] font-black">點擊切換 ▸</span>
-      </button>
+      <!-- Quick Theme & Orientation Switchers in Settings Menu -->
+      <div class="space-y-1.5">
+        <button id="btnMenuSwitchTheme" class="w-full py-2 px-3 rounded-xl bg-indigo-950/90 border border-amber-400/70 text-xs font-black text-amber-300 flex items-center justify-between shadow">
+          <span>🎨 目前主題：<b id="menuCurrentThemeText" class="text-white">💼 原版 Burn Rate</b></span>
+          <span class="px-2 py-0.5 rounded bg-amber-500 text-slate-950 text-[10px] font-black">點擊切換 ▸</span>
+        </button>
+        <button id="btnMenuToggleOrientation" class="w-full py-2 px-3 rounded-xl bg-stone-950 border border-sky-400/60 text-xs font-black text-sky-300 flex items-center justify-between shadow">
+          <span>📐 畫面方向：<b id="menuOrientationText" class="text-white">直向掌機模式</b></span>
+          <span class="px-2 py-0.5 rounded bg-sky-400 text-slate-950 text-[10px] font-black">直向 ⇄ 橫屏 ▸</span>
+        </button>
+      </div>
 
       <!-- Primary Actions: Multiplayer Lobby & Return to Home Screen -->
       <div class="grid grid-cols-2 gap-2">

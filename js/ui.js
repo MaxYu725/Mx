@@ -73,8 +73,91 @@ function triggerPwaInstallOrFullscreen() {
 }
 
 
+
+// === V13.9 Landscape Tabletop Mode & Orientation Controller ===
+let layoutOrientationPref = (function() {
+  try {
+    return window.localStorage.getItem("dbr_v13_orientation") || "AUTO";
+  } catch (e) {
+    return "AUTO";
+  }
+})();
+
+function isLandscapeModeActive() {
+  if (layoutOrientationPref === "LANDSCAPE") return true;
+  if (layoutOrientationPref === "PORTRAIT") return false;
+  const vw = window.innerWidth || 390;
+  const vh = window.innerHeight || 844;
+  return vw > vh && vw >= 540;
+}
+
+function setLayoutOrientationPref(newPref) {
+  layoutOrientationPref = newPref;
+  try {
+    window.localStorage.setItem("dbr_v13_orientation", newPref);
+  } catch (e) {}
+  syncLayoutOrientationDOM();
+  if (typeof renderAll === "function" && typeof gameState !== "undefined" && gameState) {
+    renderAll();
+  }
+}
+
+function toggleLandscapePortraitMode() {
+  const curActive = isLandscapeModeActive();
+  const nextPref = curActive ? "PORTRAIT" : "LANDSCAPE";
+  if (typeof playSfx === "function") playSfx("click");
+  setLayoutOrientationPref(nextPref);
+  if (typeof showToast === "function") {
+    showToast(nextPref === "LANDSCAPE" ? "🖥️ 已切換為「橫屏圓桌牌桌模式」" : "📱 已切換為「直向單手掌機模式」");
+  }
+}
+
+function syncLayoutOrientationDOM() {
+  const lsActive = isLandscapeModeActive();
+  const vw = window.innerWidth || 390;
+  const vh = window.innerHeight || 844;
+  const pHeader = document.getElementById("portraitHeaderBar");
+  const pMain = document.getElementById("portraitMainArena");
+  const lsRoot = document.getElementById("landscapeArenaRoot");
+
+  document.body.classList.toggle("is-landscape-active", lsActive);
+  // If user manually forced LANDSCAPE while holding phone vertically (vh > vw), apply 90deg CSS viewport rotation
+  document.body.classList.toggle("force-landscape-rotate", lsActive && vh > vw);
+
+  if (pHeader) pHeader.classList.toggle("hidden", lsActive);
+  if (pMain) pMain.classList.toggle("hidden", lsActive);
+  if (lsRoot) lsRoot.classList.toggle("hidden", !lsActive);
+
+  const btnHomeOrient = document.getElementById("btnHomeToggleOrientation");
+  if (btnHomeOrient) {
+    btnHomeOrient.textContent = lsActive ? "📱 切換直向掌機模式" : "🖥️ 切換橫屏牌桌模式";
+  }
+  const menuOrientText = document.getElementById("menuOrientationText");
+  if (menuOrientText) {
+    menuOrientText.textContent = lsActive ? "🖥️ 橫屏圓桌牌桌" : "📱 直向單手掌機";
+  }
+}
+
+window.addEventListener("resize", () => {
+  syncLayoutOrientationDOM();
+  if (typeof gameState !== "undefined" && gameState && typeof renderAll === "function") {
+    renderAll();
+  }
+});
+window.addEventListener("orientationchange", () => {
+  setTimeout(() => {
+    syncLayoutOrientationDOM();
+    if (typeof gameState !== "undefined" && gameState && typeof renderAll === "function") {
+      renderAll();
+    }
+  }, 120);
+});
+
 function getPlayerAnchorSelector(playerId) {
-  return playerId === getLocalPlayerId() ? '#myHeroStatusBar' : `[data-seat-tab="${playerId}"]`;
+  if (isLandscapeModeActive()) {
+    return playerId === getLocalPlayerId() ? "#lsMyCompanyPanel" : `[data-ls-seat="${playerId}"]`;
+  }
+  return playerId === getLocalPlayerId() ? "#myHeroStatusBar" : `[data-seat-tab="${playerId}"]`;
 }
 
 function clearDuelBannersVFX() {
@@ -1064,6 +1147,12 @@ function renderAll() {
     }
   }
 
+  // 5B. Sync Orientation & Render Landscape Tabletop Arena when active
+  syncLayoutOrientationDOM();
+  if (isLandscapeModeActive()) {
+    renderLandscapeArena();
+  }
+
   // 6. Render Mode D Tactical Targeting Drawer
   renderModeDDrawer();
 
@@ -1146,6 +1235,522 @@ function renderAll() {
   }
 
   attachDynamicBoardListeners();
+}
+
+
+// ============================================================================
+// V13.9 LANDSCAPE TABLETOP MODE RENDERER (橫屏圓桌模式 — 四家圍桌 + 橢圓中央牌桌)
+// ============================================================================
+const LS_DEPT_ORDER = ['BLUE', 'RED', 'YELLOW', 'GREEN'];
+
+const LS_EMPTY_DEPT_STYLE = {
+  BLUE:   { bg: 'bg-sky-950/60',     border: 'border-sky-500/45',     text: 'text-sky-200',     headerBg: 'bg-sky-700' },
+  RED:    { bg: 'bg-rose-950/60',    border: 'border-rose-500/45',    text: 'text-rose-200',    headerBg: 'bg-rose-700' },
+  YELLOW: { bg: 'bg-amber-950/60',   border: 'border-amber-500/45',   text: 'text-amber-200',   headerBg: 'bg-amber-700' },
+  GREEN:  { bg: 'bg-emerald-950/60', border: 'border-emerald-500/45', text: 'text-emerald-200', headerBg: 'bg-emerald-700' }
+};
+
+function renderLsDeptSlotHTML(player, d, opts = {}) {
+  const meta = DEPT_META[d];
+  const st = LS_EMPTY_DEPT_STYLE[d] || LS_EMPTY_DEPT_STYLE.RED;
+  const terms = typeof getThemeTerms === 'function' ? getThemeTerms() : {};
+  const list = player.departments[d] || [];
+  const headUid = list[0];
+  const subCount = Math.max(0, list.length - 1);
+  const effSkill = getEffectiveSkill(player, d);
+  const deptSalary = list.reduce((acc, u) => acc + (CARDS_BY_ID[u] ? CARDS_BY_ID[u].salary : 0), 0);
+  const isHighlighted = opts.highlightDept === d;
+  const glowCls = isHighlighted ? 'ls-dept-target-glow' : `border ${st.border}`;
+  const clickAttrs = opts.noInspect ? '' : (headUid ? `data-inspect-dept="${d}" data-inspect-player="${player.id}"` : `data-empty-dept="${d}"`);
+
+  if (!headUid) {
+    return `
+      <div ${clickAttrs} class="ls-dept-card ${st.bg} ${glowCls} flex flex-col justify-between items-center p-1 select-none">
+        <div class="w-full text-center text-[8px] font-black ${st.text} opacity-80 truncate">${meta.short}</div>
+        <div class="text-[11px] font-black ${st.text} opacity-75 my-auto">缺</div>
+        <div class="w-full text-center text-[8px] font-bold text-slate-400/80">0級</div>
+      </div>
+    `;
+  }
+
+  const hCard = CARDS_BY_ID[headUid];
+  const roleLabel = hCard.isVP ? (terms.vpName || '副總') : (terms.mgrName || '經理');
+  const artKey = hCard.artKey || hCard.tplId;
+
+  return `
+    <div ${clickAttrs} class="ls-dept-card ${glowCls} bg-slate-950 select-none">
+      ${getCardImgTag(artKey, hCard.title, 'w-full h-full object-cover block')}
+      <div class="absolute top-0 inset-x-0 ${st.headerBg}/90 py-0.5 px-1 flex items-center justify-center z-10 shadow">
+        <span class="text-[8px] font-black text-white leading-none truncate">${roleLabel}</span>
+      </div>
+      ${subCount > 0 ? `<span class="absolute bottom-0.5 left-1/2 -translate-x-1/2 px-1 py-0.2 rounded bg-slate-950/90 border border-amber-400/80 text-[8px] font-black text-amber-300 leading-none z-20 whitespace-nowrap">+${subCount}</span>` : ''}
+      <span class="ls-orb-skill" title="部門有效技能 ${effSkill} 級">${effSkill}</span>
+      <span class="ls-orb-salary" title="部門總薪資負擔 -${deptSalary}/回">${deptSalary}</span>
+    </div>
+  `;
+}
+
+function renderLsBankCardHTML(d, topUid, deckLen) {
+  const meta = DEPT_META[d];
+  const st = LS_EMPTY_DEPT_STYLE[d] || LS_EMPTY_DEPT_STYLE.RED;
+  const terms = typeof getThemeTerms === 'function' ? getThemeTerms() : {};
+  if (!topUid) {
+    return `
+      <div class="ls-dept-card ${st.bg} border border-dashed ${st.border} flex flex-col items-center justify-center p-1 opacity-60">
+        <span class="text-[9px] font-black ${st.text}">${meta.short}</span>
+        <span class="text-[8px] text-slate-400 mt-0.5">抽乾</span>
+      </div>
+    `;
+  }
+  const c = CARDS_BY_ID[topUid];
+  const roleLabel = c.role === 'ENGINEER' ? (terms.engName || '工程師') : c.isVP ? (terms.vpName || '副總') : (terms.mgrName || '經理');
+  const skillVal = c.role === 'ENGINEER' ? '工' : c.skill;
+  return `
+    <button data-open-bank-dept="${d}" class="ls-dept-card border ${st.border} bg-slate-950">
+      ${getCardImgTag(c.artKey || c.tplId, c.title, 'w-full h-full object-cover block')}
+      <div class="absolute top-0 inset-x-0 ${st.headerBg}/90 py-0.5 px-1 flex items-center justify-between z-10">
+        <span class="text-[8px] font-black text-white leading-none truncate">${roleLabel}</span>
+        <span class="text-[7px] font-bold text-amber-200 leading-none">${deckLen}</span>
+      </div>
+      <span class="ls-orb-skill">${skillVal}</span>
+      <span class="ls-orb-salary">${c.salary}</span>
+    </button>
+  `;
+}
+
+function renderLsOpponentSeatHTML(opp) {
+  if (!opp) return '';
+  const state = gameState;
+  const activePlayer = state.players[state.turn.activePlayerIndex];
+  const isTurn = activePlayer && activePlayer.id === opp.id && state.phase !== 'GAME_OVER';
+  const burn = getPlayerBurnRate(opp);
+  const crisisReq = getCrisisTotalEngineerReq(opp);
+  const shortName = getShortPlayerName(opp.name);
+  const roleTag = opp.isAI ? '電腦' : '真人';
+  const terms = typeof getThemeTerms === 'function' ? getThemeTerms() : {};
+
+  let modeDSeatAttr = '';
+  let targetRingCls = '';
+  if (uiSelection.mode === 'MODE_D_SELECT' && uiSelection.sourceCardUid) {
+    const selCard = CARDS_BY_ID[uiSelection.sourceCardUid];
+    const localPlayer = getLocalPlayer(state);
+    const status = evaluateCardPlayability(state, localPlayer, selCard.uid);
+    const isValidOpp = (status.validOpponents && status.validOpponents.includes(opp.id)) ||
+      (status.targetableByOpponent && status.targetableByOpponent[opp.id] && status.targetableByOpponent[opp.id].length > 0) ||
+      (status.targetVPs && status.targetVPs.some(t => t.opponentId === opp.id));
+    if (isValidOpp) {
+      modeDSeatAttr = 'data-mode-d-seat="VALID_TARGET"';
+      targetRingCls = 'ring-2 ring-rose-400 border-rose-400';
+    }
+  }
+
+  return `
+    <div data-ls-seat="${opp.id}" data-seat-tab="${opp.id}" ${modeDSeatAttr} class="ls-seat-panel ${isTurn ? 'ls-seat-active' : ''} ${targetRingCls} ${opp.isEliminated ? 'opacity-45 grayscale' : ''} w-full h-full flex flex-col justify-between gap-1 cursor-pointer min-w-0 overflow-hidden">
+      <div class="flex items-center justify-between gap-1 min-w-0 shrink-0 px-0.5">
+        <div class="flex items-center gap-1 min-w-0">
+          <span class="text-[11px] font-black text-stone-200 truncate">${shortName} · ${roleTag}</span>
+          <span class="text-sm sm:text-base font-black text-amber-300 leading-none whitespace-nowrap">${opp.crystals}</span>
+          <span class="text-[10px] font-bold text-stone-400 whitespace-nowrap">手${opp.hand.length}</span>
+        </div>
+        <div class="flex items-center gap-1 shrink-0 text-[9px] font-black">
+          <span class="px-1 py-0.2 rounded bg-rose-950/90 border border-rose-500/40 text-rose-300 whitespace-nowrap">🔥-${burn}</span>
+          <span class="px-1 py-0.2 rounded bg-red-950/80 border border-red-500/35 text-red-200 whitespace-nowrap">${terms.engIcon || '⚒'}${opp.engineers.length}</span>
+          ${opp.crises.length > 0 ? `<span class="px-1 py-0.2 rounded bg-amber-950/90 border border-amber-400 text-amber-300 whitespace-nowrap">${terms.crisisIcon || '💥'}${opp.crises.length}(需${crisisReq})</span>` : ''}
+          ${opp.outsourcedCount > 0 ? `<span class="px-1 py-0.2 rounded bg-rose-700 text-white whitespace-nowrap">包${opp.outsourcedCount}</span>` : ''}
+        </div>
+      </div>
+
+      <div class="flex-1 min-h-0 w-full grid grid-cols-4 gap-1 items-center justify-items-center py-0.5">
+        ${LS_DEPT_ORDER.map(d => renderLsDeptSlotHTML(opp, d, { noInspect: true })).join('')}
+      </div>
+    </div>
+  `;
+}
+
+function getActionCategoryVisuals(card) {
+  const terms = typeof getThemeTerms === 'function' ? getThemeTerms() : {};
+  if (card.effect === 'BAD_IDEA') {
+    return { tag: '攻擊', headerBg: 'bg-amber-600', artBg: 'from-amber-500/90 to-amber-700/95', badge: `×${card.val}`, border: 'border-amber-400', checkDept: 'YELLOW' };
+  }
+  if (card.effect === 'RELEASE_CRISIS') {
+    return { tag: '防守', headerBg: 'bg-rose-700', artBg: 'from-rose-600/90 to-stone-800/95', badge: `清×${card.val}`, border: 'border-rose-400', checkDept: 'RED' };
+  }
+  if (card.effect === 'GAIN_FUNDS') {
+    return { tag: '財務', headerBg: 'bg-emerald-700', artBg: 'from-emerald-600/90 to-teal-900/95', badge: `+${card.val}`, border: 'border-emerald-400', checkDept: 'GREEN' };
+  }
+  if (card.effect === 'HIRE_BANK') {
+    return { tag: '聘僱', headerBg: 'bg-sky-700', artBg: 'from-sky-600/90 to-slate-900/95', badge: '請人', border: 'border-sky-400', checkDept: null };
+  }
+  if (card.effect === 'FIRE_OWN') {
+    return { tag: '解僱', headerBg: 'bg-slate-700', artBg: 'from-slate-600/90 to-slate-900/95', badge: '裁員', border: 'border-slate-400', checkDept: null };
+  }
+  if (card.effect === 'FORCE_HIRE') {
+    return { tag: '陷害', headerBg: 'bg-orange-700', artBg: 'from-orange-600/90 to-stone-900/95', badge: '塞人', border: 'border-orange-400', checkDept: 'BLUE' };
+  }
+  if (card.effect === 'POACH_ENEMY') {
+    return { tag: '挖角', headerBg: 'bg-indigo-700', artBg: 'from-indigo-600/90 to-slate-900/95', badge: '奪才', border: 'border-indigo-400', checkDept: 'BLUE' };
+  }
+  return { tag: `${terms.vpName || '副總'}大招`, headerBg: 'bg-purple-700', artBg: 'from-purple-600/90 to-slate-950/95', badge: '大招', border: 'border-purple-400', checkDept: null };
+}
+
+function renderLsTableMiniActionCardHTML(card, countBadge = null, topSubLabel = '') {
+  if (!card) return '';
+  const vis = getActionCategoryVisuals(card);
+  return `
+    <div class="ls-table-pile-card bg-[#f5efe6] border-2 ${vis.border} overflow-hidden flex flex-col justify-between select-none">
+      <div class="${vis.headerBg} px-1 py-0.5 text-[7px] font-black text-white flex items-center justify-between leading-none">
+        <span>${vis.tag}</span>
+        ${topSubLabel ? `<span class="truncate max-w-[38px] text-amber-200">${topSubLabel}</span>` : `<span>${vis.badge}</span>`}
+      </div>
+      <div class="flex-1 bg-gradient-to-b ${vis.artBg} flex flex-col items-center justify-center p-0.5 text-center relative">
+        <span class="text-base sm:text-lg leading-none drop-shadow">${card.svg}</span>
+        <span class="text-[8px] font-black text-white mt-0.5 drop-shadow">${vis.badge}</span>
+      </div>
+      <div class="bg-[#f5efe6] px-1 py-0.5 text-center">
+        <div class="text-[8px] font-black text-slate-900 truncate leading-tight">${card.title}</div>
+      </div>
+      ${countBadge !== null ? `<span class="absolute -bottom-1 -right-1 px-1.5 py-0.2 rounded-full bg-stone-950 border border-amber-400/80 text-[9px] font-black text-amber-300 z-20 shadow">${countBadge}</span>` : ''}
+    </div>
+  `;
+}
+
+function renderLsHandCardHTML(card, status, isSelected, isDiscardSel, isHumanStep1) {
+  const vis = getActionCategoryVisuals(card);
+  const reqOrbs = (card.reqSkills && card.reqSkills.length > 0)
+    ? `<div class="flex items-center justify-end gap-0.5">${card.reqSkills.map(s => `<span class="w-3.5 h-3.5 rounded-full bg-amber-600 text-white text-[8px] font-black flex items-center justify-center leading-none">${s}</span>`).join('')}</div>`
+    : `<span class="text-[7px] font-bold text-slate-500">${card.dept === 'PURPLE' ? '2副總' : '免檢定'}</span>`;
+
+  const dimCls = (isHumanStep1 && uiSelection.mode !== 'DISCARD_SELECT' && !status.playable) ? 'opacity-45 grayscale-[35%]' : '';
+  const selCls = isSelected ? 'ls-hand-selected' : isDiscardSel ? 'ls-hand-discard-sel' : '';
+
+  return `
+    <div data-act-uid="${card.uid}" class="ls-hand-card ${selCls} ${dimCls} select-none">
+      <div class="${vis.headerBg} px-1.5 py-0.5 text-[8px] font-black text-white flex items-center justify-between leading-none shrink-0">
+        <span>${vis.tag}</span>
+        <span>${vis.badge}</span>
+      </div>
+      <div class="flex-1 min-h-0 bg-gradient-to-b ${vis.artBg} flex flex-col items-center justify-center p-1 relative overflow-hidden">
+        <div class="text-xl sm:text-2xl leading-none drop-shadow-md">${card.svg}</div>
+        <div class="mt-1 px-1.5 py-0.2 rounded bg-black/45 text-[9px] font-black text-amber-200 whitespace-nowrap">${vis.badge}</div>
+        ${isDiscardSel ? `<div class="absolute inset-0 bg-orange-600/80 flex items-center justify-center text-xs font-black text-white">🗑️待棄置</div>` : ''}
+      </div>
+      <div class="bg-[#f5efe6] px-1.5 py-1 flex flex-col gap-0.5 shrink-0 border-t border-stone-300">
+        <div class="text-[9px] sm:text-[10px] font-black text-slate-900 truncate leading-tight">${card.title}</div>
+        <div class="flex items-center justify-between min-h-[14px]">
+          <span class="text-[7px] font-extrabold ${status.playable ? 'text-emerald-700' : 'text-rose-700'} truncate">${status.playable ? '●可出' : status.shortReason}</span>
+          ${reqOrbs}
+        </div>
+      </div>
+    </div>
+  `;
+}
+
+function renderLandscapeArena() {
+  const state = gameState;
+  if (!state) return;
+  const activeTheme = typeof getActiveTheme === 'function' ? getActiveTheme() : { id: 'CLASSIC_BURN_RATE' };
+  const terms = typeof getThemeTerms === 'function' ? getThemeTerms() : {};
+  const localPlayer = getLocalPlayer(state);
+  const myId = localPlayer.id;
+  const isMyTurnNow = isLocalPlayerTurn(state);
+  const activePlayer = state.players[state.turn.activePlayerIndex];
+
+  // 1. Top-Left: Phase Badge & 3-Line Live Log
+  const lsPhaseEl = document.getElementById('lsPhaseBadge');
+  if (lsPhaseEl) {
+    lsPhaseEl.textContent = state.phase === 'INITIAL_DRAFT' ? '首輪選秀' : `R${state.turn.roundNumber}`;
+  }
+  const lsTurnEl = document.getElementById('lsActiveTurnBadge');
+  if (lsTurnEl) {
+    lsTurnEl.textContent = isMyTurnNow ? '👑 我方回合' : `⏳ ${getShortPlayerName(activePlayer.name)}`;
+    lsTurnEl.className = isMyTurnNow
+      ? 'px-1.5 py-0.5 rounded bg-amber-400 text-slate-950 text-[10px] font-black truncate'
+      : 'px-1.5 py-0.5 rounded bg-stone-800 border border-stone-600 text-[10px] font-bold text-amber-300 truncate';
+  }
+  const lsLogLinesEl = document.getElementById('lsLiveLogLines');
+  if (lsLogLinesEl) {
+    const top3 = state.logs.slice(0, 3);
+    lsLogLinesEl.innerHTML = top3.map((line, idx) => {
+      const cleanLine = line.replace(/^\[R\d+\]\s*/, '');
+      if (idx === 0) {
+        return `<div class="text-xs sm:text-sm font-black text-amber-300 truncate leading-tight">${cleanLine}</div>`;
+      }
+      return `<div class="text-[10px] sm:text-[11px] font-semibold text-stone-400 truncate leading-tight">${cleanLine}</div>`;
+    }).join('');
+  }
+
+  // 2. Top-Right: Talent Pool 1x4
+  const lsBankGrid = document.getElementById('lsJobBankGrid');
+  if (lsBankGrid) {
+    const bankSig = `${activeTheme.id}:${LS_DEPT_ORDER.map(d => `${d}_${state.jobBank[d][0] || 'NONE'}_${state.jobBank[d].length}`).join('|')}`;
+    if (lsBankGrid.getAttribute('data-bank-sig') !== bankSig) {
+      lsBankGrid.setAttribute('data-bank-sig', bankSig);
+      lsBankGrid.innerHTML = LS_DEPT_ORDER.map(d => renderLsBankCardHTML(d, state.jobBank[d][0], state.jobBank[d].length)).join('');
+    }
+  }
+
+  // 3. Opponents Around the Table (Left 9:00, Top 12:00, Right 3:00)
+  const opponents = getClockwiseOpponents(state);
+  let leftOpp = null, topOpp = null, rightOpp = null;
+  if (opponents.length === 1) {
+    topOpp = opponents[0];
+  } else if (opponents.length === 2) {
+    leftOpp = opponents[0];
+    topOpp = opponents[1];
+  } else if (opponents.length >= 3) {
+    leftOpp = opponents[0];
+    topOpp = opponents[1];
+    rightOpp = opponents[2];
+  }
+
+  const seatTopEl = document.getElementById('lsSeatTop');
+  const seatLeftEl = document.getElementById('lsSeatLeft');
+  const seatRightEl = document.getElementById('lsSeatRight');
+  if (seatTopEl) seatTopEl.innerHTML = topOpp ? renderLsOpponentSeatHTML(topOpp) : '';
+  if (seatLeftEl) {
+    seatLeftEl.innerHTML = leftOpp ? renderLsOpponentSeatHTML(leftOpp) : '';
+    seatLeftEl.classList.toggle('invisible', !leftOpp);
+  }
+  if (seatRightEl) {
+    seatRightEl.innerHTML = rightOpp ? renderLsOpponentSeatHTML(rightOpp) : '';
+    seatRightEl.classList.toggle('invisible', !rightOpp);
+  }
+
+  // 4. Center Oval Table (Initial Draft OR Discard / Just Played / Draw Deck)
+  const centerEl = document.getElementById('lsCenterOvalTable');
+  if (centerEl) {
+    if (state.phase === 'INITIAL_DRAFT') {
+      const draftHero = state.players[state.draft.Order ? state.draft.Order[state.draft.pickIndex] : 0] || activePlayer;
+      centerEl.innerHTML = `
+        <div class="ls-oval-felt flex flex-col items-center justify-center px-6 py-1.5 gap-1">
+          <div class="text-[10px] sm:text-xs font-black text-amber-300 truncate">
+            🎲 首輪選秀（${state.draft.pickIndex + 1}/${state.draft.totalPicks}）：${isMyTurnNow ? '請點選下方部門頂牌招募' : `等待 ${getShortPlayerName(draftHero.name)} 挑選...`}
+          </div>
+          <div class="flex-1 min-h-0 flex items-center justify-center gap-2 h-full py-0.5">
+            ${LS_DEPT_ORDER.map(d => {
+              const topUid = state.jobBank[d][0];
+              if (!topUid) return '';
+              const c = CARDS_BY_ID[topUid];
+              const st = LS_EMPTY_DEPT_STYLE[d];
+              return `
+                <button data-draft-dept="${d}" class="ls-dept-card border-2 ${st.border} bg-slate-950 ${isMyTurnNow ? 'ring-1 ring-amber-400' : 'opacity-70'}">
+                  ${getCardImgTag(c.artKey || c.tplId, c.title, 'w-full h-full object-cover block')}
+                  <span class="ls-orb-skill">${c.role === 'ENGINEER' ? '工' : c.skill}</span>
+                  <span class="ls-orb-salary">${c.salary}</span>
+                </button>
+              `;
+            }).join('')}
+          </div>
+        </div>
+      `;
+    } else {
+      const topDiscardUid = state.discardPile[0];
+      const topDiscardCard = topDiscardUid ? CARDS_BY_ID[topDiscardUid] : null;
+      const lastPlayedObj = state.lastPlayedCard;
+      const lastPlayedCard = (lastPlayedObj && lastPlayedObj.uid) ? CARDS_BY_ID[lastPlayedObj.uid] : null;
+      const lastActorShort = lastPlayedObj ? getShortPlayerName(lastPlayedObj.actorName) : '';
+
+      centerEl.innerHTML = `
+        <div class="ls-oval-felt flex items-center justify-center gap-5 sm:gap-7 px-6 py-1.5">
+          <!-- Discard Pile -->
+          <div class="h-full flex flex-col items-center justify-center gap-0.5">
+            <span class="text-[10px] font-bold text-stone-400 leading-none">棄牌</span>
+            ${topDiscardCard
+              ? renderLsTableMiniActionCardHTML(topDiscardCard, state.discardPile.length)
+              : `<div class="ls-table-pile-card bg-stone-900/70 border border-stone-700/80 flex items-center justify-center text-[10px] font-bold text-stone-500 relative">空<span class="absolute -bottom-1 -right-1 px-1.5 py-0.2 rounded-full bg-stone-950 border border-stone-700 text-[9px] font-black text-amber-300">0</span></div>`
+            }
+          </div>
+
+          <!-- Just Played Slot -->
+          <div class="h-full flex flex-col items-center justify-center gap-0.5">
+            <span class="text-[10px] font-bold text-amber-300/90 leading-none">剛出</span>
+            ${lastPlayedCard
+              ? renderLsTableMiniActionCardHTML(lastPlayedCard, null, lastActorShort)
+              : `<div class="ls-table-pile-card bg-stone-900/50 border border-dashed border-amber-500/30 flex items-center justify-center text-[9px] font-bold text-stone-500">待出牌</div>`
+            }
+          </div>
+
+          <!-- Draw Deck -->
+          <div class="h-full flex flex-col items-center justify-center gap-0.5">
+            <span class="text-[10px] font-bold text-stone-400 leading-none">抽牌</span>
+            <div class="ls-table-pile-card bg-gradient-to-br from-stone-800 via-stone-900 to-stone-950 border-2 border-stone-600/80 flex flex-col items-center justify-center relative shadow-xl">
+              <span class="text-base opacity-45">${terms.appIcon || '💼'}</span>
+              <span class="absolute -bottom-1 -right-1 px-1.5 py-0.2 rounded-full bg-stone-950 border border-amber-400/80 text-[9px] font-black text-amber-300 z-20 shadow">${state.actionDeck.length}</span>
+            </div>
+          </div>
+        </div>
+      `;
+    }
+  }
+
+  // 5. Bottom-Left: My Company Panel (1x4 Departments + Status Pills)
+  const myPanelEl = document.getElementById('lsMyCompanyPanel');
+  const myBurn = getPlayerBurnRate(localPlayer);
+  const myCrisisReq = getCrisisTotalEngineerReq(localPlayer);
+  const myCrisisCnt = localPlayer.crises.length;
+  if (myPanelEl) {
+    const mySig = `${activeTheme.id}:${myId}:${localPlayer.name}:${isMyTurnNow}:${localPlayer.crystals}:${myBurn}:${localPlayer.hand.length}:${localPlayer.engineers.length}:${myCrisisCnt}:${myCrisisReq}:${localPlayer.outsourcedCount}:${LS_DEPT_ORDER.map(d => (localPlayer.departments[d] || []).join(',')).join('|')}`;
+    if (myPanelEl.getAttribute('data-render-sig') !== mySig) {
+      myPanelEl.setAttribute('data-render-sig', mySig);
+      myPanelEl.innerHTML = `
+        <div class="ls-seat-panel ${isMyTurnNow ? 'ls-seat-active' : ''} w-full h-full flex flex-col justify-between gap-1 overflow-hidden">
+          <div class="flex items-center justify-between gap-1 px-0.5 shrink-0">
+            <div class="flex items-center gap-1.5 min-w-0">
+              <span class="text-xs sm:text-sm font-black text-stone-100 truncate">你 · ${getShortPlayerName(localPlayer.name)}</span>
+              <span class="text-base sm:text-lg font-black text-amber-300 leading-none whitespace-nowrap">${localPlayer.crystals}</span>
+              <span class="text-[10px] font-bold text-stone-400 whitespace-nowrap">手${localPlayer.hand.length}</span>
+            </div>
+            <div class="flex items-center gap-1 shrink-0">
+              <span class="px-1.5 py-0.5 rounded bg-purple-950/90 border border-purple-400/60 text-[9px] font-black text-purple-200 whitespace-nowrap">${terms.vpIcon || '👑'}${terms.vpName || '副總'}:${getTotalVPCount(localPlayer)}</span>
+              <span class="px-1.5 py-0.5 rounded bg-rose-950/90 border border-rose-500/60 text-[10px] font-black text-rose-300 whitespace-nowrap">🔥-${myBurn}/回</span>
+            </div>
+          </div>
+
+          <div class="flex-1 min-h-0 w-full grid grid-cols-4 gap-1.5 items-center justify-items-center py-0.5">
+            ${LS_DEPT_ORDER.map(d => renderLsDeptSlotHTML(localPlayer, d)).join('')}
+          </div>
+
+          <div class="grid grid-cols-3 gap-1 w-full shrink-0">
+            <div class="rounded bg-red-950/70 border border-red-500/40 px-1.5 py-0.5 flex items-center justify-between text-[9px] font-bold text-red-200">
+              <span class="truncate">${terms.engIcon || '⚒'}${terms.engName || '工程師'}:${localPlayer.engineers.length}</span>
+              <span class="text-rose-300 font-black">-${localPlayer.engineers.length}</span>
+            </div>
+            <button data-inspect-crises="${myId}" class="rounded ${myCrisisCnt > 0 ? 'bg-amber-950/90 border border-amber-400 text-amber-200' : 'bg-stone-900 border border-stone-700 text-stone-400'} px-1.5 py-0.5 flex items-center justify-between text-[9px] font-bold">
+              <span class="truncate">${terms.crisisIcon || '💥'}${terms.crisisName || '爛點子'}:${myCrisisCnt}</span>
+              <span class="font-black">需${myCrisisReq} 🔍</span>
+            </button>
+            <div class="rounded ${localPlayer.outsourcedCount > 0 ? 'bg-rose-900/90 border border-rose-400 text-white' : 'bg-stone-900 border border-stone-700 text-stone-400'} px-1.5 py-0.5 flex items-center justify-between text-[9px] font-bold">
+              <span class="truncate">${terms.outIcon || '💸'}${terms.outName || '外包'}:${localPlayer.outsourcedCount}</span>
+              <span class="font-black">-${localPlayer.outsourcedCount * 3}</span>
+            </div>
+          </div>
+        </div>
+      `;
+    }
+  }
+
+  // 6. Bottom-Right: 6 Vertical Hand Cards + Right-Side Action Controls
+  const lsHandEl = document.getElementById('lsHandContainer');
+  const lsCtrlCol = document.getElementById('lsActionControlsCol');
+  const isHumanStep1 = state.phase === 'STEP1_PLAY_OR_DISCARD' && isMyTurnNow;
+
+  if (lsHandEl) {
+    if (localPlayer.hand.length === 0) {
+      lsHandEl.innerHTML = `<div class="text-xs font-bold text-stone-400 m-auto text-center">${state.phase === 'INITIAL_DRAFT' ? '🎲 請先在中央牌桌完成「首輪選秀」（挑選 4 名人員），結束後發放 6 張手牌！' : '目前無手牌'}</div>`;
+    } else {
+      const statuses = localPlayer.hand.map(uid => ({
+        uid,
+        card: CARDS_BY_ID[uid],
+        status: evaluateCardPlayability(state, localPlayer, uid)
+      }));
+      const lsHandSig = `${activeTheme.id}:${state.phase}:${isHumanStep1}:${uiSelection.mode}:${uiSelection.sourceCardUid || ''}:${[...uiSelection.discardSet].join(',')}:${statuses.map(s => `${s.uid}_${s.status.playable}_${s.status.shortReason}`).join('|')}`;
+      if (lsHandEl.getAttribute('data-render-sig') !== lsHandSig) {
+        lsHandEl.setAttribute('data-render-sig', lsHandSig);
+        lsHandEl.innerHTML = statuses.map(({ uid, card, status }) => {
+          const isSelected = uiSelection.mode === 'MODE_D_SELECT' && uiSelection.sourceCardUid === uid;
+          const isDiscardSel = uiSelection.mode === 'DISCARD_SELECT' && uiSelection.discardSet.has(uid);
+          return renderLsHandCardHTML(card, status, isSelected, isDiscardSel, isHumanStep1);
+        }).join('');
+      }
+    }
+  }
+
+  if (lsCtrlCol) {
+    const remainingActions = Math.max(0, state.turn.maxActions - state.turn.actionsUsed);
+    const canDiscard = isHumanStep1 && (state.config.playDiscardMode === 'SHARED_QUOTA_4' || !state.turn.hasPlayedCard) && remainingActions > 0;
+    const isDiscardMode = uiSelection.mode === 'DISCARD_SELECT';
+    const discardCnt = uiSelection.discardSet.size;
+
+    lsCtrlCol.innerHTML = `
+      <div class="text-center">
+        <div class="text-lg sm:text-xl font-black text-amber-300 leading-none">${remainingActions}</div>
+        <div class="text-[9px] font-bold text-stone-400 mt-0.5">剩餘額度</div>
+      </div>
+
+      ${isDiscardMode && discardCnt > 0 ? `
+        <button data-ls-ctrl="CONFIRM_DISCARD" class="w-full py-2 px-1.5 rounded-full bg-orange-600 border border-orange-300 text-[11px] font-black text-white shadow-lg">
+          確認棄(${discardCnt})
+        </button>
+      ` : `
+        <button data-ls-ctrl="TOGGLE_DISCARD" ${!canDiscard ? 'disabled' : ''} class="w-full py-2 px-1.5 rounded-full ${isDiscardMode ? 'bg-orange-900 border-2 border-orange-400 text-orange-200' : 'bg-stone-900 border border-stone-600 text-stone-200'} text-xs font-black ${!canDiscard ? 'opacity-40 cursor-not-allowed' : 'hover:border-amber-400'}">
+          ${isDiscardMode ? '取消棄牌' : '棄牌'}
+        </button>
+      `}
+
+      <button data-ls-ctrl="END_TURN" ${!isHumanStep1 ? 'disabled' : ''} class="w-full py-2 px-1.5 rounded-full bg-gradient-to-b from-amber-400 to-amber-600 border border-amber-200 text-slate-950 text-xs font-black shadow-lg ${!isHumanStep1 ? 'opacity-40 cursor-not-allowed' : 'hover:brightness-110'}">
+        ${state.turn.hasPlayedCard || state.turn.hasDiscardedCard ? `發薪 ${myBurn}` : '結束'}
+      </button>
+    `;
+  }
+}
+
+function renderLsModeDLeftCardColumnHTML(card) {
+  const vis = getActionCategoryVisuals(card);
+  const reqOrbs = (card.reqSkills && card.reqSkills.length > 0)
+    ? `<div class="flex items-center justify-end gap-1">${card.reqSkills.map(s => `<span class="w-4 h-4 rounded-full bg-amber-600 text-white text-[10px] font-black flex items-center justify-center leading-none">${s}</span>`).join('')}</div>`
+    : `<span class="text-[9px] font-bold text-slate-600">${card.dept === 'PURPLE' ? '需在職 2 副總' : '無等級限制'}</span>`;
+
+  return `
+    <div class="w-[155px] sm:w-[175px] shrink-0 flex flex-col gap-2">
+      <div class="w-full aspect-[2/3] rounded-xl overflow-hidden bg-[#f5efe6] border-2 ${vis.border} flex flex-col justify-between shadow-xl">
+        <div class="${vis.headerBg} px-2 py-1 text-[10px] font-black text-white flex items-center justify-between">
+          <span>${vis.tag}</span>
+          <span>${vis.badge}</span>
+        </div>
+        <div class="flex-1 bg-gradient-to-b ${vis.artBg} flex flex-col items-center justify-center p-2 relative">
+          <div class="text-4xl leading-none drop-shadow-lg">${card.svg}</div>
+          <div class="mt-2 px-2 py-0.5 rounded bg-black/50 text-xs font-black text-amber-200">${vis.badge}</div>
+        </div>
+        <div class="bg-[#f5efe6] px-2.5 py-1.5 flex flex-col gap-1 border-t border-stone-300">
+          <div class="text-xs font-black text-slate-900 truncate">${card.title}</div>
+          <div class="flex items-center justify-between">${reqOrbs}</div>
+        </div>
+      </div>
+      <div class="text-[11px] font-semibold text-stone-300 leading-snug line-clamp-3">
+        ${card.desc || ''}
+      </div>
+    </div>
+  `;
+}
+
+function renderLsOpponentComparisonCardHTML(opp, checkDept, isValid, actionAttr, subFooterText, btnLabel) {
+  const terms = typeof getThemeTerms === 'function' ? getThemeTerms() : {};
+  const shortOpp = getShortPlayerName(opp.name);
+  const vpCnt = getTotalVPCount(opp);
+  const crisisReq = getCrisisTotalEngineerReq(opp);
+  const deptStrip = LS_DEPT_ORDER.map(d => renderLsDeptSlotHTML(opp, d, { highlightDept: checkDept, noInspect: true })).join('');
+
+  if (!isValid) {
+    return `
+      <div class="rounded-xl bg-stone-900/75 border border-stone-700 p-2 opacity-60 flex flex-col justify-between gap-1.5 min-w-0">
+        <div class="flex items-center justify-between gap-1">
+          <span class="text-sm font-black text-stone-200 truncate">${shortOpp}</span>
+          <span class="text-sm font-black text-amber-300">${opp.crystals}</span>
+        </div>
+        <div class="h-[86px] sm:h-[96px] w-full grid grid-cols-4 gap-1 items-center justify-items-center">
+          ${deptStrip}
+        </div>
+        <div class="text-[10px] font-bold text-stone-400 truncate">${terms.engName || '工程師'} ${opp.engineers.length} · ${terms.vpName || '副總'} ${vpCnt} · ${terms.crisisName || '爛點子'} ×${crisisReq}</div>
+        <div class="w-full py-1 rounded-lg bg-stone-800 text-center text-[10px] font-bold text-sky-300 truncate">${btnLabel}</div>
+      </div>
+    `;
+  }
+
+  return `
+    <button ${actionAttr} class="rounded-xl bg-stone-950/95 border-2 border-amber-400/80 hover:border-amber-300 p-2 text-left shadow-xl flex flex-col justify-between gap-1.5 min-w-0 transition hover:-translate-y-0.5">
+      <div class="flex items-center justify-between gap-1 w-full">
+        <span class="text-sm font-black text-white truncate">🎯 ${shortOpp}</span>
+        <span class="text-sm font-black text-amber-300">${opp.crystals}</span>
+      </div>
+      <div class="h-[86px] sm:h-[96px] w-full grid grid-cols-4 gap-1 items-center justify-items-center pointer-events-none">
+        ${deptStrip}
+      </div>
+      <div class="text-[10px] font-bold text-stone-300 truncate w-full">${subFooterText}</div>
+      <div class="w-full py-1 rounded-lg bg-gradient-to-r from-amber-500 to-amber-600 text-center text-[11px] font-black text-slate-950 shadow">
+        ${btnLabel}
+      </div>
+    </button>
+  `;
 }
 
 function renderModeDDrawer() {
@@ -1521,6 +2126,73 @@ function renderModeDDrawer() {
     }).join('');
   }
 
+  // In Landscape Tabletop Mode, enhance opponent-targeting cards with the 4-department highlighted comparison cards & wrap in 2-column layout
+  if (isLandscapeModeActive()) {
+    const terms = typeof getThemeTerms === 'function' ? getThemeTerms() : {};
+    if (card.effect === 'BAD_IDEA') {
+      const oppGridHTML = aliveOpponents.map(opp => {
+        const oppSkill = getEffectiveSkill(opp, 'YELLOW');
+        const isValid = status.validOpponents.includes(opp.id);
+        const curBurn = getPlayerBurnRate(opp);
+        const curReq = getCrisisTotalEngineerReq(opp);
+        const newReq = curReq + card.val;
+        const newOutsourced = Math.max(0, newReq - opp.engineers.length);
+        const addedOutsourced = newOutsourced - opp.outsourcedCount;
+        const projBurn = curBurn + addedOutsourced * (opp.doubleBurnFlag ? 6 : 3);
+        const subText = `${terms.engName || '工程師'} ${opp.engineers.length} · ${terms.vpName || '副總'} ${getTotalVPCount(opp)} · 🔥-${curBurn}➔-${projBurn}/回`;
+        const btnLabel = isValid ? `⚔️ 攻擊 ${getShortPlayerName(opp.name)} (×${card.val})` : `🛡️ ${DEPT_META.YELLOW.short}${oppSkill}級免疫`;
+        return renderLsOpponentComparisonCardHTML(opp, 'YELLOW', isValid, `data-d-action="CONFIRM_BAD_IDEA" data-opp-id="${opp.id}"`, subText, btnLabel);
+      }).join('');
+      container.className = 'w-full min-w-0';
+      container.innerHTML = `
+        <div class="flex items-stretch gap-3 w-full min-w-0">
+          ${renderLsModeDLeftCardColumnHTML(card)}
+          <div class="flex-1 min-w-0 flex flex-col justify-between gap-2">
+            <div class="text-xs font-bold text-amber-200">看對方的【${DEPT_META.YELLOW.name}】。亮黃框是要對上的部門，點選目標立即施放：</div>
+            <div class="grid ${aliveOpponents.length >= 3 ? 'grid-cols-3' : aliveOpponents.length === 2 ? 'grid-cols-2' : 'grid-cols-1'} gap-2 w-full min-w-0 my-auto">
+              ${oppGridHTML}
+            </div>
+          </div>
+        </div>
+      `;
+    } else if (card.effect === 'FORCE_HIRE' && !uiSelection.step2OpponentId) {
+      const oppGridHTML = aliveOpponents.map(opp => {
+        const oppSkill = getEffectiveSkill(opp, 'BLUE');
+        const isValid = status.validOpponents.includes(opp.id);
+        const curBurn = getPlayerBurnRate(opp);
+        const subText = `${terms.engName || '工程師'} ${opp.engineers.length} · ${terms.vpName || '副總'} ${getTotalVPCount(opp)} · 目前 🔥-${curBurn}/回`;
+        const btnLabel = isValid ? `🪤 選取 ${getShortPlayerName(opp.name)} ➔ 挑人` : `🛡️ ${DEPT_META.BLUE.short}${oppSkill}級免疫`;
+        return renderLsOpponentComparisonCardHTML(opp, 'BLUE', isValid, `data-d-action="STEP2_FORCE_HIRE_OPP" data-opp-id="${opp.id}"`, subText, btnLabel);
+      }).join('');
+      container.className = 'w-full min-w-0';
+      container.innerHTML = `
+        <div class="flex items-stretch gap-3 w-full min-w-0">
+          ${renderLsModeDLeftCardColumnHTML(card)}
+          <div class="flex-1 min-w-0 flex flex-col justify-between gap-2">
+            <div class="text-xs font-bold text-amber-200">步驟 1/2：看對方的【${DEPT_META.BLUE.name}】（亮框部門），點選要強塞冗員的對手：</div>
+            <div class="grid ${aliveOpponents.length >= 3 ? 'grid-cols-3' : aliveOpponents.length === 2 ? 'grid-cols-2' : 'grid-cols-1'} gap-2 w-full min-w-0 my-auto">
+              ${oppGridHTML}
+            </div>
+          </div>
+        </div>
+      `;
+    } else {
+      const rightContent = container.innerHTML;
+      const rightGridCls = container.className;
+      container.className = 'w-full min-w-0';
+      container.innerHTML = `
+        <div class="flex items-stretch gap-3 w-full min-w-0">
+          ${renderLsModeDLeftCardColumnHTML(card)}
+          <div class="flex-1 min-w-0 flex flex-col justify-center">
+            <div class="${rightGridCls} max-h-[68vh] overflow-y-auto pr-1">
+              ${rightContent}
+            </div>
+          </div>
+        </div>
+      `;
+    }
+  }
+
   container.querySelectorAll('[data-d-action]').forEach(btn => {
     btn.addEventListener('click', (e) => {
       e.stopPropagation();
@@ -1643,7 +2315,20 @@ function attachDynamicBoardListeners() {
       return;
     }
 
-    const handCardEl = e.target.closest('#localHandContainer [data-act-uid]');
+    const lsCtrlBtn = e.target.closest('[data-ls-ctrl]');
+    if (lsCtrlBtn) {
+      const ctrlAct = lsCtrlBtn.getAttribute('data-ls-ctrl');
+      if (ctrlAct === 'TOGGLE_DISCARD') {
+        document.getElementById('btnToggleDiscardMode')?.click();
+      } else if (ctrlAct === 'CONFIRM_DISCARD') {
+        document.getElementById('btnConfirmDiscard')?.click();
+      } else if (ctrlAct === 'END_TURN') {
+        document.getElementById('btnEndTurn')?.click();
+      }
+      return;
+    }
+
+    const handCardEl = e.target.closest('#localHandContainer [data-act-uid], #lsHandContainer [data-act-uid]');
     if (handCardEl) {
       const actUid = handCardEl.getAttribute('data-act-uid');
       if (state.phase !== 'STEP1_PLAY_OR_DISCARD' || !isMyTurnNow) return;
@@ -2310,23 +2995,9 @@ function renderHomeScreenUI() {
       { tplId: 'E_G_VP3', dept: 'GREEN', cls: 'home-hero-fan-card home-hero-fan-center border-2 border-amber-400' },
       { tplId: 'E_B_VP3', dept: 'BLUE', cls: 'home-hero-fan-card home-hero-fan-right border-2 border-blue-400' }
     ];
-    fanContainer.innerHTML = heroSamples.map(item => {
-      if (theme.useFullCardArt && getCardArtSrc(item.tplId)) {
-        return `<div class="${item.cls} bg-slate-950">${getCardImgTag(item.tplId, item.tplId, 'w-full h-full object-cover block')}</div>`;
-      }
-      const empRecipe = EMPLOYEE_RECIPES.find(r => r.tplId === item.tplId);
-      const meta = DEPT_META[item.dept];
-      return `
-        <div class="${item.cls} burnrate-css-card">
-          <div class="${meta.color} px-1 py-0.5 text-[7px] font-black text-white truncate text-center">${meta.icon}${meta.short}</div>
-          <div class="flex-1 flex flex-col items-center justify-center p-0.5">
-            <div class="text-base leading-none">${empRecipe ? empRecipe.svg : meta.icon}</div>
-            <div class="text-[8px] font-black text-white text-center leading-tight truncate w-full mt-0.5">${empRecipe ? empRecipe.title : ''}</div>
-          </div>
-          <div class="bg-slate-950 text-[7px] font-black text-amber-300 text-center py-0.5 border-t border-slate-800">3級 · ${terms.currencyIcon || '💵'}-2</div>
-        </div>
-      `;
-    }).join('');
+    fanContainer.innerHTML = heroSamples.map(item => (
+      `<div class="${item.cls} bg-slate-950">${getCardImgTag(item.tplId, item.tplId, 'w-full h-full object-cover block')}</div>`
+    )).join('');
   }
 
   const homeNick = document.getElementById('homeInputNickname');
@@ -2401,6 +3072,32 @@ function initAppOnLoad() {
   } else {
     document.getElementById('homeScreenModal')?.classList.remove('hidden');
   }
+
+  // Landscape Tabletop Mode Controls
+  document.getElementById('btnHeaderLandscape')?.addEventListener('click', () => {
+    toggleLandscapePortraitMode();
+  });
+  document.getElementById('btnLsToPortrait')?.addEventListener('click', () => {
+    toggleLandscapePortraitMode();
+  });
+  document.getElementById('btnHomeToggleOrientation')?.addEventListener('click', () => {
+    toggleLandscapePortraitMode();
+  });
+  document.getElementById('btnMenuToggleOrientation')?.addEventListener('click', () => {
+    toggleLandscapePortraitMode();
+    document.getElementById('settingsMenuModal')?.classList.add('hidden');
+  });
+  document.getElementById('btnLsFullscreen')?.addEventListener('click', () => {
+    triggerPwaInstallOrFullscreen();
+  });
+  document.getElementById('btnLsRoomMenu')?.addEventListener('click', () => {
+    updateSettingsMenuUI();
+    document.getElementById('settingsMenuModal')?.classList.remove('hidden');
+  });
+  document.getElementById('lsLogPanel')?.addEventListener('click', () => {
+    renderFullBattleLog();
+    document.getElementById('logModal')?.classList.remove('hidden');
+  });
 
   // Home Screen & Theme Switcher Controls
   document.getElementById('homeSelectTheme')?.addEventListener('change', (e) => {

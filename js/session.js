@@ -754,6 +754,7 @@ function authoritativePlayCard(state, action) {
   if (!status.playable) return;
 
   state.turn.hasPlayedCard = true;
+  state.lastPlayedCard = { uid: card.uid, tplId: card.tplId, actorId: player.id, actorName: player.name };
 
   if (card.effect === 'GAIN_FUNDS') {
     consumeHandCard(state, player, card.uid, true);
