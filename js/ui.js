@@ -524,123 +524,27 @@ function renderEmployeeCardHTML(empUid, extraClasses = '', badgeLabel = '') {
   const c = CARDS_BY_ID[empUid];
   if (!c) return '';
   const meta = DEPT_META[c.dept] || DEPT_META.RED;
-  const theme = typeof getActiveTheme === 'function' ? getActiveTheme() : { useFullCardArt: true };
-  const terms = typeof getThemeTerms === 'function' ? getThemeTerms() : { currencyIcon: '💎', vpIcon: '👑', vpName: '皇室', mgrName: '主管', engName: '苦工', crisisName: '危機' };
-  const fullCardSrc = theme.useFullCardArt ? getCardArtSrc(c.tplId) : '';
-
-  if (fullCardSrc) {
-    return `
-      <div data-emp-uid="${c.uid}" class="relative rounded-xl bg-slate-950 border-2 ${meta.border} ${c.isVP ? 'vp-card-frame' : ''} overflow-hidden shadow-xl transition min-w-0 ${extraClasses}">
-        ${getCardImgTag(c.tplId, c.title, "full-gpt-card-img")}
-        ${badgeLabel ? `<span class="absolute top-1 right-1 px-1.5 py-0.5 rounded bg-sky-500 text-slate-950 text-[10px] font-black shadow-lg z-20">${badgeLabel}</span>` : ''}
-      </div>
-    `;
-  }
-
-  // Dynamic CSS 2:3 Card (Used for Classic Burn Rate & any CSS-driven theme)
-  const roleTag = c.role === 'ENGINEER'
-    ? `<span class="text-[9px] font-black bg-slate-950/90 text-amber-300 px-1.5 py-0.5 rounded border border-amber-400/50 whitespace-nowrap">${terms.engIcon || '⚒️'}${terms.engName}</span>`
-    : c.isVP
-    ? `<span class="text-[9px] font-black bg-amber-400 text-slate-950 px-1.5 py-0.5 rounded whitespace-nowrap shadow">${terms.vpIcon}${terms.vpName}</span>`
-    : `<span class="text-[9px] font-bold bg-slate-950/75 text-white px-1.5 py-0.5 rounded whitespace-nowrap">${terms.mgrName}</span>`;
-
-  const orbHTML = c.role === 'ENGINEER'
-    ? `<div class="burnrate-skill-orb text-xs text-amber-300">🔧</div>`
-    : `<div class="burnrate-skill-orb ${c.isVP ? 'burnrate-skill-orb-vp' : ''}">${c.skill}</div>`;
+  const artKey = c.artKey || c.tplId;
 
   return `
-    <div data-emp-uid="${c.uid}" class="burnrate-css-card aspect-card-2-3 rounded-xl border-2 ${meta.border} ${c.isVP ? 'vp-card-frame' : ''} text-left transition min-w-0 ${extraClasses}">
-      <!-- Top Department Color Header -->
-      <div class="${meta.color} px-2 py-1 flex items-center justify-between gap-1 border-b border-white/20 shrink-0 min-w-0">
-        <span class="text-[10px] font-black text-white truncate">${meta.icon}${meta.short}</span>
-        ${roleTag}
-      </div>
-
-      <!-- Center Skill Orb + Corporate Portrait Medallion + Titles -->
-      <div class="flex-1 flex flex-col items-center justify-center p-2 relative min-w-0">
-        <div class="absolute top-1.5 left-1.5">${orbHTML}</div>
-        ${badgeLabel ? `<span class="absolute top-1.5 right-1.5 px-1.5 py-0.5 rounded bg-sky-400 text-slate-950 text-[9px] font-black shadow z-20 whitespace-nowrap">${badgeLabel}</span>` : ''}
-        <div class="burnrate-emblem-circle">${c.svg}</div>
-        <div class="text-xs sm:text-sm font-black text-white mt-1.5 text-center leading-tight truncate w-full px-1">${c.title}</div>
-        <div class="text-[9px] sm:text-[10px] font-bold text-amber-300/90 truncate w-full text-center mt-0.5 px-1">${c.origTitle}</div>
-      </div>
-
-      <!-- Bottom Salary & Skill Bar -->
-      <div class="bg-slate-950/95 border-t border-slate-800 px-2 py-1.5 flex items-center justify-between text-[10px] shrink-0">
-        <span class="font-black text-rose-400 whitespace-nowrap">${terms.currencyIcon}-${c.salary}/回</span>
-        <span class="font-extrabold text-sky-300 whitespace-nowrap">${c.role === 'ENGINEER' ? `抵1${terms.crisisName}` : `技能 ${c.skill}級`}</span>
-      </div>
+    <div data-emp-uid="${c.uid}" class="relative rounded-xl bg-slate-950 border-2 ${meta.border} ${c.isVP ? 'vp-card-frame' : ''} overflow-hidden shadow-xl transition min-w-0 ${extraClasses}">
+      ${getCardImgTag(artKey, c.title, "full-gpt-card-img")}
+      ${badgeLabel ? `<span class="absolute top-1 right-1 px-1.5 py-0.5 rounded bg-sky-500 text-slate-950 text-[10px] font-black shadow-lg z-20">${badgeLabel}</span>` : ''}
     </div>
   `;
 }
 
 function renderTalentPoolThumbCardHTML(topCard, d, deckLen) {
   const meta = DEPT_META[d];
-  const theme = typeof getActiveTheme === 'function' ? getActiveTheme() : { useFullCardArt: true };
-  const terms = typeof getThemeTerms === 'function' ? getThemeTerms() : { currencyIcon: '💎', vpIcon: '👑' };
-
-  if (theme.useFullCardArt && getCardArtSrc(topCard.tplId)) {
-    return `
-      <button data-open-bank-dept="${d}" class="jobbank-thumb-card border-2 ${meta.border} ${topCard.isVP ? 'vp-card-frame' : ''} bg-slate-950">
-        ${getCardImgTag(topCard.tplId, topCard.title, 'w-full h-full object-cover block')}
-        <span class="absolute top-0.5 right-0.5 px-1 py-0.5 rounded bg-slate-950/90 border border-slate-600 text-[8px] font-black text-amber-300 leading-none shadow">剩${deckLen}</span>
-      </button>
-    `;
-  }
-
-  const orbText = topCard.role === 'ENGINEER' ? '🔧' : topCard.skill;
+  const artKey = topCard.artKey || topCard.tplId;
   return `
-    <button data-open-bank-dept="${d}" class="jobbank-thumb-card burnrate-css-card border-2 ${meta.border} ${topCard.isVP ? 'vp-card-frame' : ''} text-left">
-      <div class="${meta.color} px-1 py-0.5 flex items-center justify-between gap-0.5 border-b border-white/20 shrink-0 w-full">
-        <span class="text-[8px] font-black text-white truncate">${meta.icon}${meta.short}</span>
-        <span class="px-1 rounded bg-slate-950/90 text-[8px] font-black text-amber-300 leading-none">剩${deckLen}</span>
-      </div>
-      <div class="flex-1 flex flex-col items-center justify-center px-1 py-0.5 relative w-full min-w-0">
-        <div class="burnrate-thumb-orb ${topCard.isVP ? 'burnrate-skill-orb-vp' : ''} absolute top-1 left-1">${orbText}</div>
-        ${topCard.isVP ? `<span class="absolute top-1 right-1 text-[8px] font-black bg-amber-400 text-slate-950 px-1 rounded leading-none">${terms.vpIcon}</span>` : ''}
-        <div class="burnrate-thumb-emblem">${topCard.svg}</div>
-        <div class="text-[9px] font-black text-white text-center leading-tight truncate w-full mt-0.5">${topCard.title}</div>
-      </div>
-      <div class="bg-slate-950/95 border-t border-slate-800 px-1 py-0.5 flex items-center justify-between text-[8px] w-full shrink-0">
-        <span class="font-black text-rose-400">${terms.currencyIcon}-${topCard.salary}</span>
-        <span class="font-bold text-sky-300">${topCard.role === 'ENGINEER' ? '工程' : `${topCard.skill}級`}</span>
-      </div>
+    <button data-open-bank-dept="${d}" class="jobbank-thumb-card border-2 ${meta.border} ${topCard.isVP ? 'vp-card-frame' : ''} bg-slate-950">
+      ${getCardImgTag(artKey, topCard.title, 'w-full h-full object-cover block')}
+      <span class="absolute top-0.5 right-0.5 px-1 py-0.5 rounded bg-slate-950/90 border border-slate-600 text-[8px] font-black text-amber-300 leading-none shadow">剩${deckLen}</span>
     </button>
   `;
 }
 
-function skipOldFallbackBlock() {
-  if (false) {
-
-  const skillBadge = c.role === 'ENGINEER'
-    ? `<span class="px-1.5 py-0.5 rounded bg-slate-800 text-amber-300 text-[10px] font-bold">⚒苦工</span>`
-    : `<span class="w-5 h-5 rounded-full bg-slate-950 border ${c.isVP ? 'border-amber-300 text-amber-300' : 'border-white text-white'} flex items-center justify-center text-[11px] font-black">${c.skill}</span>`;
-
-  return `
-    <div data-emp-uid="${c.uid}" class="relative rounded-xl bg-slate-900 border ${meta.border} ${c.isVP ? 'vp-card-frame' : ''} overflow-hidden flex flex-col justify-between text-left shadow-lg transition min-w-0 ${extraClasses}">
-      <div class="${meta.color} px-2 py-1 flex items-center justify-between gap-1 min-w-0">
-        <span class="text-[10px] font-extrabold text-white truncate">${meta.icon}${meta.short}</span>
-        <div class="flex items-center gap-1 shrink-0">
-          ${c.isVP ? `<span class="text-[9px] font-black bg-amber-400 text-slate-950 px-1 rounded whitespace-nowrap">👑皇室</span>` : `<span class="text-[9px] text-white/80">統領</span>`}
-          ${badgeLabel ? `<span class="text-[9px] px-1 rounded bg-sky-400 text-slate-950 font-black whitespace-nowrap">${badgeLabel}</span>` : ''}
-        </div>
-      </div>
-      <div class="flex-1 flex flex-col items-center justify-center py-2 px-1.5 relative min-w-0">
-        <div class="absolute top-1 left-1">${skillBadge}</div>
-        <div class="text-xl leading-none">${c.svg}</div>
-        <div class="text-xs font-black text-white mt-1 text-center leading-tight truncate w-full">${c.title}</div>
-        <div class="text-[10px] text-slate-400 truncate w-full text-center">${c.origTitle}</div>
-      </div>
-      <div class="bg-slate-950/90 border-t border-slate-800 px-2 py-1 flex items-center justify-between text-[10px]">
-        <span class="font-black text-rose-400 whitespace-nowrap">💎-${c.salary}/回</span>
-        <span class="font-bold text-slate-300 whitespace-nowrap">${c.role === 'ENGINEER' ? '抵1危機' : `技能 ${c.skill}`}</span>
-      </div>
-    </div>
-  `;
-}
-}
-
-// V13.2 Ultra-Compact Hand Card (w-[92px] h-[118px] on mobile -> fits ~3.8 cards horizontally, saves vertical space!)
 function renderActionCardHTML(actUid, extraClasses = '', playStatus = null, isSelected = false, isDiscardChecked = false) {
   const c = CARDS_BY_ID[actUid];
   if (!c) return '';
@@ -1098,21 +1002,13 @@ function renderAll() {
 
       const hCard = CARDS_BY_ID[headUid];
       const badgeStr = `👑我方${subCount > 0 ? ` +${subCount}${terms.empName || '下屬'}` : ''}`;
-      if (activeTheme.useFullCardArt && getCardArtSrc(hCard.tplId)) {
-        slotEl.innerHTML = `
-          <div data-inspect-dept="${d}" data-inspect-player="${localPlayer.id}" class="dept-card-scroll tilt-card-3d ${isNewlyFlipped ? 'anim-flip-in' : ''} rounded-xl bg-slate-950 border-2 ${meta.border} ${hCard.isVP ? 'vp-card-frame' : ''} overflow-hidden cursor-pointer shadow-xl min-w-0 relative">
-            ${getCardImgTag(hCard.tplId, hCard.title, 'w-full h-full object-cover block')}
-            <div class="holo-sheen-layer"></div>
-            <span class="absolute bottom-1 left-1/2 -translate-x-1/2 px-1.5 py-0.5 rounded-full text-[9px] font-black shadow-lg whitespace-nowrap z-20 bg-slate-950/90 border border-amber-400 text-amber-300">${badgeStr}</span>
-          </div>
-        `;
-      } else {
-        slotEl.innerHTML = `
-          <div data-inspect-dept="${d}" data-inspect-player="${localPlayer.id}" class="dept-card-scroll tilt-card-3d ${isNewlyFlipped ? 'anim-flip-in' : ''} cursor-pointer min-w-0 relative">
-            ${renderEmployeeCardHTML(headUid, 'w-full h-full', subCount > 0 ? `+${subCount}${terms.empName || '下屬'}` : '')}
-          </div>
-        `;
-      }
+      slotEl.innerHTML = `
+        <div data-inspect-dept="${d}" data-inspect-player="${localPlayer.id}" class="dept-card-scroll tilt-card-3d ${isNewlyFlipped ? 'anim-flip-in' : ''} rounded-xl bg-slate-950 border-2 ${meta.border} ${hCard.isVP ? 'vp-card-frame' : ''} overflow-hidden cursor-pointer shadow-xl min-w-0 relative">
+          ${getCardImgTag(hCard.artKey || hCard.tplId, hCard.title, 'w-full h-full object-cover block')}
+          <div class="holo-sheen-layer"></div>
+          <span class="absolute bottom-1 left-1/2 -translate-x-1/2 px-1.5 py-0.5 rounded-full text-[9px] font-black shadow-lg whitespace-nowrap z-20 bg-slate-950/90 border border-amber-400 text-amber-300">${badgeStr}</span>
+        </div>
+      `;
       const insertedCard = slotEl.firstElementChild;
       if (insertedCard && isNewlyFlipped) {
         insertedCard.addEventListener('animationend', () => {
@@ -1151,18 +1047,18 @@ function renderAll() {
           </div>
         </div>
         <div class="grid grid-cols-3 gap-1.5 w-full min-w-0">
-          <button data-inspect-eng="${myId}" class="rounded-lg bg-red-950/60 border border-red-500/40 px-2 py-0.5 text-left flex items-center justify-between min-w-0">
-            <span class="text-[10px] font-bold text-red-200 truncate">${terms.engIcon || '⚒'}${terms.engName || '苦工'}:${localPlayer.engineers.length}</span>
-            <span class="text-[10px] font-black text-rose-300 whitespace-nowrap shrink-0">${terms.currencyIcon || '💎'}-${localPlayer.engineers.length} 🔍</span>
-          </button>
+          <div class="rounded-lg bg-red-950/60 border border-red-500/40 px-2 py-0.5 text-left flex items-center justify-between min-w-0">
+            <span class="text-[10px] font-bold text-red-200 truncate">${terms.engIcon || '⚒'}${terms.engName || '工程師'}:${localPlayer.engineers.length}</span>
+            <span class="text-[10px] font-black text-rose-300 whitespace-nowrap shrink-0">${terms.currencyIcon || '💵'}-${localPlayer.engineers.length}</span>
+          </div>
           <button data-inspect-crises="${myId}" class="rounded-lg ${myCrisisCnt > 0 ? 'bg-amber-950/80 border border-amber-400' : 'bg-slate-900 border border-slate-700'} px-2 py-0.5 text-left flex items-center justify-between min-w-0">
             <span class="text-[10px] font-bold ${myCrisisCnt > 0 ? 'text-amber-200' : 'text-slate-400'} whitespace-nowrap">${terms.crisisIcon || '⚠️'}${terms.crisisName || '危機'}:${myCrisisCnt}</span>
             <span class="text-[10px] font-black ${myCrisisCnt > 0 ? 'text-amber-300' : 'text-slate-500'} whitespace-nowrap shrink-0">需${myCrisisReq} 🔍</span>
           </button>
-          <button data-inspect-outsourced="${myId}" class="rounded-lg ${localPlayer.outsourcedCount > 0 ? 'bg-rose-950/90 border border-rose-400' : 'bg-slate-900 border border-slate-700'} px-2 py-0.5 text-left flex items-center justify-between min-w-0">
-            <span class="text-[10px] font-bold ${localPlayer.outsourcedCount > 0 ? 'text-rose-200' : 'text-slate-400'} truncate">${terms.outIcon || '👹'}${terms.outName || '外包'}:${localPlayer.outsourcedCount}</span>
-            <span class="text-[10px] font-black ${localPlayer.outsourcedCount > 0 ? 'text-rose-300' : 'text-slate-500'} whitespace-nowrap shrink-0">${terms.currencyIcon || '💎'}-${localPlayer.outsourcedCount * 3} 🔍</span>
-          </button>
+          <div class="rounded-lg ${localPlayer.outsourcedCount > 0 ? 'bg-rose-950/90 border border-rose-400' : 'bg-slate-900 border border-slate-700'} px-2 py-0.5 text-left flex items-center justify-between min-w-0">
+            <span class="text-[10px] font-bold ${localPlayer.outsourcedCount > 0 ? 'text-rose-200' : 'text-slate-400'} truncate">${terms.outIcon || '💸'}${terms.outName || '外包'}:${localPlayer.outsourcedCount}</span>
+            <span class="text-[10px] font-black ${localPlayer.outsourcedCount > 0 ? 'text-rose-300' : 'text-slate-500'} whitespace-nowrap shrink-0">${terms.currencyIcon || '💵'}-${localPlayer.outsourcedCount * 3}</span>
+          </div>
         </div>
       `;
     }
@@ -1281,7 +1177,7 @@ function renderModeDDrawer() {
     if (!empCard) {
       return `<div class="portrait-target-avatar bg-slate-950 border border-dashed border-slate-600 flex items-center justify-center text-sm">🏰</div>`;
     }
-    const avSrc = getMiniAvatarSrc(empCard.tplId);
+    const avSrc = getMiniAvatarSrc(empCard.artKey || empCard.tplId);
     return avSrc
       ? `<img src="${avSrc}" alt="${empCard.title}" class="portrait-target-avatar" />`
       : `<div class="portrait-target-avatar bg-slate-950 flex items-center justify-center text-base">${empCard.svg}</div>`;
@@ -1878,7 +1774,7 @@ function openOpponentCastleModal(oppId) {
   const roundsLeft = burn > 0 ? Math.max(0, Math.ceil(opp.crystals / burn)) : 99;
 
   document.getElementById('jobBankModalTitle').textContent = `🎯 對手偵察：【${opp.name}】主城編制`;
-  document.getElementById('jobBankModalSub').textContent = '點擊苦工、危機、外包或任一角色卡可查看下屬與完整卡牌清單';
+  document.getElementById('jobBankModalSub').textContent = '點擊危機專案或任一角色卡可查看下屬與完整卡牌清單';
 
   const summaryEl = document.getElementById('jobBankOpponentSummary');
   if (summaryEl) {
@@ -1911,17 +1807,16 @@ function openOpponentCastleModal(oppId) {
 
         <!-- Part 2: Enlarged 3-Column Workforce & Crisis Inspection Cards -->
         <div class="grid grid-cols-3 gap-1.5 w-full">
-          <button data-opp-modal-eng="${opp.id}" class="rounded-xl bg-red-950/75 border border-red-500/50 p-2 text-left flex flex-col justify-between gap-0.5 shadow">
+          <div class="rounded-xl bg-red-950/75 border border-red-500/50 p-2 text-left flex flex-col justify-between gap-0.5 shadow">
             <div class="flex items-center justify-between w-full">
               <span class="text-[11px] sm:text-xs font-extrabold text-red-200 whitespace-nowrap">${(typeof getThemeTerms === 'function' ? getThemeTerms().engIcon : '⚒️')} ${(typeof getThemeTerms === 'function' ? getThemeTerms().engFull : '工程師')}</span>
-              <span class="text-[10px] font-black text-sky-300">🔍</span>
             </div>
             <div class="flex items-baseline justify-between w-full mt-0.5">
               <span class="text-xs sm:text-sm font-black text-white whitespace-nowrap">${opp.engineers.length} 人</span>
               <span class="text-[11px] font-black text-rose-300 whitespace-nowrap">${(typeof getThemeTerms === 'function' ? getThemeTerms().currencyIcon : '💵')}-${opp.engineers.length}/回</span>
             </div>
             <div class="text-[10px] text-slate-300 font-semibold truncate">可抵銷 ${opp.engineers.length} 點${(typeof getThemeTerms === 'function' ? getThemeTerms().crisisName : '爛點子')}</div>
-          </button>
+          </div>
 
           <button data-opp-modal-crises="${opp.id}" class="rounded-xl ${opp.crises.length > 0 ? 'bg-amber-950/85 border border-amber-400' : 'bg-slate-950 border border-slate-700'} p-2 text-left flex flex-col justify-between gap-0.5 shadow">
             <div class="flex items-center justify-between w-full">
@@ -1935,23 +1830,20 @@ function openOpponentCastleModal(oppId) {
             <div class="text-[10px] text-slate-300 font-semibold truncate">${opp.crises.length > 0 ? '點擊檢視明細' : '場上無危機專案'}</div>
           </button>
 
-          <button data-opp-modal-outsourced="${opp.id}" class="rounded-xl ${opp.outsourcedCount > 0 ? 'bg-rose-950/90 border border-rose-400' : 'bg-slate-950 border border-slate-700'} p-2 text-left flex flex-col justify-between gap-0.5 shadow">
+          <div class="rounded-xl ${opp.outsourcedCount > 0 ? 'bg-rose-950/90 border border-rose-400' : 'bg-slate-950 border border-slate-700'} p-2 text-left flex flex-col justify-between gap-0.5 shadow">
             <div class="flex items-center justify-between w-full">
               <span class="text-[11px] sm:text-xs font-extrabold ${opp.outsourcedCount > 0 ? 'text-rose-200' : 'text-slate-300'} whitespace-nowrap">${(typeof getThemeTerms === 'function' ? getThemeTerms().outIcon : '💸')} ${(typeof getThemeTerms === 'function' ? getThemeTerms().outFull : '高價外包顧問')}</span>
-              <span class="text-[10px] font-black text-sky-300">🔍</span>
             </div>
             <div class="flex items-baseline justify-between w-full mt-0.5">
               <span class="text-xs sm:text-sm font-black text-white whitespace-nowrap">${opp.outsourcedCount} 人</span>
               <span class="text-[11px] font-black ${opp.outsourcedCount > 0 ? 'text-rose-400' : 'text-slate-400'} whitespace-nowrap">${(typeof getThemeTerms === 'function' ? getThemeTerms().currencyIcon : '💵')}-${opp.outsourcedCount * 3}/回</span>
             </div>
             <div class="text-[10px] text-slate-300 font-semibold truncate">${opp.outsourcedCount > 0 ? '每名每回耗3資金!' : '無外包赤字'}</div>
-          </button>
+          </div>
         </div>
       </div>
     `;
-    summaryEl.querySelector('[data-opp-modal-eng]')?.addEventListener('click', () => openEngineersInspectorModal(opp.id));
     summaryEl.querySelector('[data-opp-modal-crises]')?.addEventListener('click', () => openCrisesInspectorModal(opp.id));
-    summaryEl.querySelector('[data-opp-modal-outsourced]')?.addEventListener('click', () => openOutsourcedInspectorModal(opp.id));
   }
 
   // Part 3: 4 Departments — Pure 2:3 Character Cards Only (No redundant outer box, header, or footer text!)

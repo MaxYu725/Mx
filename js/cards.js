@@ -103,7 +103,7 @@ const THEME_PACKS = {
     id: 'CLASSIC_BURN_RATE',
     label: '💼 原版 Burn Rate (矽谷新創動態CSS版)',
     shortLabel: '💼 原版 Burn Rate',
-    useFullCardArt: false,
+    useFullCardArt: true,
     terms: {
       appTitle: 'Burn Rate：矽谷新創燒錢爭霸戰',
       shortTitle: 'Burn Rate 燒錢戰',
@@ -145,23 +145,23 @@ const THEME_PACKS = {
       PURPLE: { name: '董事會高層', short: '副總', icon: '👔' }
     },
     employees: {
-      E_R_VP3:     { title: '王牌研發副總', subTitle: 'VP of Development', svg: '💻' },
-      E_R_VP2:     { title: '資深研發副總', subTitle: 'VP of Development', svg: '🖥️' },
-      E_R_VP0:     { title: '外行空降副總', subTitle: '0級庸才副總 (鎖死0級)', svg: '🤡' },
-      E_R_M1:      { title: '系統研發經理', subTitle: 'Development Manager', svg: '⚙️' },
-      E_R_ENG:     { title: '軟體工程師',   subTitle: 'Engineer (抵1爛點子)', svg: '👨‍💻' },
-      E_Y_VP1:     { title: '公關業務副總', subTitle: 'VP of Sales', svg: '📣' },
-      E_Y_VP0:     { title: '嘴砲業務副總', subTitle: '0級庸才副總 (鎖死0級)', svg: '🫧' },
-      E_Y_M2:      { title: '王牌業務總監', subTitle: 'Senior Sales Manager', svg: '🎯' },
-      E_Y_M1:      { title: '專案業務經理', subTitle: 'Sales Manager', svg: '📊' },
-      E_B_VP3:     { title: '人資執行副總', subTitle: 'VP of Human Resources', svg: '🏛️' },
-      E_B_VP2:     { title: '資深人資副總', subTitle: 'VP of Human Resources', svg: '📋' },
-      E_B_M2:      { title: '首席獵頭總監', subTitle: 'Senior HR Manager', svg: '🕵️' },
-      E_B_M1:      { title: '招募人資經理', subTitle: 'HR Manager', svg: '🤝' },
-      E_G_VP3:     { title: '首席財務副總', subTitle: 'VP of Finance (CFO)', svg: '🏦' },
-      E_G_VP2:     { title: '資本營運副總', subTitle: 'VP of Finance', svg: '⚖️' },
-      E_G_VP2_LOW: { title: '節流財務副總', subTitle: '低薪副總 (2級/僅$1!)', svg: '🧮' },
-      E_G_M1:      { title: '企業財務經理', subTitle: 'Finance Manager', svg: '💹' }
+      E_R_VP3:     { title: '程式壞', copyTitles: ['程式壞'], subTitle: '研發部副總 (3級/$2)', svg: '💻' },
+      E_R_VP2:     { title: '甄識整', copyTitles: ['甄識整'], subTitle: '研發部副總 (2級/$2)', svg: '🖥️' },
+      E_R_VP0:     { title: '包冇Bug', copyTitles: ['包冇Bug'], subTitle: '研發部副總 (0級/$2)', svg: '🤡' },
+      E_R_M1:      { title: '伍零二', copyTitles: ['伍零二', '吳識寫', '馬上改'], subTitle: '研發部經理 (1級/$1)', svg: '⚙️' },
+      E_R_ENG:     { title: '工程師', copyTitles: ['工程師'], subTitle: '研發部工程師 (抵1爛點子/$1)', svg: '👨‍💻' },
+      E_Y_VP1:     { title: '易成交', copyTitles: ['易成交', '包你掂'], subTitle: '業務部副總 (1級/$2)', svg: '📣' },
+      E_Y_VP0:     { title: '甄抵買', copyTitles: ['甄抵買'], subTitle: '業務部副總 (0級/$2)', svg: '🫧' },
+      E_Y_M2:      { title: '裘訂單', copyTitles: ['裘訂單', '馬上賣'], subTitle: '業務部經理 (2級/$1)', svg: '🎯' },
+      E_Y_M1:      { title: '高佣金', copyTitles: ['高佣金', '黎幫襯', '張大單'], subTitle: '業務部經理 (1級/$1)', svg: '📊' },
+      E_B_VP3:     { title: '吳得閒', copyTitles: ['吳得閒'], subTitle: '人資部副總 (3級/$2)', svg: '🏛️' },
+      E_B_VP2:     { title: '鍾意請', copyTitles: ['鍾意請', '何必請'], subTitle: '人資部副總 (2級/$2)', svg: '📋' },
+      E_B_M2:      { title: '裘加薪', copyTitles: ['裘加薪'], subTitle: '人資部經理 (2級/$1)', svg: '🕵️' },
+      E_B_M1:      { title: '黎加班', copyTitles: ['黎加班', '關你事', '甄有才', '任你揀'], subTitle: '人資部經理 (1級/$1)', svg: '🤝' },
+      E_G_VP3:     { title: '吳使錢', copyTitles: ['吳使錢'], subTitle: '財務部副總 (3級/$2)', svg: '🏦' },
+      E_G_VP2:     { title: '利滾利', copyTitles: ['利滾利'], subTitle: '財務部副總 (2級/$2)', svg: '⚖️' },
+      E_G_VP2_LOW: { title: '甄有錢', copyTitles: ['甄有錢'], subTitle: '財務部低薪副總 (2級/$1!)', svg: '🧮' },
+      E_G_M1:      { title: '錢唔夠', copyTitles: ['錢唔夠', '馬上富', '毛利高', '余現金', '蕭本光'], subTitle: '財務部經理 (1級/$1)', svg: '💹' }
     },
     actions: {
       FUND_5:  { title: '天使輪注資 +5',  subTitle: 'Funding +5',  desc: '獲得創投 5 百萬美元營運資金。', svg: '💵' },
@@ -316,9 +316,11 @@ function applyThemeToRegistry(themeId) {
   Object.values(CARDS_BY_ID).forEach(c => {
     if (!c || !c.tplId) return;
     if (c.cardKind === 'EMPLOYEE' && pack.employees[c.tplId]) {
-      c.title = pack.employees[c.tplId].title;
-      c.origTitle = pack.employees[c.tplId].subTitle;
-      c.svg = pack.employees[c.tplId].svg;
+      const tEmp = pack.employees[c.tplId];
+      const copyTitles = tEmp.copyTitles;
+      c.title = (Array.isArray(copyTitles) && copyTitles[c.copyIdx || 0]) ? copyTitles[c.copyIdx || 0] : tEmp.title;
+      c.origTitle = tEmp.subTitle;
+      c.svg = tEmp.svg;
     } else if (c.cardKind === 'ACTION' && c.actGroup && pack.actions[c.actGroup]) {
       c.title = pack.actions[c.actGroup].title;
       c.origTitle = pack.actions[c.actGroup].subTitle;
@@ -345,10 +347,15 @@ function initCardRegistry() {
   let empCounter = 1;
   let actCounter = 1;
 
+  const activePack = THEME_PACKS[activeThemeId] || THEME_PACKS.CLASSIC_BURN_RATE;
   EMPLOYEE_RECIPES.forEach(r => {
+    const tEmp = activePack.employees[r.tplId];
+    const copyTitles = tEmp && tEmp.copyTitles;
     for (let i = 0; i < r.count; i++) {
       const uid = `emp_${String(empCounter++).padStart(3, '0')}`;
-      CARDS_BY_ID[uid] = { ...r, uid, cardKind: 'EMPLOYEE' };
+      const copyTitle = (Array.isArray(copyTitles) && copyTitles[i]) ? copyTitles[i] : r.title;
+      const artKey = `${r.tplId}_${i}`;
+      CARDS_BY_ID[uid] = { ...r, title: copyTitle, copyIdx: i, artKey, uid, cardKind: 'EMPLOYEE' };
       jobBank[r.dept].push(uid);
     }
   });
