@@ -2417,3 +2417,89 @@ body.is-landscape-active .mode-d-sheet-card.ls-moded-sheet-wide {
 :root {
   --ls-modal-card-h: clamp(86px, calc(var(--app-h, 390px) * 0.325), 142px);
 }
+
+/* === V14.1.3 INSPECTOR MODAL & JOB BANK MODAL LANDSCAPE CARD FIT (ZERO CLIPPING) === */
+body.is-landscape-active #inspectorModal > div {
+  max-width: min(calc(var(--app-w, 100vw) * 0.94), 820px) !important;
+  max-height: calc(var(--app-h, 100vh) * 0.94) !important;
+  padding: 0.55rem 0.85rem !important;
+  overflow: hidden !important;
+  display: flex !important;
+  flex-direction: column !important;
+}
+
+/* Convert #inspectorCardsGrid in Landscape Mode into a Safe Horizontal Scroll Row where every card fits 100% of its height with zero bottom or left clipping! */
+body.is-landscape-active #inspectorCardsGrid {
+  display: flex !important;
+  flex-wrap: nowrap !important;
+  align-items: center !important;
+  justify-content: flex-start !important;
+  gap: 0.65rem !important;
+  width: 100% !important;
+  overflow-x: auto !important;
+  overflow-y: hidden !important;
+  padding: 6px 8px 8px 8px !important;
+  flex: 1 1 auto !important;
+  min-height: 0 !important;
+  -webkit-overflow-scrolling: touch;
+}
+
+/* Safe centering when few cards, safe left=0 start when many cards (never clips left edge!) */
+body.is-landscape-active #inspectorCardsGrid > *:first-child {
+  margin-left: auto !important;
+}
+body.is-landscape-active #inspectorCardsGrid > *:last-child {
+  margin-right: auto !important;
+}
+
+/* Every card inside #inspectorCardsGrid scales to fit 100% vertically between header and footer */
+body.is-landscape-active #inspectorCardsGrid > .ls-inspector-card-item,
+body.is-landscape-active #inspectorCardsGrid > .modal-pure-card,
+body.is-landscape-active #inspectorCardsGrid > div[data-emp-uid],
+body.is-landscape-active #inspectorCardsGrid > div[data-card-uid] {
+  height: clamp(124px, calc(var(--app-h, 390px) * 0.455), 188px) !important;
+  aspect-ratio: 2 / 3 !important;
+  width: auto !important;
+  max-width: none !important;
+  flex: 0 0 auto !important;
+  position: relative !important;
+}
+
+body.is-landscape-active #inspectorCardsGrid .ls-inspector-card-item > div[data-emp-uid],
+body.is-landscape-active #inspectorCardsGrid .ls-inspector-card-item > div[data-card-uid] {
+  width: 100% !important;
+  height: 100% !important;
+}
+
+body.is-landscape-active #inspectorCardsGrid .full-gpt-card-img {
+  width: 100% !important;
+  height: 100% !important;
+  object-fit: fill !important;
+  display: block !important;
+}
+
+body.is-landscape-active #inspectorModalFooter {
+  margin-top: 0.35rem !important;
+  padding-top: 0.4rem !important;
+  flex-shrink: 0 !important;
+}
+
+/* Also ensure #jobBankModal (Talent Pool & Opponent Castle Inspector) fits cleanly in Landscape Mode */
+body.is-landscape-active #jobBankModal > div {
+  max-width: min(calc(var(--app-w, 100vw) * 0.94), 800px) !important;
+  max-height: calc(var(--app-h, 100vh) * 0.94) !important;
+  padding: 0.55rem 0.85rem !important;
+}
+
+body.is-landscape-active #jobBankModalGrid .modal-pure-card {
+  height: clamp(114px, calc(var(--app-h, 390px) * 0.42), 176px) !important;
+  aspect-ratio: 2 / 3 !important;
+  width: auto !important;
+  max-width: none !important;
+  margin: 0 auto !important;
+}
+
+body.is-landscape-active #jobBankModalGrid .modal-pure-card > div[data-emp-uid] {
+  width: 100% !important;
+  height: 100% !important;
+}

@@ -3920,7 +3920,7 @@ function openDepartmentInspectorModal(playerId, dept) {
   document.getElementById('inspectorModalFooter').classList.add('hidden');
 
   const grid = document.getElementById('inspectorCardsGrid');
-  grid.innerHTML = arr.map((uid, idx) => renderEmployeeCardHTML(uid, '', idx === 0 ? '👑主管' : `下屬#${idx}`)).join('');
+  grid.innerHTML = arr.map((uid, idx) => `<div class="ls-inspector-card-item">${renderEmployeeCardHTML(uid, 'w-full h-full', idx === 0 ? '👑主管' : `下屬#${idx}`)}</div>`).join('');
   document.getElementById('inspectorModal').classList.remove('hidden');
 }
 
@@ -3933,7 +3933,7 @@ function openCrisesInspectorModal(playerId) {
   document.getElementById('inspectorCardsGrid').innerHTML =
     player.crises.length === 0
       ? `<div class="text-xs text-slate-400 py-4">目前場上沒有任何討伐危機！</div>`
-      : player.crises.map(uid => renderActionCardHTML(uid)).join('');
+      : player.crises.map(uid => `<div class="ls-inspector-card-item">${renderActionCardHTML(uid, 'w-full h-full')}</div>`).join('');
   document.getElementById('inspectorModal').classList.remove('hidden');
 }
 
@@ -3946,7 +3946,7 @@ function openEngineersInspectorModal(playerId) {
   document.getElementById('inspectorCardsGrid').innerHTML =
     player.engineers.length === 0
       ? `<div class="text-xs text-slate-400 py-4">目前無在職苦工</div>`
-      : player.engineers.map((uid, i) => renderEmployeeCardHTML(uid, '', `苦工#${i+1}`)).join('');
+      : player.engineers.map((uid, i) => `<div class="ls-inspector-card-item">${renderEmployeeCardHTML(uid, 'w-full h-full', `苦工#${i+1}`)}</div>`).join('');
   document.getElementById('inspectorModal').classList.remove('hidden');
 }
 
@@ -3955,24 +3955,46 @@ function openMassLayoffModal(cardUid) {
   uiSelection.layoffSet.clear();
   const allEmps = getAllPlayerEmployeeUids(localPlayer);
   const totalVPs = getTotalVPCount(localPlayer);
+  const terms = typeof getThemeTerms === 'function' ? getThemeTerms() : {};
+  const isDemon = (typeof getActiveTheme === 'function' && getActiveTheme().id === 'DEMON_CASTLE');
+  const vpName = terms.vpName || (isDemon ? '皇室' : '副總');
+  const actCard = CARDS_BY_ID[cardUid];
+  const cardTitle = actCard ? actCard.title : (isDemon ? '血祭大掃除' : '組織重組大裁員');
 
-  document.getElementById('inspectorModalTitle').textContent = '🩸 血祭大掃除（裁員）：請勾選要遣散的部下';
-  document.getElementById('inspectorModalSubtitle').textContent = `須保留至少 2 名在職皇室（目前你有 ${totalVPs} 名皇室）。`;
+  document.getElementById('inspectorModalTitle').textContent = `🩸 ${cardTitle}（裁員）：請勾選要遣散的成員`;
+  document.getElementById('inspectorModalSubtitle').textContent = `須保留至少 2 名在職${vpName}（目前你有 ${totalVPs} 名${vpName}，可左右滑動檢視全部成員）。`;
   document.getElementById('inspectorModalFooter').classList.remove('hidden');
+  const confirmBtn = document.getElementById('btnConfirmMassLayoff');
+  if (confirmBtn) confirmBtn.textContent = `⚡ 確認執行${cardTitle}`;
 
   function renderLayoffGrid() {
     const selectedVPs = [...uiSelection.layoffSet].filter(id => CARDS_BY_ID[id].isVP).length;
     const canSelectMoreVP = (totalVPs - selectedVPs) > 2;
-    document.getElementById('inspectorFooterHint').textContent = `已選 ${uiSelection.layoffSet.size} 人（保留皇室：${totalVPs - selectedVPs} 名）`;
+    const savedSalary = [...uiSelection.layoffSet].reduce((sum, id) => sum + (CARDS_BY_ID[id]?.salary || 0), 0);
+    document.getElementById('inspectorFooterHint').textContent = `已選 ${uiSelection.layoffSet.size} 人（每回省 🔥-${savedSalary} · 保留${vpName}：${totalVPs - selectedVPs} 名）`;
 
     const grid = document.getElementById('inspectorCardsGrid');
     grid.innerHTML = allEmps.map(eUid => {
       const emp = CARDS_BY_ID[eUid];
       const checked = uiSelection.layoffSet.has(eUid);
       const lockedVP = emp.isVP && !checked && !canSelectMoreVP;
+      const deptArr = localPlayer.departments[emp.dept] || [];
+      const roleLabel = emp.role === 'ENGINEER'
+        ? `⚒${terms.engName || '苦工'}`
+        : emp.isVP
+          ? `👑${vpName}`
+          : (deptArr[0] === eUid ? '🏛️現任主管' : '➕部門下屬');
+      const statusPill = checked
+        ? `<span class="absolute top-1 right-1 px-1.5 py-0.5 rounded bg-rose-600 border border-amber-300 text-white text-[9.5px] font-black shadow-lg z-30">✔ 已勾選</span>`
+        : lockedVP
+          ? `<span class="absolute top-1 right-1 px-1.5 py-0.5 rounded bg-slate-900/95 border border-slate-600 text-amber-300 text-[9px] font-black shadow-lg z-30">🔒 須保留</span>`
+          : `<span class="absolute top-1 right-1 px-1.5 py-0.5 rounded bg-sky-500 text-slate-950 text-[9.5px] font-black shadow-lg z-30">點擊勾選</span>`;
+      const rolePill = `<span class="absolute top-1 left-1 px-1.5 py-0.5 rounded bg-slate-950/90 border border-white/25 text-amber-200 text-[8.5px] font-black shadow z-30">${roleLabel}</span>`;
       return `
-        <div data-layoff-uid="${eUid}" class="relative ${lockedVP ? 'opacity-40' : 'cursor-pointer'}">
-          ${renderEmployeeCardHTML(eUid, checked ? 'ring-4 ring-rose-500' : '', checked ? '✔已勾選' : lockedVP ? '🔒保留' : '點擊勾選')}
+        <div data-layoff-uid="${eUid}" class="ls-inspector-card-item relative ${lockedVP ? 'opacity-45' : 'cursor-pointer'}">
+          ${renderEmployeeCardHTML(eUid, `w-full h-full ${checked ? 'ring-4 ring-rose-500 border-rose-400' : ''}`, '')}
+          ${rolePill}
+          ${statusPill}
         </div>
       `;
     }).join('');
