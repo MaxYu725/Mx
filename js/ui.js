@@ -281,7 +281,7 @@ function showVsDuelBanner(attackerName, cardIcon, cardTitle, defenderName, effec
   const isDefMe = (defenderId && defenderId === myId) || (!defenderId && defenderName && defenderName.includes('你'));
 
   const shortAtk = isAtkMe ? '👑我方' : ('😈' + escapeHtml(getShortPlayerName(attackerName)));
-  const shortDef = defenderName ? (isDefMe ? '👑我方' : ('😈' + escapeHtml(getShortPlayerName(defenderName))) : '';
+  const shortDef = defenderName ? (isDefMe ? '👑我方' : ('😈' + escapeHtml(getShortPlayerName(defenderName)))) : '';
 
   if (isSelfBuff) {
     banner.style.background = 'linear-gradient(135deg, rgba(6, 78, 59, 0.96) 0%, rgba(15, 23, 42, 0.98) 100%)';
@@ -304,7 +304,7 @@ function showVsDuelBanner(attackerName, cardIcon, cardTitle, defenderName, effec
       <div class="flex items-center justify-between gap-1.5 min-w-0">
         <div class="px-2 py-1 rounded-lg bg-slate-950 border border-amber-400 text-center shrink-0">
           <div class="text-[9px] text-amber-300 font-bold leading-none">⚔️攻方</div>
-          <div class="text-xs font-black text-white mt-0.5 whitespace-nowrap">${escapeHtml(shortAtk)}</div>
+          <div class="text-xs font-black text-white mt-0.5 whitespace-nowrap">${shortAtk}</div>
         </div>
         <div class="flex-1 rounded-lg bg-rose-950/95 border border-rose-400 px-2 py-1 flex items-center justify-between gap-1.5 min-w-0">
           <div class="flex items-center gap-1 min-w-0">
@@ -315,7 +315,7 @@ function showVsDuelBanner(attackerName, cardIcon, cardTitle, defenderName, effec
         </div>
         <div class="px-2 py-1 rounded-lg bg-slate-950 border border-rose-400 text-center shrink-0">
           <div class="text-[9px] text-rose-300 font-bold leading-none">🎯目標</div>
-          <div class="text-xs font-black text-white mt-0.5 whitespace-nowrap">${escapeHtml(shortDef)}</div>
+          <div class="text-xs font-black text-white mt-0.5 whitespace-nowrap">${shortDef}</div>
         </div>
       </div>
     `;
