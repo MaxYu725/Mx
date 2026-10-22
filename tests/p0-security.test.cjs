@@ -18,7 +18,10 @@ function gameHarness() {
   for (const file of ['js/cards.js', 'js/engine.js', 'js/session.js']) {
     vm.runInContext(fs.readFileSync(path.join(__dirname, '..', file), 'utf8'), sandbox, { filename: file });
   }
-  return vm.runInContext('({ createInitialGameState, evaluateCardPlayability, consumeHandCard, sanitizeStateForSeat, escapeHtml, validatePlayActionTargets, handleIncomingNetworkPacket, authoritativeDiscardCards, authoritativeSettleAndAdvanceTurn, gameSession, publicLobbyState, CARDS_BY_ID, generateRandomCode })', sandbox);
+  const game = vm.runInContext('({ createInitialGameState, evaluateCardPlayability, consumeHandCard, sanitizeStateForSeat, escapeHtml, validatePlayActionTargets, handleIncomingNetworkPacket, authoritativeDiscardCards, authoritativeSettleAndAdvanceTurn, gameSession, publicLobbyState, CARDS_BY_ID, generateRandomCode, ensurePeerJsReady, createOnlineHostRoom, joinOnlineRoomAsClient })', sandbox);
+  game.window = window;
+  game.document = document;
+  return game;
 }
 
 test('unowned cards cannot be played or added to the discard pile', () => {
@@ -98,4 +101,85 @@ test('HTML encoding and stronger room-code format', () => {
   const x = gameHarness();
   assert.match(x.escapeHtml('<img onerror="bad">'), /^&lt;img /);
   assert.match(x.generateRandomCode(8), /^[A-HJ-NP-Z2-9]{8}$/);
+});
+
+test('PeerJS loader retries another CDN before reporting failure', async () => {
+  const x = gameHarness();
+  const scripts = [];
+  class FakePeer {}
+  x.document.createElement = () => ({ remove() {}, style: {} });
+  x.document.head = {
+    appendChild(script) {
+      scripts.push(script.src);
+      if (scripts.length === 1) script.onerror();
+      else { x.window.Peer = FakePeer; script.onload(); }
+    },
+  };
+  const loaded = await x.ensurePeerJsReady();
+  assert.equal(loaded, FakePeer);
+  assert.equal(scripts.length, 2);
+  assert.match(scripts[0], /cdn\\.jsdelivr\\.net/);
+  assert.match(scripts[1], /unpkg\\.com/);
+});
+
+test('a simulated encrypted PeerJS transport can admit a fog-protected guest', async () => {
+  const nodes = new Map();
+  let guestSequence = 0;
+  class Connection {
+    constructor() { this.listeners = {}; this.open = false; }
+    on(type, handler) { this.listeners[type] = handler; }
+    send(packet) {
+      if (this.remote.listeners.data) this.remote.listeners.data(packet);
+    }
+    close() { this.open = false; if (this.listeners.close) this.listeners.close(); }
+  }
+  class FakePeer {
+    constructor(id) {
+      this.id = id || 'guest-' + ++guestSequence;
+      this.listeners = {};
+      nodes.set(this.id, this);
+    }
+    on(type, handler) { this.listeners[type] = handler; }
+    emit(type, ...args) { if (this.listeners[type]) this.listeners[type](...args); }
+    connect(id) {
+      const host = nodes.get(id);
+      if (!host) throw new Error('host not registered');
+      const mine = new Connection(), theirs = new Connection();
+      mine.remote = theirs;
+      theirs.remote = mine;
+      host.emit('connection', theirs);
+      Promise.resolve().then(() => {
+        mine.open = theirs.open = true;
+        if (mine.listeners.open) mine.listeners.open();
+      });
+      return mine;
+    }
+    destroy() { nodes.delete(this.id); }
+  }
+  function prepare(x) {
+    x.window.Peer = FakePeer;
+    x.document.createElement = () => ({ style: {}, remove() {}, className: '', textContent: '' });
+    x.document.body = { appendChild() {} };
+  }
+  const host = gameHarness(), guest = gameHarness();
+  prepare(host); prepare(guest);
+  host.createOnlineHostRoom('AB88QX27');
+  await Promise.resolve();
+  const room = nodes.get('dbr-v13-room-AB88QX27');
+  assert.ok(room);
+  room.emit('open');
+  assert.equal(host.gameSession.peerStatus, 'ONLINE');
+  assert.equal(host.gameSession.lobbyState.fogOfWar, true);
+  guest.joinOnlineRoomAsClient('AB88QX27', 'Guest Player');
+  await Promise.resolve();
+  const guestPeer = nodes.get('guest-1');
+  assert.ok(guestPeer);
+  guestPeer.emit('open');
+  await Promise.resolve();
+  await Promise.resolve();
+  assert.equal(guest.gameSession.peerStatus, 'ONLINE');
+  assert.equal(guest.gameSession.localSeatId, 'p2');
+  assert.equal(host.gameSession.lobbyState.seats[1].role, 'HUMAN');
+  assert.equal(guest.gameSession.lobbyState.fogOfWar, true);
+  assert.equal(JSON.stringify(guest.gameSession.lobbyState).includes(host.gameSession.clientToken), false);
 });
