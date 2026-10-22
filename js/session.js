@@ -720,12 +720,15 @@ function authoritativeDraftPick(state, dept) {
   addEmployeeToPlayer(picker, topUid);
   addLog(state, `🎲 首輪召喚：【${picker.name}】挑選了【${DEPT_META[dept].name}・${emp.title}】！`);
 
+  const isFinalPick = (state.draft.totalPicked + 1) >= state.draft.targetTotal;
   recordVfxEvent(state, {
     vfxType: 'DRAFT_PICK',
     actorId: picker.id,
     actorName: picker.name,
     dept,
+    empUid: topUid,
     empTitle: emp.title,
+    isFinalPick,
     flippedDeptKey: `${picker.id}_${emp.dept}`
   });
 
@@ -736,7 +739,11 @@ function authoritativeDraftPick(state, dept) {
     state.turn.activePlayerIndex = 0;
     addLog(state, `🔥 首輪召喚完成！每位魔王獲發 6 張功能卡，正式進入回合對決！`);
     syncMasterStateToClientsAndRender();
-    checkAndScheduleHostAI();
+    if (typeof window.runLsPostDraftDealSequence === 'function' && typeof isLandscapeModeActive === 'function' && isLandscapeModeActive()) {
+      window.runLsPostDraftDealSequence(state, () => checkAndScheduleHostAI());
+    } else {
+      checkAndScheduleHostAI();
+    }
   } else {
     state.draft.pickerIndex = (state.draft.pickerIndex + 1) % state.players.length;
     state.draft.round = Math.floor(state.draft.totalPicked / state.players.length) + 1;
@@ -764,6 +771,7 @@ function authoritativePlayCard(state, action) {
     recordVfxEvent(state, {
       vfxType: 'PLAY_CARD',
       effect: 'GAIN_FUNDS',
+      cardUid: card.uid,
       actorId: player.id,
       actorName: player.name,
       cardTitle: card.title,
@@ -784,6 +792,8 @@ function authoritativePlayCard(state, action) {
     recordVfxEvent(state, {
       vfxType: 'PLAY_CARD',
       effect: 'RELEASE_CRISIS',
+      cardUid: card.uid,
+      crisisUid,
       actorId: player.id,
       actorName: player.name,
       crisisTitle: cTitle,
@@ -801,6 +811,8 @@ function authoritativePlayCard(state, action) {
     recordVfxEvent(state, {
       vfxType: 'PLAY_CARD',
       effect: 'HIRE_BANK',
+      cardUid: card.uid,
+      empUid,
       actorId: player.id,
       actorName: player.name,
       dept,
@@ -826,6 +838,8 @@ function authoritativePlayCard(state, action) {
     recordVfxEvent(state, {
       vfxType: 'PLAY_CARD',
       effect: 'FIRE_OWN',
+      cardUid: card.uid,
+      empUid,
       actorId: player.id,
       actorName: player.name,
       dept: emp.dept,
@@ -844,6 +858,7 @@ function authoritativePlayCard(state, action) {
     recordVfxEvent(state, {
       vfxType: 'PLAY_CARD',
       effect: 'BAD_IDEA',
+      cardUid: card.uid,
       actorId: player.id,
       actorName: player.name,
       targetPlayerId: opp.id,
@@ -864,6 +879,8 @@ function authoritativePlayCard(state, action) {
     recordVfxEvent(state, {
       vfxType: 'PLAY_CARD',
       effect: 'FORCE_HIRE',
+      cardUid: card.uid,
+      empUid,
       actorId: player.id,
       actorName: player.name,
       targetPlayerId: opp.id,
@@ -894,6 +911,9 @@ function authoritativePlayCard(state, action) {
     recordVfxEvent(state, {
       vfxType: 'PLAY_CARD',
       effect: 'POACH_ENEMY',
+      cardUid: card.uid,
+      empUid,
+      dept: emp.dept,
       actorId: player.id,
       actorName: player.name,
       targetPlayerId: opp.id,
@@ -915,6 +935,9 @@ function authoritativePlayCard(state, action) {
     recordVfxEvent(state, {
       vfxType: 'PLAY_CARD',
       effect: 'VP_KICK_ENEMY',
+      cardUid: card.uid,
+      empUid,
+      dept: emp.dept,
       actorId: player.id,
       actorName: player.name,
       targetPlayerId: opp.id,
@@ -932,6 +955,7 @@ function authoritativePlayCard(state, action) {
     recordVfxEvent(state, {
       vfxType: 'PLAY_CARD',
       effect: 'VP_DOUBLE_PAY',
+      cardUid: card.uid,
       actorId: player.id,
       actorName: player.name,
       targetPlayerId: opp.id,
@@ -951,6 +975,8 @@ function authoritativePlayCard(state, action) {
     recordVfxEvent(state, {
       vfxType: 'PLAY_CARD',
       effect: 'VP_MASS_LAYOFF',
+      cardUid: card.uid,
+      layoffUids,
       actorId: player.id,
       actorName: player.name,
       layoffCount: layoffUids.length
@@ -985,7 +1011,8 @@ function authoritativeDiscardCards(state, cardUids) {
     vfxType: 'DISCARD',
     actorId: player.id,
     actorName: player.name,
-    count: validToDiscard.length
+    count: validToDiscard.length,
+    cardUids: [...validToDiscard]
   });
 
   if (typeof resetSelectionState === 'function') resetSelectionState();
@@ -1011,6 +1038,7 @@ function authoritativeSettleAndAdvanceTurn(state) {
 
   addLog(state, `🔥 步驟二＆三結算：【${player.name}】支付魔力供品 ${burnAmount} 魔晶${wasDouble ? ' (含雙倍暴動×2!)' : ''}，剩餘 ${player.crystals} 魔晶。`);
 
+  let drawnUids = [];
   if (player.crystals < 0) {
     player.isEliminated = true;
     getAllPlayerEmployeeUids(player).forEach(eUid => {
@@ -1024,7 +1052,7 @@ function authoritativeSettleAndAdvanceTurn(state) {
     player.outsourcedCount = 0;
     addLog(state, `💥 破產崩潰！【${player.name}】魔晶跌破零點，魔王城倒閉退出競爭！`);
   } else {
-    drawCardsForPlayer(state, player, 6);
+    drawnUids = drawCardsForPlayer(state, player, 6) || [];
   }
 
   recordVfxEvent(state, {
@@ -1034,7 +1062,8 @@ function authoritativeSettleAndAdvanceTurn(state) {
     burnAmount,
     wasDouble,
     remainingCrystals: player.crystals,
-    eliminated: player.isEliminated
+    eliminated: player.isEliminated,
+    drawnUids
   });
 
   const survivors = state.players.filter(p => !p.isEliminated);
@@ -1288,10 +1317,24 @@ function runAIStep() {
   if (canDiscard && ai.hand.length > 0) {
     const remaining = state.turn.maxActions - state.turn.actionsUsed;
     const toDiscard = ai.hand.slice(0, Math.min(remaining, 3));
-    toDiscard.forEach(uid => consumeHandCard(state, ai, uid, true));
-    state.turn.actionsUsed += toDiscard.length;
-    state.turn.hasDiscardedCard = true;
-    addLog(state, `🗑️ 【${ai.name}】棄置了 ${toDiscard.length} 張手牌以更新法術牌組。`);
+    if (toDiscard.length > 0) {
+      toDiscard.forEach(uid => consumeHandCard(state, ai, uid, true));
+      state.turn.actionsUsed += toDiscard.length;
+      state.turn.hasDiscardedCard = true;
+      addLog(state, `🗑️ 【${ai.name}】棄置了 ${toDiscard.length} 張手牌以更新法術牌組。`);
+      recordVfxEvent(state, {
+        vfxType: 'DISCARD',
+        actorId: ai.id,
+        actorName: ai.name,
+        count: toDiscard.length,
+        cardUids: [...toDiscard]
+      });
+      syncMasterStateToClientsAndRender();
+      const dDelay = (typeof animSpeedMultiplier !== 'undefined' && animSpeedMultiplier === 2) ? 450 : 750;
+      clearTimeout(aiTimer);
+      aiTimer = setTimeout(() => authoritativeSettleAndAdvanceTurn(state), dDelay);
+      return;
+    }
   }
 
   authoritativeSettleAndAdvanceTurn(state);
@@ -1336,7 +1379,11 @@ function startMatchFromLobby(quickStart = false) {
     document.getElementById('gameOverModal')?.classList.add('hidden');
     broadcastLobbyState();
     broadcastHostState();
-    checkAndScheduleHostAI();
+    if (typeof window.startLsOpeningCeremony === 'function' && typeof isLandscapeModeActive === 'function' && isLandscapeModeActive()) {
+      window.startLsOpeningCeremony(gameSession.hostMasterState, quickStart, () => checkAndScheduleHostAI());
+    } else {
+      checkAndScheduleHostAI();
+    }
   } else {
     cleanupNetworkChannels();
     gameSession.mode = 'SOLO';
@@ -1355,7 +1402,12 @@ function startMatchFromLobby(quickStart = false) {
     if (typeof resetSelectionState === 'function') resetSelectionState();
     document.getElementById('lobbyModal')?.classList.add('hidden');
     document.getElementById('gameOverModal')?.classList.add('hidden');
-    if (typeof renderAll === 'function') renderAll();
+    if (typeof window.startLsOpeningCeremony === 'function' && typeof isLandscapeModeActive === 'function' && isLandscapeModeActive()) {
+      window.startLsOpeningCeremony(gameState, quickStart, () => checkAndScheduleHostAI());
+    } else {
+      if (typeof renderAll === 'function') renderAll();
+      checkAndScheduleHostAI();
+    }
   }
 }
 

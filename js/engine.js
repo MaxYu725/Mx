@@ -304,6 +304,7 @@ function getAllPlayerEmployeeUids(player) {
 }
 
 function drawCardsForPlayer(state, player, targetHandSize = 6) {
+  const drawn = [];
   while (player.hand.length < targetHandSize) {
     if (state.actionDeck.length === 0) {
       if (state.discardPile.length === 0) break;
@@ -311,8 +312,13 @@ function drawCardsForPlayer(state, player, targetHandSize = 6) {
       state.discardPile = [];
       addLog(state, '🔄 功能卡抽牌堆已抽乾，將棄牌堆洗勻成為新牌庫！');
     }
-    player.hand.push(state.actionDeck.shift());
+    const nextUid = state.actionDeck.shift();
+    if (nextUid) {
+      player.hand.push(nextUid);
+      drawn.push(nextUid);
+    }
   }
+  return drawn;
 }
 
 function evaluateCardPlayability(state, player, handUid) {

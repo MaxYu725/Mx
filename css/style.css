@@ -1737,3 +1737,183 @@ body.is-landscape-active #inspectorCardsGrid .modal-pure-card {
   object-fit: cover !important;
   display: block !important;
 }
+
+/* === V14.0 FLUID RESPONSIVE CARD SIZING, STACKING & PHYSICAL CARD FLIGHT ENGINE === */
+:root {
+  --ls-dept-card-h: clamp(48px, calc(var(--app-h, 390px) * 0.162), 102px);
+  --ls-pile-card-h: clamp(46px, calc(var(--app-h, 390px) * 0.150), 94px);
+  --ls-hand-card-h: clamp(56px, calc(var(--app-h, 390px) * 0.192), 114px);
+  --ls-modal-card-h: clamp(66px, calc(var(--app-h, 390px) * 0.228), 120px);
+  --ls-moded-left-w: clamp(80px, calc(var(--app-w, 844px) * 0.108), 114px);
+}
+
+/* Override fixed 100% height on .ls-dept-card with fluid --ls-dept-card-h so cards are sleekly scaled to screen size */
+.ls-dept-card {
+  height: var(--ls-dept-card-h) !important;
+  max-height: 100% !important;
+  aspect-ratio: 2 / 3 !important;
+  width: auto !important;
+  flex-shrink: 0 !important;
+  position: relative !important;
+  border-radius: 0.38rem !important;
+  overflow: hidden !important;
+  box-shadow: 0 3px 8px rgba(0, 0, 0, 0.72);
+  transition: transform 0.14s ease, border-color 0.14s ease, opacity 0.18s ease;
+}
+
+.ls-table-pile-card {
+  height: var(--ls-pile-card-h) !important;
+  max-height: calc(100% - 14px) !important;
+  aspect-ratio: 2 / 3 !important;
+  width: auto !important;
+  border-radius: 0.42rem !important;
+  position: relative !important;
+  box-shadow: 0 5px 12px rgba(0, 0, 0, 0.8);
+}
+
+.ls-hand-strip .ls-hand-card {
+  height: var(--ls-hand-card-h) !important;
+  max-height: 96% !important;
+  aspect-ratio: 2 / 3 !important;
+  width: auto !important;
+  max-width: calc((100% - 1.75rem) / 6) !important;
+  flex: 0 1 auto !important;
+}
+
+.ls-target-emp-card {
+  height: var(--ls-modal-card-h) !important;
+  aspect-ratio: 2 / 3 !important;
+  width: auto !important;
+}
+
+.ls-moded-left-col {
+  width: var(--ls-moded-left-w) !important;
+}
+
+/* Department Vertical Card Stacking:
+   Top Card (VP or highest-skill employee) on top, Subordinates stacked below exposing ONLY Salary (left) & Skill (right) */
+.ls-dept-card.ls-dept-card-stacked {
+  display: flex !important;
+  flex-direction: column !important;
+  justify-content: space-between !important;
+  background: #090d16 !important;
+}
+
+.ls-stack-head-wrap {
+  flex: 1 1 0% !important;
+  min-height: 0 !important;
+  width: 100% !important;
+  position: relative !important;
+  overflow: hidden !important;
+  z-index: 10 !important;
+  border-bottom: 1.5px solid rgba(251, 191, 36, 0.75);
+  box-shadow: 0 2px 5px rgba(0, 0, 0, 0.85);
+}
+
+.ls-stack-head-wrap > img {
+  position: absolute !important;
+  top: 0 !important;
+  left: 0 !important;
+  width: 100% !important;
+  height: 100% !important;
+  object-fit: cover !important;
+  object-position: center top !important;
+  display: block !important;
+}
+
+.ls-stack-subs-tray {
+  width: 100% !important;
+  display: flex !important;
+  flex-direction: column !important;
+  flex-shrink: 0 !important;
+  background: #0f172a !important;
+  z-index: 5 !important;
+}
+
+.ls-sub-peek-strip {
+  width: 100% !important;
+  height: 10px !important;
+  padding: 0 2px !important;
+  display: flex !important;
+  align-items: center !important;
+  justify-content: space-between !important;
+  background: linear-gradient(90deg, rgba(15, 23, 42, 0.98), rgba(30, 41, 59, 0.96), rgba(15, 23, 42, 0.98)) !important;
+  border-top: 1px solid rgba(148, 163, 184, 0.35) !important;
+  line-height: 1 !important;
+}
+
+.ls-sub-peek-sal {
+  font-size: 7px !important;
+  font-weight: 900 !important;
+  color: #fda4af !important;
+  letter-spacing: -0.02em;
+}
+
+.ls-sub-peek-skl {
+  font-size: 7px !important;
+  font-weight: 900 !important;
+  color: #fde047 !important;
+  letter-spacing: -0.02em;
+}
+
+/* Deferred Landing & Flying Card Clone Styles */
+.ls-card-in-flight-hidden {
+  opacity: 0 !important;
+  pointer-events: none !important;
+}
+
+.ls-flying-card-clone {
+  position: absolute !important;
+  pointer-events: none !important;
+  z-index: 90 !important;
+  will-change: transform, opacity;
+}
+
+.ls-fx-impact-ring {
+  position: absolute !important;
+  width: 18px !important;
+  height: 18px !important;
+  margin-left: -9px !important;
+  margin-top: -9px !important;
+  border-radius: 9999px !important;
+  border: 2.5px solid #fbbf24;
+  pointer-events: none !important;
+  z-index: 85 !important;
+  animation: lsImpactExpand 0.42s cubic-bezier(0.16, 1, 0.3, 1) forwards;
+}
+
+@keyframes lsImpactExpand {
+  0%   { transform: scale(0.4); opacity: 0.95; }
+  100% { transform: scale(3.1); opacity: 0; }
+}
+
+/* Opening Ceremony Seat & Card Flip Animations */
+.ls-seat-ceremony-hidden {
+  opacity: 0 !important;
+  transform: translateY(10px) scale(0.95) !important;
+  pointer-events: none !important;
+}
+
+.ls-seat-ceremony-visible {
+  opacity: 1;
+  transform: translateY(0) scale(1);
+  transition: opacity 0.26s ease, transform 0.26s cubic-bezier(0.22, 1, 0.36, 1);
+}
+
+.ls-card-flip-in {
+  animation: lsCardFlip3D 0.32s cubic-bezier(0.22, 1, 0.36, 1);
+}
+
+@keyframes lsCardFlip3D {
+  0%   { transform: perspective(400px) rotateY(90deg) scale(0.92); opacity: 0.4; }
+  100% { transform: perspective(400px) rotateY(0deg) scale(1); opacity: 1; }
+}
+
+.ls-center-piles-reveal {
+  animation: lsCenterPilesPop 0.32s cubic-bezier(0.22, 1, 0.36, 1);
+}
+
+@keyframes lsCenterPilesPop {
+  0%   { opacity: 0; transform: scale(0.92); }
+  100% { opacity: 1; transform: scale(1); }
+}
