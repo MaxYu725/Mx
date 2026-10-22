@@ -87,8 +87,85 @@ function showToast(msg, durationMs = 2400) {
   }, durationMs);
 }
 
+let hostKeepAliveTimer = null;
+let clientConnectRetryTimer = null;
+let clientHelloRetryTimer = null;
+let clientRetryCount = 0;
+
+// Multi-STUN + Multi-Protocol TURN Relay Configuration for Mobile 4G/5G (Symmetric NAT / CGNAT) Traversal
+function getPeerJsConfig() {
+  return {
+    debug: 1,
+    pingInterval: 5000,
+    config: {
+      iceTransportPolicy: 'all',
+      iceCandidatePoolSize: 10,
+      iceServers: [
+        { urls: 'stun:stun.l.google.com:19302' },
+        { urls: 'stun:stun1.l.google.com:19302' },
+        { urls: 'stun:stun2.l.google.com:19302' },
+        { urls: 'stun:stun.cloudflare.com:3478' },
+        {
+          urls: [
+            'turn:openrelay.metered.ca:80',
+            'turn:openrelay.metered.ca:443',
+            'turn:openrelay.metered.ca:443?transport=tcp',
+            'turns:openrelay.metered.ca:443?transport=tcp'
+          ],
+          username: 'openrelayproject',
+          credential: 'openrelayproject'
+        },
+        {
+          urls: [
+            'turn:standard.relay.metered.ca:80',
+            'turn:standard.relay.metered.ca:80?transport=tcp',
+            'turn:standard.relay.metered.ca:443',
+            'turns:standard.relay.metered.ca:443?transport=tcp'
+          ],
+          username: 'openrelayproject',
+          credential: 'openrelayproject'
+        }
+      ]
+    }
+  };
+}
+
+// Ensures window.Peer is loaded even on slow mobile networks before initializing WebRTC
+function ensurePeerJsLoaded(callback) {
+  if (typeof window.Peer !== 'undefined') {
+    callback(true);
+    return;
+  }
+  let attempts = 0;
+  const checkTimer = setInterval(() => {
+    attempts += 1;
+    if (typeof window.Peer !== 'undefined') {
+      clearInterval(checkTimer);
+      callback(true);
+    } else if (attempts === 6) {
+      // Inject backup CDN script if primary CDN is slow/blocked
+      const s = document.createElement('script');
+      s.src = 'https://cdn.jsdelivr.net/npm/peerjs@1.5.4/dist/peerjs.min.js';
+      document.head.appendChild(s);
+    } else if (attempts >= 25) {
+      clearInterval(checkTimer);
+      callback(false);
+    }
+  }, 200);
+}
+
+function clearNetworkTimers() {
+  clearInterval(hostKeepAliveTimer);
+  hostKeepAliveTimer = null;
+  clearTimeout(clientConnectRetryTimer);
+  clientConnectRetryTimer = null;
+  clearInterval(clientHelloRetryTimer);
+  clientHelloRetryTimer = null;
+}
+
 function cleanupNetworkChannels() {
   clearTimeout(aiTimer);
+  clearNetworkTimers();
   if (gameSession.bc) {
     try { gameSession.bc.close(); } catch (e) {}
     gameSession.bc = null;
@@ -106,6 +183,7 @@ function cleanupNetworkChannels() {
     gameSession.peer = null;
   }
   gameSession.peerStatus = 'OFFLINE';
+  gameSession.peerDetailMsg = '';
 }
 
 function getPeerIdForRoom(roomCode) {
@@ -162,6 +240,117 @@ function syncHostLobbySettingsFromInputs() {
   }
 }
 
+// Attach Host incoming DataConnection handlers with bidirectional handshake
+function bindHostIncomingConnection(conn) {
+  if (!conn) return;
+  conn.on('data', (data) => {
+    handleIncomingNetworkPacket(data, 'PEER', conn);
+  });
+  conn.on('open', () => {
+    // Immediately send a welcome ping so the mobile client knows the TURN/DataChannel pipe is open
+    try {
+      conn.send({
+        msgType: 'HOST_READY_PING',
+        roomCode: gameSession.roomCode
+      });
+    } catch (e) {}
+  });
+  conn.on('close', () => {
+    handlePeerDisconnect(conn);
+  });
+  conn.on('error', () => {
+    handlePeerDisconnect(conn);
+  });
+}
+
+// Mount or Re-mount the Host PeerJS instance on the signaling server
+function mountHostPeerServer(code) {
+  if (gameSession.mode !== 'HOST' || gameSession.roomCode !== code) return;
+
+  ensurePeerJsLoaded((loaded) => {
+    if (!loaded || gameSession.mode !== 'HOST' || gameSession.roomCode !== code) {
+      gameSession.peerStatus = 'BC_READY';
+      gameSession.peerDetailMsg = 'PeerJS 載入失敗，僅限同機分頁';
+      if (typeof renderLobbyUI === 'function') renderLobbyUI();
+      return;
+    }
+
+    if (gameSession.peer && !gameSession.peer.destroyed) {
+      if (gameSession.peer.disconnected) {
+        try { gameSession.peer.reconnect(); } catch (e) {}
+      }
+      return;
+    }
+
+    try {
+      gameSession.peerStatus = 'CONNECTING';
+      gameSession.peerDetailMsg = '正在註冊跨網房號信令 (含行動網路 TURN 中繼)...';
+      if (typeof renderLobbyUI === 'function') renderLobbyUI();
+
+      const peer = new window.Peer(getPeerIdForRoom(code), getPeerJsConfig());
+      gameSession.peer = peer;
+
+      peer.on('open', () => {
+        gameSession.peerStatus = 'ONLINE';
+        gameSession.peerDetailMsg = '跨網連線就緒（支援手機 4G/5G 與跨 Wi-Fi）';
+        if (typeof renderLobbyUI === 'function') renderLobbyUI();
+        if (typeof renderAll === 'function') renderAll();
+      });
+
+      peer.on('connection', (conn) => {
+        bindHostIncomingConnection(conn);
+      });
+
+      peer.on('disconnected', () => {
+        if (gameSession.mode === 'HOST' && peer && !peer.destroyed) {
+          gameSession.peerStatus = 'CONNECTING';
+          gameSession.peerDetailMsg = '信令背景休眠，正在自動重連...';
+          if (typeof renderLobbyUI === 'function') renderLobbyUI();
+          setTimeout(() => {
+            if (gameSession.mode === 'HOST' && peer && peer.disconnected && !peer.destroyed) {
+              try { peer.reconnect(); } catch (e) {}
+            }
+          }, 600);
+        }
+      });
+
+      peer.on('error', (err) => {
+        const errType = err && err.type ? err.type : 'unknown';
+        if (errType === 'unavailable-id') {
+          // Previous socket for same room code is still releasing on PeerJS broker; retry in 2s
+          gameSession.peerStatus = 'CONNECTING';
+          gameSession.peerDetailMsg = '房號信令釋放中，2 秒後自動重試掛載...';
+          if (typeof renderLobbyUI === 'function') renderLobbyUI();
+          try { peer.destroy(); } catch (e) {}
+          gameSession.peer = null;
+          setTimeout(() => mountHostPeerServer(code), 2000);
+          return;
+        }
+        if (errType === 'network' || errType === 'server-error' || errType === 'socket-error' || errType === 'socket-closed') {
+          gameSession.peerStatus = 'CONNECTING';
+          gameSession.peerDetailMsg = `網路切換 (${errType})，正在自動恢復信令...`;
+          if (typeof renderLobbyUI === 'function') renderLobbyUI();
+          setTimeout(() => {
+            if (gameSession.mode === 'HOST') {
+              if (gameSession.peer && !gameSession.peer.destroyed && gameSession.peer.disconnected) {
+                try { gameSession.peer.reconnect(); } catch (e) {}
+              } else if (!gameSession.peer || gameSession.peer.destroyed) {
+                mountHostPeerServer(code);
+              }
+            }
+          }, 1500);
+          return;
+        }
+        gameSession.peerDetailMsg = `信令狀態提示：${errType}`;
+        if (typeof renderLobbyUI === 'function') renderLobbyUI();
+      });
+    } catch (e) {
+      gameSession.peerStatus = 'BC_READY';
+      if (typeof renderLobbyUI === 'function') renderLobbyUI();
+    }
+  });
+}
+
 // === Host: Create Online Room ===
 function createOnlineHostRoom(customCode = null) {
   cleanupNetworkChannels();
@@ -199,42 +388,31 @@ function createOnlineHostRoom(customCode = null) {
   };
 
   openBroadcastChannelForRoom(code);
+  mountHostPeerServer(code);
 
-  if (typeof window.Peer !== 'undefined') {
-    try {
-      gameSession.peerStatus = 'CONNECTING';
-      const peer = new window.Peer(getPeerIdForRoom(code));
-      gameSession.peer = peer;
-
-      peer.on('open', () => {
-        gameSession.peerStatus = 'ONLINE';
-        if (typeof renderLobbyUI === 'function') renderLobbyUI();
-        if (typeof renderAll === 'function') renderAll();
-      });
-
-      peer.on('connection', (conn) => {
-        conn.on('data', (data) => {
-          handleIncomingNetworkPacket(data, 'PEER', conn);
-        });
-        conn.on('close', () => {
-          handlePeerDisconnect(conn);
-        });
-      });
-
-      peer.on('error', () => {
-        gameSession.peerStatus = 'BC_READY';
-        if (typeof renderLobbyUI === 'function') renderLobbyUI();
-      });
-    } catch (e) {
-      gameSession.peerStatus = 'BC_READY';
+  // Periodic keep-alive check so if Host phone wakes up from LINE/WhatsApp, it immediately reconnects
+  clearInterval(hostKeepAliveTimer);
+  hostKeepAliveTimer = setInterval(() => {
+    if (gameSession.mode !== 'HOST' || !gameSession.roomCode) return;
+    if (!gameSession.peer || gameSession.peer.destroyed) {
+      mountHostPeerServer(gameSession.roomCode);
+    } else if (gameSession.peer.disconnected) {
+      try { gameSession.peer.reconnect(); } catch (e) {}
     }
-  }
+  }, 3500);
 
   if (typeof renderLobbyUI === 'function') renderLobbyUI();
-  showToast(`🌐 已建立連線房間【${code}】！等待玩家加入後點擊下方開局。`);
+  showToast(`🌐 已建立連線房間【${code}】！傳完連結後請保持此畫面在前景。`);
 }
 
-// === Client: Join Online Room ===
+// Helper: Checks if Client has already been accepted into a seat in the current room
+function isClientSeatedInLobby() {
+  if (gameSession.mode !== 'CLIENT' || !gameSession.roomCode) return false;
+  const seats = (gameSession.lobbyState && gameSession.lobbyState.seats) || [];
+  return seats.some(s => s.id === gameSession.localSeatId && s.clientToken === gameSession.clientToken);
+}
+
+// === Client: Join Online Room (with Mobile TURN Relay + Auto-Retry when Host is in Background App) ===
 function joinOnlineRoomAsClient(rawCode, playerName) {
   const code = String(rawCode || '').trim().toUpperCase();
   if (!code) {
@@ -252,50 +430,185 @@ function joinOnlineRoomAsClient(rawCode, playerName) {
   gameSession.hasSimulatedHotSeat = false;
   gameSession.lobbyState.roomCode = code;
   gameSession.lobbyState.matchStarted = false;
+  gameSession.lobbyState.seats = [];
   gameSession.peerStatus = 'CONNECTING';
+  gameSession.peerDetailMsg = '正在啟動行動網路穿透 (STUN/TURN)...';
+  clientRetryCount = 0;
   if (typeof renderLobbyUI === 'function') renderLobbyUI();
 
-  const helloPacket = {
+  const buildHelloPacket = () => ({
     msgType: 'HELLO_JOIN',
     roomCode: code,
     clientToken: gameSession.clientToken,
     playerName: gameSession.playerName
-  };
+  });
 
   // 1. BroadcastChannel for instant same-browser multi-tab sync
   openBroadcastChannelForRoom(code);
   if (gameSession.bc) {
-    gameSession.bc.postMessage(helloPacket);
+    gameSession.bc.postMessage(buildHelloPacket());
   }
 
-  // 2. PeerJS WebRTC for cross-device / internet play
-  if (typeof window.Peer !== 'undefined') {
-    try {
-      const peer = new window.Peer();
-      gameSession.peer = peer;
-      peer.on('open', () => {
-        const conn = peer.connect(getPeerIdForRoom(code), { reliable: true });
+  // 2. PeerJS WebRTC with TURN Relay & Automatic Retry Loop
+  ensurePeerJsLoaded((loaded) => {
+    if (!loaded || gameSession.mode !== 'CLIENT' || gameSession.roomCode !== code) {
+      gameSession.peerStatus = 'BC_READY';
+      gameSession.peerDetailMsg = 'PeerJS 元件未載入，請檢查網路後點擊重試';
+      if (typeof renderLobbyUI === 'function') renderLobbyUI();
+      return;
+    }
+
+    function startClientPeerAttempt() {
+      if (gameSession.mode !== 'CLIENT' || gameSession.roomCode !== code || isClientSeatedInLobby()) return;
+
+      clearTimeout(clientConnectRetryTimer);
+      clearInterval(clientHelloRetryTimer);
+
+      if (gameSession.clientHostConn) {
+        try { gameSession.clientHostConn.close(); } catch (e) {}
+        gameSession.clientHostConn = null;
+      }
+
+      const openDataChannelToHost = (peerInstance) => {
+        if (gameSession.mode !== 'CLIENT' || gameSession.roomCode !== code || isClientSeatedInLobby()) return;
+        clientRetryCount += 1;
+        gameSession.peerStatus = 'CONNECTING';
+        gameSession.peerDetailMsg = clientRetryCount === 1
+          ? `正在連線至房主【${code}】(穿透行動網路中)...`
+          : `正在重試連線至房主【${code}】(第 ${clientRetryCount} 次嘗試，請確認房主畫面保持在遊戲內)...`;
+        if (typeof renderLobbyUI === 'function') renderLobbyUI();
+
+        const conn = peerInstance.connect(getPeerIdForRoom(code), {
+          reliable: true,
+          serialization: 'json'
+        });
         gameSession.clientHostConn = conn;
+
+        const sendHelloNow = () => {
+          if (conn && conn.open) {
+            try { conn.send(buildHelloPacket()); } catch (e) {}
+          }
+          if (gameSession.bc) {
+            try { gameSession.bc.postMessage(buildHelloPacket()); } catch (e) {}
+          }
+        };
+
         conn.on('open', () => {
           gameSession.peerStatus = 'ONLINE';
-          conn.send(helloPacket);
+          gameSession.peerDetailMsg = '跨網通道已建立，正在同步候戰室席位...';
+          sendHelloNow();
           if (typeof renderLobbyUI === 'function') renderLobbyUI();
+
+          // Re-send HELLO_JOIN every 1.4s until JOIN_ACCEPTED arrives (prevents mobile WebRTC first-packet drop)
+          clearInterval(clientHelloRetryTimer);
+          clientHelloRetryTimer = setInterval(() => {
+            if (isClientSeatedInLobby() || gameSession.lobbyState.matchStarted) {
+              clearInterval(clientHelloRetryTimer);
+              clientHelloRetryTimer = null;
+              return;
+            }
+            sendHelloNow();
+          }, 1400);
         });
+
         conn.on('data', (data) => {
+          if (data && data.msgType === 'HOST_READY_PING') {
+            sendHelloNow();
+            return;
+          }
           handleIncomingNetworkPacket(data, 'PEER', conn);
         });
+
         conn.on('close', () => {
-          showToast('⚠️ 與房主的連線已中斷，可重新點擊連線入房。');
+          if (gameSession.mode === 'CLIENT' && gameSession.roomCode === code) {
+            showToast('⚠️ 與房主的連線中斷，正在自動嘗試重連...');
+            clientConnectRetryTimer = setTimeout(() => startClientPeerAttempt(), 1800);
+          }
         });
-      });
-      peer.on('error', () => {
-        if (gameSession.peerStatus === 'CONNECTING') {
-          gameSession.peerStatus = 'BC_READY';
-          if (typeof renderLobbyUI === 'function') renderLobbyUI();
+
+        // Watchdog: if DataChannel hasn't finished seating within 6.5s, re-attempt connection
+        clientConnectRetryTimer = setTimeout(() => {
+          if (gameSession.mode === 'CLIENT' && gameSession.roomCode === code && !isClientSeatedInLobby()) {
+            if (clientRetryCount < 15) {
+              startClientPeerAttempt();
+            } else {
+              gameSession.peerDetailMsg = `⚠️ 無法連上房主【${code}】。請確認房主手機停留在遊戲畫面（未切去背景 App），並點擊上方「連線入房」重試。`;
+              if (typeof renderLobbyUI === 'function') renderLobbyUI();
+            }
+          }
+        }, 6500);
+      };
+
+      if (gameSession.peer && !gameSession.peer.destroyed) {
+        if (gameSession.peer.disconnected) {
+          try { gameSession.peer.reconnect(); } catch (e) {}
+          setTimeout(() => openDataChannelToHost(gameSession.peer), 500);
+        } else if (gameSession.peer.open) {
+          openDataChannelToHost(gameSession.peer);
         }
-      });
-    } catch (e) {}
-  }
+        return;
+      }
+
+      try {
+        const peer = new window.Peer(getPeerJsConfig());
+        gameSession.peer = peer;
+
+        peer.on('open', () => {
+          openDataChannelToHost(peer);
+        });
+
+        peer.on('disconnected', () => {
+          if (gameSession.mode === 'CLIENT' && peer && !peer.destroyed) {
+            try { peer.reconnect(); } catch (e) {}
+          }
+        });
+
+        peer.on('error', (err) => {
+          const errType = err && err.type ? err.type : 'unknown';
+          if (errType === 'peer-unavailable') {
+            gameSession.peerDetailMsg = `⏳ 尚未找到房主【${code}】(若房主剛切去 LINE 傳連結，請等房主切回遊戲畫面，系統正自動重試第 ${clientRetryCount} 次)...`;
+            if (typeof renderLobbyUI === 'function') renderLobbyUI();
+            clearTimeout(clientConnectRetryTimer);
+            if (clientRetryCount < 15) {
+              clientConnectRetryTimer = setTimeout(() => startClientPeerAttempt(), 2200);
+            }
+            return;
+          }
+          gameSession.peerDetailMsg = `連線重試中 (${errType})...`;
+          if (typeof renderLobbyUI === 'function') renderLobbyUI();
+          clearTimeout(clientConnectRetryTimer);
+          if (clientRetryCount < 15) {
+            clientConnectRetryTimer = setTimeout(() => startClientPeerAttempt(), 2500);
+          }
+        });
+      } catch (e) {}
+    }
+
+    startClientPeerAttempt();
+  });
+}
+
+// Mobile Foreground Wake-Up Listener: Automatically restore PeerJS signaling when user switches back from LINE/WhatsApp!
+if (typeof document !== 'undefined' && !window.__dbrVisibilityWakeBound) {
+  window.__dbrVisibilityWakeBound = true;
+  document.addEventListener('visibilitychange', () => {
+    if (document.visibilityState !== 'visible') return;
+    if (gameSession.mode === 'HOST' && gameSession.roomCode) {
+      if (!gameSession.peer || gameSession.peer.destroyed) {
+        mountHostPeerServer(gameSession.roomCode);
+      } else if (gameSession.peer.disconnected) {
+        try { gameSession.peer.reconnect(); } catch (e) {}
+      }
+      broadcastLobbyState();
+      if (gameSession.lobbyState.matchStarted) broadcastHostState();
+    } else if (gameSession.mode === 'CLIENT' && gameSession.roomCode) {
+      if (!isClientSeatedInLobby() && !gameSession.lobbyState.matchStarted) {
+        joinOnlineRoomAsClient(gameSession.roomCode, gameSession.playerName);
+      } else if (gameSession.peer && gameSession.peer.disconnected && !gameSession.peer.destroyed) {
+        try { gameSession.peer.reconnect(); } catch (e) {}
+      }
+    }
+  });
 }
 
 function handlePeerDisconnect(conn) {
@@ -529,7 +842,17 @@ function handleIncomingNetworkPacket(packet, transport, peerConn) {
         state: isMatchRunning ? sanitizeStateForSeat(gameSession.hostMasterState, assignedSeat.id) : null
       };
 
-      if (peerConn && peerConn.open) peerConn.send(acceptPacket);
+      if (peerConn) {
+        const trySendAccept = () => {
+          try { peerConn.send(acceptPacket); } catch (e) {}
+        };
+        if (peerConn.open) {
+          trySendAccept();
+          setTimeout(trySendAccept, 250);
+        } else {
+          peerConn.on('open', trySendAccept);
+        }
+      }
       if (gameSession.bc) gameSession.bc.postMessage(acceptPacket);
 
       broadcastLobbyState();
@@ -550,6 +873,7 @@ function handleIncomingNetworkPacket(packet, transport, peerConn) {
   // --- CLIENT HANDLERS ---
   if (gameSession.mode === 'CLIENT') {
     if (packet.msgType === 'JOIN_ACCEPTED' && packet.targetToken === gameSession.clientToken) {
+      clearNetworkTimers();
       gameSession.localSeatId = packet.assignedSeatId;
       viewedPlayerId = packet.assignedSeatId;
       gameSession.lobbyState = packet.lobbyState;

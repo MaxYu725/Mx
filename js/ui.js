@@ -4138,9 +4138,10 @@ function renderLobbyUI() {
     const statusBadge = document.getElementById('hostNetStatusBadge');
     if (statusBadge) {
       const st = gameSession.peerStatus;
+      const detail = gameSession.peerDetailMsg || '';
       statusBadge.innerHTML = st === 'ONLINE'
-        ? `<span class="online-dot-pulse mr-1"></span>PeerJS 跨網 ＋ 跨分頁雙軌就緒`
-        : `<span class="online-dot-pulse mr-1"></span>跨分頁即時通道就緒 (PeerJS ${st === 'CONNECTING' ? '連線中' : '待機'})`;
+        ? `<span class="online-dot-pulse mr-1"></span>🟢 ${detail || 'PeerJS 跨網 (含手機 4G/5G TURN 中繼) 已就緒'}`
+        : `<span class="online-dot-pulse mr-1"></span>🟡 ${detail || `正在連線跨網信令 (${st === 'CONNECTING' ? '連線中' : '待機'})`}`;
     }
 
     const pCount = parseInt(document.getElementById('selectPlayerCount')?.value, 10) || gameSession.lobbyState.playerCount || 3;
@@ -4237,9 +4238,11 @@ function renderLobbyUI() {
             </div>
           `;
         } else {
+          const detailMsg = gameSession.peerDetailMsg || `正在連線至房間【${gameSession.roomCode}】並同步候戰室席位...`;
           statusBox.innerHTML = `
-            <div class="rounded-xl p-2.5 seat-card-waiting text-xs text-amber-200 font-bold">
-              🔄 正在連線至房間【${gameSession.roomCode}】並同步候戰室席位...
+            <div class="rounded-xl p-2.5 seat-card-waiting text-xs text-amber-200 font-bold space-y-1.5">
+              <div>🔄 ${detailMsg}</div>
+              <div class="text-[10px] text-slate-300 font-normal">💡 手機連線小提示：若房主剛切去 LINE 傳送邀請連結，請等房主切回遊戲畫面，系統會每 2 秒自動重連（亦可直接點擊上方「連線入房」立即重試）。</div>
             </div>
           `;
         }
