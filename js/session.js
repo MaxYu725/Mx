@@ -23,25 +23,45 @@ function saveStoredString(storageKind, key, val) {
   } catch (e) {}
 }
 
-function generateRandomCode(len = 4) {
+function generateRandomCode(len = 8) {
   const chars = 'ABCDEFGHJKLMNPQRSTUVWXYZ23456789';
-  let out = '';
-  for (let i = 0; i < len; i++) {
-    out += chars[Math.floor(Math.random() * chars.length)];
-  }
-  return out;
+  const random = new Uint32Array(len);
+  window.crypto.getRandomValues(random);
+  return Array.from(random, n => chars[n % chars.length]).join('');
+}
+
+// Disallow HTML markup in names; all HTML sinks also escape their content.
+function normalizePlayerName(name, fallback = '深淵領主') {
+  const clean = String(name || '').replace(/[<>&"'`]/g, '').replace(/[\u0000-\u001f\u007f]/g, '').trim().slice(0, 32);
+  return clean || fallback;
+}
+
+function publicLobbyState() {
+  return {
+    ...gameSession.lobbyState,
+    seats: gameSession.lobbyState.seats.map(({ clientToken, ...seat }) => ({ ...seat }))
+  };
 }
 
 const initialClientToken = (() => {
+  // sessionStorage is copied into a new tab opened by window.open. Bind the
+  // reconnect token to a browsing-context marker which is not shared with a
+  // second tab; otherwise the copied token collides with the original seat.
+  const oldWindowName = String(window.name || '');
+  const tabMarker = /^mx-v13-tab-[a-f0-9-]{36}$/i.test(oldWindowName)
+    ? oldWindowName : 'mx-v13-tab-' + window.crypto.randomUUID();
+  window.name = tabMarker;
+  const savedMarker = loadStoredString('session', 'dbr_v13_tab_identity', '');
   let tk = loadStoredString('session', 'dbr_v13_client_token', '');
-  if (!tk) {
-    tk = 'tk_' + Math.random().toString(36).slice(2, 10) + '_' + Date.now().toString(36);
+  if (savedMarker !== tabMarker || !/^tk_[a-f0-9-]{36}$/i.test(tk)) {
+    tk = 'tk_' + window.crypto.randomUUID();
     saveStoredString('session', 'dbr_v13_client_token', tk);
+    saveStoredString('session', 'dbr_v13_tab_identity', tabMarker);
   }
   return tk;
 })();
 
-const initialPlayerName = loadStoredString('local', 'dbr_v13_player_name', '深淵領主');
+const initialPlayerName = normalizePlayerName(loadStoredString('local', 'dbr_v13_player_name', '深淵領主'));
 
 const gameSession = {
   mode: 'SOLO', // 'SOLO' | 'HOST' | 'CLIENT'
@@ -51,7 +71,8 @@ const gameSession = {
   clientToken: initialClientToken,
   hasSimulatedHotSeat: false, // Only true when Host explicitly clicks "+ 同機模擬真人"
   peer: null,
-  peerStatus: 'OFFLINE', // 'OFFLINE' | 'CONNECTING' | 'ONLINE' | 'BC_READY'
+  peerStatus: 'OFFLINE', // 'OFFLINE' | 'CONNECTING' | 'ONLINE' | 'BC_READY' | 'FAILED'
+  connectionError: '',
   peerConns: {}, // seatId -> PeerJS DataConnection
   clientHostConn: null, // Client's PeerJS connection to Host
   bc: null, // BroadcastChannel for zero-latency multi-tab play
@@ -106,6 +127,7 @@ function cleanupNetworkChannels() {
     gameSession.peer = null;
   }
   gameSession.peerStatus = 'OFFLINE';
+  gameSession.connectionError = '';
 }
 
 function getPeerIdForRoom(roomCode) {
@@ -124,17 +146,63 @@ function openBroadcastChannelForRoom(roomCode) {
         handleIncomingNetworkPacket(ev.data, 'BC', null);
       }
     };
-    if (gameSession.peerStatus === 'OFFLINE') {
-      gameSession.peerStatus = 'BC_READY';
-    }
   }
+}
+
+// Load the signaling library on demand; CDN failure must not silently disable
+// the only confidential transport for fog-of-war games.
+let peerJsLoadPromise = null;
+function ensurePeerJsReady() {
+  if (typeof window.Peer === 'function') return Promise.resolve(window.Peer);
+  if (peerJsLoadPromise) return peerJsLoadPromise;
+
+  const urls = [
+    'https://cdn.jsdelivr.net/npm/peerjs@1.5.4/dist/peerjs.min.js',
+    'https://unpkg.com/peerjs@1.5.4/dist/peerjs.min.js'
+  ];
+  peerJsLoadPromise = new Promise((resolve, reject) => {
+    const load = (index) => {
+      if (typeof window.Peer === 'function') return resolve(window.Peer);
+      if (index >= urls.length) return reject(new Error('PeerJS 程式庫無法載入；請檢查網絡、廣告阻擋或 CDN 存取。'));
+      const script = document.createElement('script');
+      script.src = urls[index];
+      script.async = true;
+      let completed = false;
+      const timer = setTimeout(() => finish(false), 9000);
+      function finish(success) {
+        if (completed) return;
+        completed = true;
+        clearTimeout(timer);
+        if (success && typeof window.Peer === 'function') resolve(window.Peer);
+        else {
+          script.remove();
+          load(index + 1);
+        }
+      }
+      script.onload = () => finish(true);
+      script.onerror = () => finish(false);
+      document.head.appendChild(script);
+    };
+    load(0);
+  }).catch(err => {
+    peerJsLoadPromise = null; // Allow retry without reloading the page.
+    throw err;
+  });
+  return peerJsLoadPromise;
+}
+
+function setPeerConnectionStatus(status, message = '') {
+  gameSession.peerStatus = status;
+  gameSession.connectionError = message;
+  if (typeof renderLobbyUI === 'function') renderLobbyUI();
+  if (status === 'FAILED') showToast('❌ ' + message, 4800);
 }
 
 // Syncs Host nickname & lobby controls into lobbyState and broadcasts to waiting clients
 function syncHostLobbySettingsFromInputs() {
   const nickInput = document.getElementById('inputPlayerNickname');
   if (nickInput && nickInput.value.trim()) {
-    gameSession.playerName = nickInput.value.trim();
+    gameSession.playerName = normalizePlayerName(nickInput.value);
     saveStoredString('local', 'dbr_v13_player_name', gameSession.playerName);
   }
   if (gameSession.mode === 'HOST') {
@@ -167,11 +235,11 @@ function createOnlineHostRoom(customCode = null) {
   cleanupNetworkChannels();
   const nickInput = document.getElementById('inputPlayerNickname');
   if (nickInput && nickInput.value.trim()) {
-    gameSession.playerName = nickInput.value.trim();
+    gameSession.playerName = normalizePlayerName(nickInput.value);
     saveStoredString('local', 'dbr_v13_player_name', gameSession.playerName);
   }
 
-  const code = (customCode ? String(customCode).trim().toUpperCase() : generateRandomCode(4));
+  const code = (customCode ? String(customCode).trim().toUpperCase() : generateRandomCode(8));
   gameSession.mode = 'HOST';
   gameSession.roomCode = code;
   gameSession.localSeatId = 'p1';
@@ -200,35 +268,62 @@ function createOnlineHostRoom(customCode = null) {
 
   openBroadcastChannelForRoom(code);
 
-  if (typeof window.Peer !== 'undefined') {
+  setPeerConnectionStatus('CONNECTING');
+  ensurePeerJsReady().then(PeerCtor => {
+    if (gameSession.mode !== 'HOST' || gameSession.roomCode !== code) return;
     try {
-      gameSession.peerStatus = 'CONNECTING';
-      const peer = new window.Peer(getPeerIdForRoom(code));
+      const peer = new PeerCtor(getPeerIdForRoom(code));
       gameSession.peer = peer;
-
+      const registrationTimeout = setTimeout(() => {
+        if (gameSession.peer === peer && gameSession.peerStatus === 'CONNECTING') {
+          setPeerConnectionStatus('FAILED', '房主未能連接 PeerJS 訊號伺服器。請檢查網絡後重新開房。');
+          try { peer.destroy(); } catch (e) {}
+        }
+      }, 15000);
       peer.on('open', () => {
-        gameSession.peerStatus = 'ONLINE';
-        if (typeof renderLobbyUI === 'function') renderLobbyUI();
+        clearTimeout(registrationTimeout);
+        if (gameSession.peer !== peer) return;
+        setPeerConnectionStatus('ONLINE');
         if (typeof renderAll === 'function') renderAll();
       });
-
-      peer.on('connection', (conn) => {
-        conn.on('data', (data) => {
-          handleIncomingNetworkPacket(data, 'PEER', conn);
-        });
-        conn.on('close', () => {
+      peer.on('connection', conn => {
+        if (gameSession.peer !== peer) { conn.close(); return; }
+        conn.on('data', data => handleIncomingNetworkPacket(data, 'PEER', conn));
+        conn.on('close', () => handlePeerDisconnect(conn));
+        conn.on('error', e => {
+          console.warn('[Mx multiplayer] Incoming PeerJS connection error:', e);
           handlePeerDisconnect(conn);
         });
       });
-
-      peer.on('error', () => {
-        gameSession.peerStatus = 'BC_READY';
-        if (typeof renderLobbyUI === 'function') renderLobbyUI();
+      peer.on('error', err => {
+        clearTimeout(registrationTimeout);
+        if (gameSession.peer !== peer) return;
+        const kind = err && err.type ? err.type : 'unknown';
+        const detail = kind === 'unavailable-id'
+          ? '房間號碼已被使用，請重新建立房間。'
+          : 'PeerJS 連線失敗（' + kind + '），請檢查網絡後重新開房。';
+        setPeerConnectionStatus('FAILED', detail);
+      });
+      peer.on('disconnected', () => {
+        if (gameSession.peer !== peer) return;
+        // PeerJS keeps established WebRTC channels alive on signaling loss.
+        // Re-register the same ID instead of destroying a live multiplayer game.
+        setPeerConnectionStatus('RECONNECTING', '訊號伺服器暫時中斷；現有玩家可繼續，正嘗試恢復新玩家入房。');
+        setTimeout(() => {
+          if (gameSession.peer !== peer || peer.destroyed || !peer.disconnected) return;
+          try { peer.reconnect(); } catch (err) {
+            setPeerConnectionStatus('FAILED', '訊號伺服器重連失敗：' + (err.message || String(err)));
+          }
+        }, 1200);
       });
     } catch (e) {
-      gameSession.peerStatus = 'BC_READY';
+      setPeerConnectionStatus('FAILED', '無法啟動 PeerJS：' + (e.message || String(e)));
     }
-  }
+  }).catch(err => {
+    if (gameSession.mode === 'HOST' && gameSession.roomCode === code) {
+      setPeerConnectionStatus('FAILED', err.message || String(err));
+    }
+  });
 
   if (typeof renderLobbyUI === 'function') renderLobbyUI();
   showToast(`🌐 已建立連線房間【${code}】！等待玩家加入後點擊下方開局。`);
@@ -237,12 +332,18 @@ function createOnlineHostRoom(customCode = null) {
 // === Client: Join Online Room ===
 function joinOnlineRoomAsClient(rawCode, playerName) {
   const code = String(rawCode || '').trim().toUpperCase();
-  if (!code) {
-    showToast('⚠️ 請輸入有效的房間碼！');
+  // A host cannot join its own room from the host tab: cleanupNetworkChannels()
+  // would destroy the room and strand every connected guest.
+  if (gameSession.mode === 'HOST' && gameSession.roomCode) {
+    showToast('⚠️ 本視窗正在主持房間！請保留房主頁面，另開無痕視窗或其他裝置加入。', 5000);
+    return;
+  }
+  if (!/^[A-HJ-NP-Z2-9]{8}$/.test(code)) {
+    showToast('⚠️ 請輸入有效的 8 碼房間碼！');
     return;
   }
   if (playerName && playerName.trim()) {
-    gameSession.playerName = playerName.trim();
+    gameSession.playerName = normalizePlayerName(playerName);
     saveStoredString('local', 'dbr_v13_player_name', gameSession.playerName);
   }
 
@@ -262,40 +363,86 @@ function joinOnlineRoomAsClient(rawCode, playerName) {
     playerName: gameSession.playerName
   };
 
-  // 1. BroadcastChannel for instant same-browser multi-tab sync
+  // Private rooms always require an authenticated PeerJS connection.
+  // BroadcastChannel is used only for explicitly public fog-disabled rooms.
   openBroadcastChannelForRoom(code);
-  if (gameSession.bc) {
-    gameSession.bc.postMessage(helloPacket);
-  }
-
-  // 2. PeerJS WebRTC for cross-device / internet play
-  if (typeof window.Peer !== 'undefined') {
+  ensurePeerJsReady().then(PeerCtor => {
+    if (gameSession.mode !== 'CLIENT' || gameSession.roomCode !== code) return;
     try {
-      const peer = new window.Peer();
+      const peer = new PeerCtor();
       gameSession.peer = peer;
+      const registrationTimeout = setTimeout(() => {
+        if (gameSession.peer === peer && gameSession.peerStatus === 'CONNECTING') {
+          setPeerConnectionStatus('FAILED', '未能連接 PeerJS 訊號伺服器，請檢查網絡後重試。');
+          try { peer.destroy(); } catch (e) {}
+        }
+      }, 15000);
       peer.on('open', () => {
+        clearTimeout(registrationTimeout);
+        if (gameSession.peer !== peer) return;
+        // Reconnected signaling must not create a duplicate WebRTC channel.
+        if (gameSession.clientHostConn && gameSession.clientHostConn.open) {
+          setPeerConnectionStatus('ONLINE');
+          return;
+        }
         const conn = peer.connect(getPeerIdForRoom(code), { reliable: true });
         gameSession.clientHostConn = conn;
+        const joinTimeout = setTimeout(() => {
+          if (gameSession.clientHostConn === conn && gameSession.peerStatus === 'CONNECTING') {
+            setPeerConnectionStatus('FAILED', '未能連接房主，請確認房主顯示「PeerJS 跨網連線就緒」，並確認雙方使用相同網站及房號。');
+          }
+        }, 15000);
         conn.on('open', () => {
-          gameSession.peerStatus = 'ONLINE';
+          if (gameSession.clientHostConn !== conn) return;
           conn.send(helloPacket);
+          // Wait until JOIN_ACCEPTED before claiming that joining succeeded.
           if (typeof renderLobbyUI === 'function') renderLobbyUI();
         });
-        conn.on('data', (data) => {
+        conn.on('data', data => {
+          if (gameSession.clientHostConn !== conn) return;
           handleIncomingNetworkPacket(data, 'PEER', conn);
+          if (gameSession.peerStatus === 'ONLINE' || gameSession.peerStatus === 'FAILED') clearTimeout(joinTimeout);
+        });
+        conn.on('error', err => {
+          clearTimeout(joinTimeout);
+          if (gameSession.clientHostConn === conn) {
+            setPeerConnectionStatus('FAILED', '與房主連線失敗（' + ((err && err.type) || '連線錯誤') + '），請確認房號及房主連線狀態。');
+          }
         });
         conn.on('close', () => {
-          showToast('⚠️ 與房主的連線已中斷，可重新點擊連線入房。');
+          clearTimeout(joinTimeout);
+          if (gameSession.clientHostConn !== conn) return;
+          setPeerConnectionStatus('FAILED', '與房主的連線已中斷，請按「連線入房」重新連接。');
         });
       });
-      peer.on('error', () => {
-        if (gameSession.peerStatus === 'CONNECTING') {
-          gameSession.peerStatus = 'BC_READY';
-          if (typeof renderLobbyUI === 'function') renderLobbyUI();
+      peer.on('error', err => {
+        clearTimeout(registrationTimeout);
+        if (gameSession.peer !== peer) return;
+        const kind = (err && err.type) || 'unknown';
+        if (gameSession.clientHostConn?.open && kind !== 'unavailable-id') {
+          console.warn('[Mx] PeerJS signaling error; data channel still active:', kind);
+          return;
         }
+        setPeerConnectionStatus('FAILED', 'PeerJS 連線失敗（' + kind + '）。請檢查房號、網絡或訊號伺服器。');
       });
-    } catch (e) {}
-  }
+      peer.on('disconnected', () => {
+        if (gameSession.peer !== peer) return;
+        setPeerConnectionStatus('RECONNECTING', 'PeerJS 訊號服務暫時中斷；正恢復連線。');
+        setTimeout(() => {
+          if (gameSession.peer !== peer || peer.destroyed || !peer.disconnected) return;
+          try { peer.reconnect(); } catch (err) {
+            setPeerConnectionStatus('FAILED', '訊號伺服器重連失敗：' + (err.message || String(err)));
+          }
+        }, 1200);
+      });
+    } catch (e) {
+      setPeerConnectionStatus('FAILED', '無法啟動 PeerJS：' + (e.message || String(e)));
+    }
+  }).catch(err => {
+    if (gameSession.mode === 'CLIENT' && gameSession.roomCode === code) {
+      setPeerConnectionStatus('FAILED', err.message || String(err));
+    }
+  });
 }
 
 function handlePeerDisconnect(conn) {
@@ -380,10 +527,10 @@ function toggleMidGameAITakeover(seatId) {
 }
 
 function sendPacketToHost(packet) {
+  // Never send a turn action twice via two transports.
   if (gameSession.clientHostConn && gameSession.clientHostConn.open) {
     try { gameSession.clientHostConn.send(packet); } catch (e) {}
-  }
-  if (gameSession.bc) {
+  } else if (gameSession.bc && !gameSession.lobbyState.fogOfWar) {
     try { gameSession.bc.postMessage(packet); } catch (e) {}
   }
 }
@@ -393,14 +540,14 @@ function broadcastLobbyState() {
   const packet = {
     msgType: 'LOBBY_SYNC',
     roomCode: gameSession.roomCode,
-    lobbyState: gameSession.lobbyState
+    lobbyState: publicLobbyState()
   };
   Object.values(gameSession.peerConns).forEach(conn => {
     if (conn && conn.open) {
       try { conn.send(packet); } catch (e) {}
     }
   });
-  if (gameSession.bc) {
+  if (gameSession.bc && !gameSession.lobbyState.fogOfWar) {
     try { gameSession.bc.postMessage(packet); } catch (e) {}
   }
   if (typeof renderLobbyUI === 'function') renderLobbyUI();
@@ -432,22 +579,22 @@ function broadcastHostState() {
     }
   });
 
-  if (gameSession.bc) {
-    const viewsBySeat = {};
-    const mySeatId = getLocalPlayerId();
-    viewsBySeat[mySeatId] = gameState;
-    master.players.forEach(p => {
-      if (p.id !== mySeatId && (!p.isAI || gameSession.hasSimulatedHotSeat)) {
-        viewsBySeat[p.id] = sanitizeStateForSeat(master, p.id);
-      }
+  // BroadcastChannel cannot keep messages confidential between same-origin tabs.
+  // Use it only when the user explicitly disabled fog-of-war.
+  if (gameSession.bc && !master.config.fogOfWar) {
+    gameSession.lobbyState.seats.forEach(seat => {
+      if (seat.role !== 'HUMAN' || !seat.clientToken || !seat.connected) return;
+      if (gameSession.peerConns[seat.id]?.open) return;
+      try {
+        gameSession.bc.postMessage({
+          msgType: 'STATE_SYNC',
+          roomCode: gameSession.roomCode,
+          targetSeatId: seat.id,
+          targetToken: seat.clientToken,
+          state: sanitizeStateForSeat(master, seat.id)
+        });
+      } catch (e) {}
     });
-    try {
-      gameSession.bc.postMessage({
-        msgType: 'STATE_SYNC_ALL_SEATS',
-        roomCode: gameSession.roomCode,
-        viewsBySeat
-      });
-    } catch (e) {}
   }
 
   if (typeof renderAll === 'function') renderAll();
@@ -465,25 +612,38 @@ function handleIncomingNetworkPacket(packet, transport, peerConn) {
   // --- HOST HANDLERS ---
   if (gameSession.mode === 'HOST') {
     if (packet.msgType === 'HELLO_JOIN') {
+      if (transport === 'BC' && gameSession.lobbyState.fogOfWar) return;
       const { clientToken, playerName } = packet;
+      if (typeof clientToken !== 'string' || !/^tk_[a-f0-9-]{36}$/i.test(clientToken)) return;
       const pCount = gameSession.lobbyState.playerCount;
       const activeSeats = gameSession.lobbyState.seats.slice(0, pCount);
       const isMatchRunning = Boolean(gameSession.lobbyState.matchStarted && gameSession.hostMasterState);
 
       // 1. Check if returning client reconnecting with same clientToken
-      let assignedSeat = activeSeats.find(s => s.clientToken && s.clientToken === clientToken);
+      let assignedSeat = activeSeats.find(s => s.id !== 'p1' && s.clientToken && s.clientToken === clientToken);
+      // An existing connected peer must not be displaced by another connection.
+      if (assignedSeat && assignedSeat.connected &&
+          gameSession.peerConns[assignedSeat.id]?.open &&
+          gameSession.peerConns[assignedSeat.id] !== peerConn) {
+        // Same session-token already has a live socket. Do not silently
+        // ignore the duplicate HELLO: tell that tab why it cannot join.
+        if (peerConn && peerConn.open) {
+          peerConn.send({
+            msgType: 'JOIN_REJECTED',
+            roomCode: gameSession.roomCode,
+            targetToken: clientToken,
+            reason: '這個身份已在另一個視窗連線。請關閉舊視窗或使用無痕視窗另行加入。'
+          });
+        }
+        return;
+      }
 
       // 2. Otherwise find first OPEN seat, or convert an AI seat to HUMAN if match hasn't started yet
-      if (!assignedSeat) {
-        assignedSeat = activeSeats.find(s => s.id !== 'p1' && s.role === 'OPEN');
-      }
       if (!assignedSeat && !isMatchRunning) {
-        assignedSeat = activeSeats.find(s => s.id !== 'p1' && s.role === 'AI');
+        assignedSeat = activeSeats.find(s => s.id !== 'p1' && s.role === 'OPEN') ||
+          activeSeats.find(s => s.id !== 'p1' && s.role === 'AI');
       }
-      // 3. Or allow claiming a disconnected human seat mid-game
-      if (!assignedSeat && isMatchRunning) {
-        assignedSeat = activeSeats.find(s => s.id !== 'p1' && !s.isAI && !s.connected);
-      }
+      // A match already in progress requires the seat's original reconnect token.
 
       if (!assignedSeat) {
         const rejectMsg = {
@@ -492,8 +652,10 @@ function handleIncomingNetworkPacket(packet, transport, peerConn) {
           targetToken: clientToken,
           reason: '房間座位已滿（目前無空缺席位）'
         };
-        if (peerConn && peerConn.open) peerConn.send(rejectMsg);
-        if (gameSession.bc) gameSession.bc.postMessage(rejectMsg);
+        if (transport === 'PEER' && peerConn && peerConn.open) peerConn.send(rejectMsg);
+        if (transport === 'BC' && gameSession.bc && !gameSession.lobbyState.fogOfWar) {
+          gameSession.bc.postMessage(rejectMsg);
+        }
         return;
       }
 
@@ -501,7 +663,7 @@ function handleIncomingNetworkPacket(packet, transport, peerConn) {
       assignedSeat.isAI = false;
       assignedSeat.connected = true;
       assignedSeat.clientToken = clientToken;
-      assignedSeat.name = playerName || `深淵魔王 (${assignedSeat.id.toUpperCase()})`;
+      assignedSeat.name = normalizePlayerName(playerName, `深淵魔王 (${assignedSeat.id.toUpperCase()})`);
 
       if (peerConn) {
         gameSession.peerConns[assignedSeat.id] = peerConn;
@@ -524,13 +686,13 @@ function handleIncomingNetworkPacket(packet, transport, peerConn) {
         roomCode: gameSession.roomCode,
         targetToken: clientToken,
         assignedSeatId: assignedSeat.id,
-        lobbyState: gameSession.lobbyState,
+        lobbyState: publicLobbyState(),
         // Crucial: null while waiting in Lobby, non-null only if reconnecting to an already-started match!
         state: isMatchRunning ? sanitizeStateForSeat(gameSession.hostMasterState, assignedSeat.id) : null
       };
 
-      if (peerConn && peerConn.open) peerConn.send(acceptPacket);
-      if (gameSession.bc) gameSession.bc.postMessage(acceptPacket);
+      if (transport === 'PEER' && peerConn && peerConn.open) peerConn.send(acceptPacket);
+      if (transport === 'BC' && gameSession.bc) gameSession.bc.postMessage(acceptPacket);
 
       broadcastLobbyState();
       if (isMatchRunning) {
@@ -541,7 +703,15 @@ function handleIncomingNetworkPacket(packet, transport, peerConn) {
     }
 
     if (packet.msgType === 'CLIENT_ACTION') {
-      const { seatId, action } = packet;
+      const { seatId, clientToken, action } = packet;
+      const seat = gameSession.lobbyState.seats.find(s => s.id === seatId);
+      if (!seat || seat.role !== 'HUMAN' || seat.isAI || !seat.connected ||
+          !seat.clientToken || clientToken !== seat.clientToken ||
+          !action || typeof action !== 'object' || Array.isArray(action) ||
+          Object.prototype.hasOwnProperty.call(action, 'fromAI')) return;
+      if (transport === 'PEER' && (!peerConn || gameSession.peerConns[seatId] !== peerConn)) return;
+      if (transport === 'BC' && gameSession.lobbyState.fogOfWar) return;
+      if (transport !== 'PEER' && transport !== 'BC') return;
       handleHostReceiveAction(seatId, action);
       return;
     }
@@ -574,11 +744,13 @@ function handleIncomingNetworkPacket(packet, transport, peerConn) {
     }
 
     if (packet.msgType === 'JOIN_REJECTED' && packet.targetToken === gameSession.clientToken) {
-      showToast(`❌ 加入失敗：${packet.reason}`);
+      setPeerConnectionStatus('FAILED', '加入失敗：' + (packet.reason || '房主拒絕連線'));
       return;
     }
 
     if (packet.msgType === 'LOBBY_SYNC') {
+      if (transport === 'BC' && gameSession.lobbyState.fogOfWar) return;
+      if (!packet.lobbyState || typeof packet.lobbyState !== 'object') return;
       gameSession.lobbyState = packet.lobbyState;
       if (packet.lobbyState && packet.lobbyState.themeId && typeof applyThemeToRegistry === 'function') {
         applyThemeToRegistry(packet.lobbyState.themeId);
@@ -591,18 +763,13 @@ function handleIncomingNetworkPacket(packet, transport, peerConn) {
       return;
     }
 
-    if (packet.msgType === 'STATE_SYNC' && (!packet.targetSeatId || packet.targetSeatId === gameSession.localSeatId)) {
+    if (packet.msgType === 'STATE_SYNC' &&
+        packet.targetSeatId === gameSession.localSeatId &&
+        (!packet.targetToken || packet.targetToken === gameSession.clientToken)) {
       applyClientReceivedState(packet.state);
       return;
     }
 
-    if (packet.msgType === 'STATE_SYNC_ALL_SEATS' && packet.viewsBySeat) {
-      const myView = packet.viewsBySeat[gameSession.localSeatId];
-      if (myView) {
-        applyClientReceivedState(myView);
-      }
-      return;
-    }
   }
 }
 
@@ -680,18 +847,19 @@ function syncMasterStateToClientsAndRender() {
 
 function handleHostReceiveAction(actorSeatId, action) {
   const state = getActiveMasterState();
-  if (!state || state.phase === 'GAME_OVER') return;
+  if (!state || state.phase === 'GAME_OVER' || state.turn.isSettling ||
+      !action || typeof action !== 'object' || Array.isArray(action)) return;
 
   if (action.type === 'DRAFT_PICK') {
     const picker = state.players[state.draft.pickerIndex];
-    if (!picker || (picker.id !== actorSeatId && !action.fromAI)) return;
+    if (!picker || picker.id !== actorSeatId) return;
     authoritativeDraftPick(state, action.dept);
     return;
   }
 
   if (state.phase !== 'STEP1_PLAY_OR_DISCARD') return;
   const activePlayer = state.players[state.turn.activePlayerIndex];
-  if (!activePlayer || (activePlayer.id !== actorSeatId && !action.fromAI)) return;
+  if (!activePlayer || activePlayer.id !== actorSeatId || activePlayer.isAI) return;
 
   if (action.type === 'PLAY_CARD') {
     authoritativePlayCard(state, action);
@@ -703,6 +871,43 @@ function handleHostReceiveAction(actorSeatId, action) {
 }
 
 // === Authoritative Rule Mutations on Master State ===
+// Validate network supplied targets BEFORE mutating any game state.
+function validatePlayActionTargets(state, player, card, action, status) {
+  const target = action.targetPlayerId;
+  const empUid = action.targetEmpUid;
+  const emp = CARDS_BY_ID[empUid];
+  const owns = uid => getAllPlayerEmployeeUids(player).includes(uid);
+  const validOpp = () => Array.isArray(status.validOpponents) && status.validOpponents.includes(target);
+  switch (card.effect) {
+    case 'GAIN_FUNDS': return true;
+    case 'RELEASE_CRISIS':
+      return status.validCrises.includes(action.targetCrisisUid);
+    case 'HIRE_BANK':
+      return status.validBankDepts.includes(action.targetDept);
+    case 'FIRE_OWN':
+      if (!status.validOwnEmployees.includes(empUid)) return false;
+      return !emp.isVP || status.companionFireUids.includes(
+        action.secondaryCardUid || status.companionFireUids[0]);
+    case 'BAD_IDEA': return validOpp();
+    case 'FORCE_HIRE':
+      return validOpp() && (status.validBankByOpponent[target] || []).includes(action.targetDept);
+    case 'POACH_ENEMY':
+      if (!validOpp() || !(status.targetableByOpponent[target] || []).includes(empUid)) return false;
+      return !emp.isVP || (status.companionsByOpponent[target] || []).includes(
+        action.secondaryCardUid || (status.companionsByOpponent[target] || [])[0]);
+    case 'VP_KICK_ENEMY':
+      return status.targetVPs.some(t => t.opponentId === target && t.empUid === empUid);
+    case 'VP_DOUBLE_PAY': return validOpp();
+    case 'VP_MASS_LAYOFF': {
+      const ids = action.layoffUids;
+      if (!Array.isArray(ids) || ids.length === 0 ||
+          new Set(ids).size !== ids.length || !ids.every(owns)) return false;
+      return getTotalVPCount(player) - ids.filter(uid => CARDS_BY_ID[uid]?.isVP).length >= 2;
+    }
+    default: return false;
+  }
+}
+
 function authoritativeDraftPick(state, dept) {
   if (!state || state.phase !== 'INITIAL_DRAFT') return;
   const picker = state.players[state.draft.pickerIndex];
@@ -758,7 +963,7 @@ function authoritativePlayCard(state, action) {
   if (!card) return;
 
   const status = evaluateCardPlayability(state, player, card.uid);
-  if (!status.playable) return;
+  if (!status.playable || !validatePlayActionTargets(state, player, card, action, status)) return;
 
   state.turn.hasPlayedCard = true;
   state.lastPlayedCard = { uid: card.uid, tplId: card.tplId, actorId: player.id, actorName: player.name };
@@ -994,14 +1199,15 @@ function authoritativePlayCard(state, action) {
 }
 
 function authoritativeDiscardCards(state, cardUids) {
-  if (!state || !cardUids || cardUids.length === 0) return;
+  if (!state || !Array.isArray(cardUids) || cardUids.length === 0 ||
+      new Set(cardUids).size !== cardUids.length || state.turn.isSettling) return;
   const player = state.players[state.turn.activePlayerIndex];
   const canDiscard = state.config.playDiscardMode === 'SHARED_QUOTA_4' || !state.turn.hasPlayedCard;
   if (!canDiscard) return;
 
   const remaining = state.turn.maxActions - state.turn.actionsUsed;
-  const validToDiscard = cardUids.filter(uid => player.hand.includes(uid)).slice(0, remaining);
-  if (validToDiscard.length === 0) return;
+  if (cardUids.length > remaining || !cardUids.every(uid => player.hand.includes(uid))) return;
+  const validToDiscard = cardUids;
 
   validToDiscard.forEach(uid => consumeHandCard(state, player, uid, true));
   state.turn.actionsUsed += validToDiscard.length;
@@ -1026,7 +1232,8 @@ function authoritativeDiscardCards(state, cardUids) {
 }
 
 function authoritativeSettleAndAdvanceTurn(state) {
-  if (!state || state.phase === 'GAME_OVER') return;
+  if (!state || state.phase === 'GAME_OVER' || state.turn.isSettling) return;
+  state.turn.isSettling = true;
   clearTimeout(aiTimer);
   const player = state.players[state.turn.activePlayerIndex];
 
@@ -1097,6 +1304,7 @@ function authoritativeSettleAndAdvanceTurn(state) {
     }
 
     activeState.turn.activePlayerIndex = nextIdx;
+    activeState.turn.isSettling = false;
     activeState.turn.actionsUsed = 0;
     activeState.turn.hasPlayedCard = false;
     activeState.turn.hasDiscardedCard = false;
@@ -1135,7 +1343,7 @@ function endPlayPhaseAndSettleTurn() {
 function checkAndScheduleHostAI(customDelayMs = null) {
   if (gameSession.mode === 'CLIENT') return;
   const state = getActiveMasterState();
-  if (!state || state.phase === 'GAME_OVER') return;
+  if (!state || state.phase === 'GAME_OVER' || state.turn.isSettling) return;
 
   if (state.phase === 'INITIAL_DRAFT') {
     const picker = state.players[state.draft.pickerIndex];
@@ -1163,7 +1371,7 @@ function scheduleNextAITick(customDelayMs = null) {
 function runAIStep() {
   if (gameSession.mode === 'CLIENT') return;
   const state = getActiveMasterState();
-  if (!state || state.phase === 'GAME_OVER') return;
+  if (!state || state.phase === 'GAME_OVER' || state.turn.isSettling) return;
 
   if (state.phase === 'INITIAL_DRAFT') {
     const picker = state.players[state.draft.pickerIndex];

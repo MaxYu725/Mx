@@ -170,17 +170,24 @@ function recordVfxEvent(state, payload) {
   };
 }
 
+// Escape all untrusted strings before inserting them into HTML templates.
+function escapeHtml(value) {
+  return String(value == null ? '' : value).replace(/[&<>"']/g, ch => ({
+    '&': '&amp;', '<': '&lt;', '>': '&gt;', '"': '&quot;', "'": '&#39;'
+  }[ch]));
+}
+
 function formatLogItemToTickerHTML(rawMsg, isLatest = true) {
   if (!rawMsg) return '';
   const localPl = getLocalPlayer();
-  let s = rawMsg;
+  let s = escapeHtml(rawMsg);
 
   if (gameState && gameState.players) {
     gameState.players.forEach((pl, idx) => {
-      const escaped = pl.name.replace(/[.*+?^${}()|[\]\\]/g, '\\$&');
+      const escaped = escapeHtml(pl.name).replace(/[.*+?^${}()|[\]\\]/g, '\\$&');
       const re = new RegExp(`【${escaped}】`, 'g');
       const isMe = localPl && pl.id === localPl.id;
-      const shortN = getShortPlayerName(pl.name);
+      const shortN = escapeHtml(getShortPlayerName(pl.name));
       const badgeStyles = [
         'bg-amber-500/20 text-amber-300 font-black',
         'bg-purple-950 text-purple-200 font-bold',
@@ -323,6 +330,9 @@ function drawCardsForPlayer(state, player, targetHandSize = 6) {
 
 function evaluateCardPlayability(state, player, handUid) {
   const card = CARDS_BY_ID[handUid];
+  if (!player || !Array.isArray(player.hand) || !player.hand.includes(handUid)) {
+    return { playable: false, shortReason: '未持有卡牌', reason: '該卡牌不在目前玩家手牌中' };
+  }
   if (!card || card.effect === 'HIDDEN') return { playable: false, shortReason: '無效卡牌', reason: '無效卡牌' };
 
   const turn = state.turn;
@@ -507,8 +517,11 @@ function evaluateCardPlayability(state, player, handUid) {
 }
 
 function consumeHandCard(state, player, handUid, moveToDiscard = true) {
-  player.hand = player.hand.filter(id => id !== handUid);
+  const index = player.hand.indexOf(handUid);
+  if (index < 0) return false;
+  player.hand.splice(index, 1);
   if (moveToDiscard) state.discardPile.unshift(handUid);
+  return true;
 }
 
 // === Fog-of-War Sanitizer for Network State Broadcast ===
@@ -548,6 +561,12 @@ function sanitizeStateForSeat(fullState, viewerSeatId) {
     }
   });
 
+  const lastVfxEvent = fullState.lastVfxEvent ? { ...fullState.lastVfxEvent } : null;
+  // Drawing cards is private information even though the animation is public.
+  if (applyFog && lastVfxEvent && lastVfxEvent.actorId !== viewerSeatId) {
+    delete lastVfxEvent.drawnUids;
+  }
+
   return {
     config: { ...fullState.config },
     phase: fullState.phase,
@@ -560,10 +579,11 @@ function sanitizeStateForSeat(fullState, viewerSeatId) {
     players,
     logs: [...fullState.logs],
     vfxSeq: fullState.vfxSeq,
-    lastVfxEvent: fullState.lastVfxEvent ? { ...fullState.lastVfxEvent } : null
+    lastVfxEvent
   };
 }
 
+window.escapeHtml = escapeHtml;
 window.getLocalPlayerId = getLocalPlayerId;
 window.getLocalPlayer = getLocalPlayer;
 window.getLocalPlayerIndex = getLocalPlayerIndex;
