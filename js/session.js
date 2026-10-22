@@ -25,23 +25,34 @@ function saveStoredString(storageKind, key, val) {
 
 function generateRandomCode(len = 4) {
   const chars = 'ABCDEFGHJKLMNPQRSTUVWXYZ23456789';
-  let out = '';
-  for (let i = 0; i < len; i++) {
-    out += chars[Math.floor(Math.random() * chars.length)];
-  }
-  return out;
+  const random = new Uint32Array(len);
+  window.crypto.getRandomValues(random);
+  return Array.from(random, n => chars[n % chars.length]).join('');
+}
+
+// Disallow HTML markup in names; all HTML sinks also escape their content.
+function normalizePlayerName(name, fallback = '深淵領主') {
+  const clean = String(name || '').replace(/[<>&"'`]/g, '').replace(/[\u0000-\u001f\u007f]/g, '').trim().slice(0, 32);
+  return clean || fallback;
+}
+
+function publicLobbyState() {
+  return {
+    ...gameSession.lobbyState,
+    seats: gameSession.lobbyState.seats.map(({ clientToken, ...seat }) => ({ ...seat }))
+  };
 }
 
 const initialClientToken = (() => {
   let tk = loadStoredString('session', 'dbr_v13_client_token', '');
   if (!tk) {
-    tk = 'tk_' + Math.random().toString(36).slice(2, 10) + '_' + Date.now().toString(36);
+    tk = 'tk_' + window.crypto.randomUUID();
     saveStoredString('session', 'dbr_v13_client_token', tk);
   }
   return tk;
 })();
 
-const initialPlayerName = loadStoredString('local', 'dbr_v13_player_name', '深淵領主');
+const initialPlayerName = normalizePlayerName(loadStoredString('local', 'dbr_v13_player_name', '深淵領主'));
 
 const gameSession = {
   mode: 'SOLO', // 'SOLO' | 'HOST' | 'CLIENT'
@@ -134,7 +145,7 @@ function openBroadcastChannelForRoom(roomCode) {
 function syncHostLobbySettingsFromInputs() {
   const nickInput = document.getElementById('inputPlayerNickname');
   if (nickInput && nickInput.value.trim()) {
-    gameSession.playerName = nickInput.value.trim();
+    gameSession.playerName = normalizePlayerName(nickInput.value);
     saveStoredString('local', 'dbr_v13_player_name', gameSession.playerName);
   }
   if (gameSession.mode === 'HOST') {
@@ -167,7 +178,7 @@ function createOnlineHostRoom(customCode = null) {
   cleanupNetworkChannels();
   const nickInput = document.getElementById('inputPlayerNickname');
   if (nickInput && nickInput.value.trim()) {
-    gameSession.playerName = nickInput.value.trim();
+    gameSession.playerName = normalizePlayerName(nickInput.value);
     saveStoredString('local', 'dbr_v13_player_name', gameSession.playerName);
   }
 
@@ -242,7 +253,7 @@ function joinOnlineRoomAsClient(rawCode, playerName) {
     return;
   }
   if (playerName && playerName.trim()) {
-    gameSession.playerName = playerName.trim();
+    gameSession.playerName = normalizePlayerName(playerName);
     saveStoredString('local', 'dbr_v13_player_name', gameSession.playerName);
   }
 
@@ -264,7 +275,7 @@ function joinOnlineRoomAsClient(rawCode, playerName) {
 
   // 1. BroadcastChannel for instant same-browser multi-tab sync
   openBroadcastChannelForRoom(code);
-  if (gameSession.bc) {
+  if (gameSession.bc && typeof window.Peer === 'undefined') {
     gameSession.bc.postMessage(helloPacket);
   }
 
@@ -291,6 +302,8 @@ function joinOnlineRoomAsClient(rawCode, playerName) {
       peer.on('error', () => {
         if (gameSession.peerStatus === 'CONNECTING') {
           gameSession.peerStatus = 'BC_READY';
+          // The host rejects this fallback when fog-of-war is enabled.
+          if (gameSession.bc) gameSession.bc.postMessage(helloPacket);
           if (typeof renderLobbyUI === 'function') renderLobbyUI();
         }
       });
@@ -380,10 +393,10 @@ function toggleMidGameAITakeover(seatId) {
 }
 
 function sendPacketToHost(packet) {
+  // Never send a turn action twice via two transports.
   if (gameSession.clientHostConn && gameSession.clientHostConn.open) {
     try { gameSession.clientHostConn.send(packet); } catch (e) {}
-  }
-  if (gameSession.bc) {
+  } else if (gameSession.bc && !gameSession.lobbyState.fogOfWar) {
     try { gameSession.bc.postMessage(packet); } catch (e) {}
   }
 }
@@ -393,7 +406,7 @@ function broadcastLobbyState() {
   const packet = {
     msgType: 'LOBBY_SYNC',
     roomCode: gameSession.roomCode,
-    lobbyState: gameSession.lobbyState
+    lobbyState: publicLobbyState()
   };
   Object.values(gameSession.peerConns).forEach(conn => {
     if (conn && conn.open) {
@@ -432,22 +445,22 @@ function broadcastHostState() {
     }
   });
 
-  if (gameSession.bc) {
-    const viewsBySeat = {};
-    const mySeatId = getLocalPlayerId();
-    viewsBySeat[mySeatId] = gameState;
-    master.players.forEach(p => {
-      if (p.id !== mySeatId && (!p.isAI || gameSession.hasSimulatedHotSeat)) {
-        viewsBySeat[p.id] = sanitizeStateForSeat(master, p.id);
-      }
+  // BroadcastChannel cannot keep messages confidential between same-origin tabs.
+  // Use it only when the user explicitly disabled fog-of-war.
+  if (gameSession.bc && !master.config.fogOfWar) {
+    gameSession.lobbyState.seats.forEach(seat => {
+      if (seat.role !== 'HUMAN' || !seat.clientToken || !seat.connected) return;
+      if (gameSession.peerConns[seat.id]?.open) return;
+      try {
+        gameSession.bc.postMessage({
+          msgType: 'STATE_SYNC',
+          roomCode: gameSession.roomCode,
+          targetSeatId: seat.id,
+          targetToken: seat.clientToken,
+          state: sanitizeStateForSeat(master, seat.id)
+        });
+      } catch (e) {}
     });
-    try {
-      gameSession.bc.postMessage({
-        msgType: 'STATE_SYNC_ALL_SEATS',
-        roomCode: gameSession.roomCode,
-        viewsBySeat
-      });
-    } catch (e) {}
   }
 
   if (typeof renderAll === 'function') renderAll();
@@ -465,25 +478,26 @@ function handleIncomingNetworkPacket(packet, transport, peerConn) {
   // --- HOST HANDLERS ---
   if (gameSession.mode === 'HOST') {
     if (packet.msgType === 'HELLO_JOIN') {
+      if (transport === 'BC' && gameSession.lobbyState.fogOfWar) return;
       const { clientToken, playerName } = packet;
+      if (typeof clientToken !== 'string' || !/^tk_[a-f0-9-]{36}$/i.test(clientToken)) return;
       const pCount = gameSession.lobbyState.playerCount;
       const activeSeats = gameSession.lobbyState.seats.slice(0, pCount);
       const isMatchRunning = Boolean(gameSession.lobbyState.matchStarted && gameSession.hostMasterState);
 
       // 1. Check if returning client reconnecting with same clientToken
-      let assignedSeat = activeSeats.find(s => s.clientToken && s.clientToken === clientToken);
+      let assignedSeat = activeSeats.find(s => s.id !== 'p1' && s.clientToken && s.clientToken === clientToken);
+      // An existing connected peer must not be displaced by another connection.
+      if (assignedSeat && assignedSeat.connected &&
+          gameSession.peerConns[assignedSeat.id] &&
+          gameSession.peerConns[assignedSeat.id] !== peerConn) return;
 
       // 2. Otherwise find first OPEN seat, or convert an AI seat to HUMAN if match hasn't started yet
-      if (!assignedSeat) {
-        assignedSeat = activeSeats.find(s => s.id !== 'p1' && s.role === 'OPEN');
-      }
       if (!assignedSeat && !isMatchRunning) {
-        assignedSeat = activeSeats.find(s => s.id !== 'p1' && s.role === 'AI');
+        assignedSeat = activeSeats.find(s => s.id !== 'p1' && s.role === 'OPEN') ||
+          activeSeats.find(s => s.id !== 'p1' && s.role === 'AI');
       }
-      // 3. Or allow claiming a disconnected human seat mid-game
-      if (!assignedSeat && isMatchRunning) {
-        assignedSeat = activeSeats.find(s => s.id !== 'p1' && !s.isAI && !s.connected);
-      }
+      // A match already in progress requires the seat's original reconnect token.
 
       if (!assignedSeat) {
         const rejectMsg = {
@@ -501,7 +515,7 @@ function handleIncomingNetworkPacket(packet, transport, peerConn) {
       assignedSeat.isAI = false;
       assignedSeat.connected = true;
       assignedSeat.clientToken = clientToken;
-      assignedSeat.name = playerName || `深淵魔王 (${assignedSeat.id.toUpperCase()})`;
+      assignedSeat.name = normalizePlayerName(playerName, `深淵魔王 (${assignedSeat.id.toUpperCase()})`);
 
       if (peerConn) {
         gameSession.peerConns[assignedSeat.id] = peerConn;
@@ -524,13 +538,13 @@ function handleIncomingNetworkPacket(packet, transport, peerConn) {
         roomCode: gameSession.roomCode,
         targetToken: clientToken,
         assignedSeatId: assignedSeat.id,
-        lobbyState: gameSession.lobbyState,
+        lobbyState: publicLobbyState(),
         // Crucial: null while waiting in Lobby, non-null only if reconnecting to an already-started match!
         state: isMatchRunning ? sanitizeStateForSeat(gameSession.hostMasterState, assignedSeat.id) : null
       };
 
-      if (peerConn && peerConn.open) peerConn.send(acceptPacket);
-      if (gameSession.bc) gameSession.bc.postMessage(acceptPacket);
+      if (transport === 'PEER' && peerConn && peerConn.open) peerConn.send(acceptPacket);
+      if (transport === 'BC' && gameSession.bc) gameSession.bc.postMessage(acceptPacket);
 
       broadcastLobbyState();
       if (isMatchRunning) {
@@ -541,7 +555,15 @@ function handleIncomingNetworkPacket(packet, transport, peerConn) {
     }
 
     if (packet.msgType === 'CLIENT_ACTION') {
-      const { seatId, action } = packet;
+      const { seatId, clientToken, action } = packet;
+      const seat = gameSession.lobbyState.seats.find(s => s.id === seatId);
+      if (!seat || seat.role !== 'HUMAN' || seat.isAI || !seat.connected ||
+          !seat.clientToken || clientToken !== seat.clientToken ||
+          !action || typeof action !== 'object' || Array.isArray(action) ||
+          Object.prototype.hasOwnProperty.call(action, 'fromAI')) return;
+      if (transport === 'PEER' && (!peerConn || gameSession.peerConns[seatId] !== peerConn)) return;
+      if (transport === 'BC' && gameSession.lobbyState.fogOfWar) return;
+      if (transport !== 'PEER' && transport !== 'BC') return;
       handleHostReceiveAction(seatId, action);
       return;
     }
@@ -591,18 +613,13 @@ function handleIncomingNetworkPacket(packet, transport, peerConn) {
       return;
     }
 
-    if (packet.msgType === 'STATE_SYNC' && (!packet.targetSeatId || packet.targetSeatId === gameSession.localSeatId)) {
+    if (packet.msgType === 'STATE_SYNC' &&
+        packet.targetSeatId === gameSession.localSeatId &&
+        (!packet.targetToken || packet.targetToken === gameSession.clientToken)) {
       applyClientReceivedState(packet.state);
       return;
     }
 
-    if (packet.msgType === 'STATE_SYNC_ALL_SEATS' && packet.viewsBySeat) {
-      const myView = packet.viewsBySeat[gameSession.localSeatId];
-      if (myView) {
-        applyClientReceivedState(myView);
-      }
-      return;
-    }
   }
 }
 
