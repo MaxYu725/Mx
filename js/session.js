@@ -296,9 +296,16 @@ function createOnlineHostRoom(customCode = null) {
         setPeerConnectionStatus('FAILED', detail);
       });
       peer.on('disconnected', () => {
-        if (gameSession.peer === peer) {
-          setPeerConnectionStatus('FAILED', '與 PeerJS 訊號伺服器中斷連線；請嘗試重新開房。');
-        }
+        if (gameSession.peer !== peer) return;
+        // PeerJS keeps established WebRTC channels alive on signaling loss.
+        // Re-register the same ID instead of destroying a live multiplayer game.
+        setPeerConnectionStatus('RECONNECTING', '訊號伺服器暫時中斷；現有玩家可繼續，正嘗試恢復新玩家入房。');
+        setTimeout(() => {
+          if (gameSession.peer !== peer || peer.destroyed || !peer.disconnected) return;
+          try { peer.reconnect(); } catch (err) {
+            setPeerConnectionStatus('FAILED', '訊號伺服器重連失敗：' + (err.message || String(err)));
+          }
+        }, 1200);
       });
     } catch (e) {
       setPeerConnectionStatus('FAILED', '無法啟動 PeerJS：' + (e.message || String(e)));
@@ -316,6 +323,12 @@ function createOnlineHostRoom(customCode = null) {
 // === Client: Join Online Room ===
 function joinOnlineRoomAsClient(rawCode, playerName) {
   const code = String(rawCode || '').trim().toUpperCase();
+  // A host cannot join its own room from the host tab: cleanupNetworkChannels()
+  // would destroy the room and strand every connected guest.
+  if (gameSession.mode === 'HOST' && gameSession.roomCode) {
+    showToast('⚠️ 本視窗正在主持房間！請保留房主頁面，另開無痕視窗或其他裝置加入。', 5000);
+    return;
+  }
   if (!/^[A-HJ-NP-Z2-9]{8}$/.test(code)) {
     showToast('⚠️ 請輸入有效的 8 碼房間碼！');
     return;
@@ -358,6 +371,11 @@ function joinOnlineRoomAsClient(rawCode, playerName) {
       peer.on('open', () => {
         clearTimeout(registrationTimeout);
         if (gameSession.peer !== peer) return;
+        // Reconnected signaling must not create a duplicate WebRTC channel.
+        if (gameSession.clientHostConn && gameSession.clientHostConn.open) {
+          setPeerConnectionStatus('ONLINE');
+          return;
+        }
         const conn = peer.connect(getPeerIdForRoom(code), { reliable: true });
         gameSession.clientHostConn = conn;
         const joinTimeout = setTimeout(() => {
@@ -392,7 +410,21 @@ function joinOnlineRoomAsClient(rawCode, playerName) {
         clearTimeout(registrationTimeout);
         if (gameSession.peer !== peer) return;
         const kind = (err && err.type) || 'unknown';
+        if (gameSession.clientHostConn?.open && kind !== 'unavailable-id') {
+          console.warn('[Mx] PeerJS signaling error; data channel still active:', kind);
+          return;
+        }
         setPeerConnectionStatus('FAILED', 'PeerJS 連線失敗（' + kind + '）。請檢查房號、網絡或訊號伺服器。');
+      });
+      peer.on('disconnected', () => {
+        if (gameSession.peer !== peer) return;
+        setPeerConnectionStatus('RECONNECTING', 'PeerJS 訊號服務暫時中斷；正恢復連線。');
+        setTimeout(() => {
+          if (gameSession.peer !== peer || peer.destroyed || !peer.disconnected) return;
+          try { peer.reconnect(); } catch (err) {
+            setPeerConnectionStatus('FAILED', '訊號伺服器重連失敗：' + (err.message || String(err)));
+          }
+        }, 1200);
       });
     } catch (e) {
       setPeerConnectionStatus('FAILED', '無法啟動 PeerJS：' + (e.message || String(e)));
@@ -506,7 +538,7 @@ function broadcastLobbyState() {
       try { conn.send(packet); } catch (e) {}
     }
   });
-  if (gameSession.bc) {
+  if (gameSession.bc && !gameSession.lobbyState.fogOfWar) {
     try { gameSession.bc.postMessage(packet); } catch (e) {}
   }
   if (typeof renderLobbyUI === 'function') renderLobbyUI();
@@ -582,8 +614,20 @@ function handleIncomingNetworkPacket(packet, transport, peerConn) {
       let assignedSeat = activeSeats.find(s => s.id !== 'p1' && s.clientToken && s.clientToken === clientToken);
       // An existing connected peer must not be displaced by another connection.
       if (assignedSeat && assignedSeat.connected &&
-          gameSession.peerConns[assignedSeat.id] &&
-          gameSession.peerConns[assignedSeat.id] !== peerConn) return;
+          gameSession.peerConns[assignedSeat.id]?.open &&
+          gameSession.peerConns[assignedSeat.id] !== peerConn) {
+        // Same session-token already has a live socket. Do not silently
+        // ignore the duplicate HELLO: tell that tab why it cannot join.
+        if (peerConn && peerConn.open) {
+          peerConn.send({
+            msgType: 'JOIN_REJECTED',
+            roomCode: gameSession.roomCode,
+            targetToken: clientToken,
+            reason: '這個身份已在另一個視窗連線。請關閉舊視窗或使用無痕視窗另行加入。'
+          });
+        }
+        return;
+      }
 
       // 2. Otherwise find first OPEN seat, or convert an AI seat to HUMAN if match hasn't started yet
       if (!assignedSeat && !isMatchRunning) {
@@ -599,8 +643,10 @@ function handleIncomingNetworkPacket(packet, transport, peerConn) {
           targetToken: clientToken,
           reason: '房間座位已滿（目前無空缺席位）'
         };
-        if (peerConn && peerConn.open) peerConn.send(rejectMsg);
-        if (gameSession.bc) gameSession.bc.postMessage(rejectMsg);
+        if (transport === 'PEER' && peerConn && peerConn.open) peerConn.send(rejectMsg);
+        if (transport === 'BC' && gameSession.bc && !gameSession.lobbyState.fogOfWar) {
+          gameSession.bc.postMessage(rejectMsg);
+        }
         return;
       }
 
@@ -694,6 +740,8 @@ function handleIncomingNetworkPacket(packet, transport, peerConn) {
     }
 
     if (packet.msgType === 'LOBBY_SYNC') {
+      if (transport === 'BC' && gameSession.lobbyState.fogOfWar) return;
+      if (!packet.lobbyState || typeof packet.lobbyState !== 'object') return;
       gameSession.lobbyState = packet.lobbyState;
       if (packet.lobbyState && packet.lobbyState.themeId && typeof applyThemeToRegistry === 'function') {
         applyThemeToRegistry(packet.lobbyState.themeId);
