@@ -1977,3 +1977,116 @@ body.is-landscape-active #inspectorCardsGrid .modal-pure-card {
 .ls-sub-peek-skl {
   font-size: 8px !important;
 }
+
+/* === V14.1 HIGH SPACE UTILIZATION & CARD-HUGGING CONTAINERS === */
+:root {
+  --ls-dept-card-h: clamp(62px, calc(var(--app-h, 390px) * 0.205), 114px);
+  --ls-my-dept-card-h: clamp(74px, calc(var(--app-h, 390px) * 0.246), 134px);
+  --ls-pile-card-h: clamp(64px, calc(var(--app-h, 390px) * 0.208), 116px);
+  --ls-hand-card-h: clamp(84px, calc(var(--app-h, 390px) * 0.292), 152px);
+  --ls-modal-card-h: clamp(112px, calc(var(--app-h, 390px) * 0.445), 186px);
+  --ls-comp-card-w: clamp(46px, calc(var(--app-w, 844px) * 0.062), 72px);
+  --ls-moded-left-w: clamp(96px, calc(var(--app-w, 844px) * 0.132), 136px);
+}
+
+.ls-row-top {
+  height: 29.5% !important;
+}
+.ls-row-mid {
+  height: 31% !important;
+}
+.ls-row-bot {
+  height: 36.5% !important;
+}
+
+/* Seat panels & Talent Pool tightly hug their 4 department cards instead of leaving wide empty black margins */
+.ls-seat-panel {
+  width: fit-content !important;
+  max-width: 100% !important;
+  padding: 0.24rem 0.48rem !important;
+}
+
+.ls-dept-row {
+  width: fit-content !important;
+  margin-left: auto !important;
+  margin-right: auto !important;
+  gap: 0.35rem !important;
+}
+
+/* My Company 4 Department Cards are larger to fill the taller bottom row */
+.ls-dept-card.ls-my-dept-card {
+  height: var(--ls-my-dept-card-h) !important;
+}
+
+/* Stacked Department Cards: Preserve 100% of the Top Card's top & bottom numbers (object-fit: fill) + slightly taller stack */
+.ls-dept-card.ls-dept-card-stacked {
+  height: calc(var(--ls-dept-card-h) + 5px) !important;
+}
+.ls-dept-card.ls-my-dept-card.ls-dept-card-stacked {
+  height: calc(var(--ls-my-dept-card-h) + 6px) !important;
+}
+.ls-stack-head-wrap > img {
+  object-fit: fill !important;
+}
+
+/* Center Oval Table hugs the 3 card piles cleanly instead of stretching into a giant empty stadium */
+.ls-oval-felt {
+  width: fit-content !important;
+  min-width: 228px !important;
+  max-width: 100% !important;
+  margin: 0 auto !important;
+  padding: 0.25rem 1.35rem !important;
+}
+
+/* Hand Cards: Larger height & width to fill the Bottom-Right Hand Dock */
+.ls-hand-strip {
+  gap: 0.38rem !important;
+}
+.ls-hand-strip .ls-hand-card {
+  height: var(--ls-hand-card-h) !important;
+  max-height: 98% !important;
+  aspect-ratio: 2 / 3 !important;
+  width: auto !important;
+  max-width: calc((100% - 1.9rem) / 6) !important;
+  flex: 0 1 auto !important;
+}
+
+/* Mode D Tactical Overlay in Landscape Mode: Auto-fit width around targets, 2x larger employee cards, zero black/green void */
+body.is-landscape-active .mode-d-sheet-card {
+  width: fit-content !important;
+  min-width: 360px !important;
+  max-width: min(calc(var(--app-w, 100vw) * 0.96), 880px) !important;
+  max-height: calc(var(--app-h, 100vh) * 0.94) !important;
+  padding: 0.6rem 0.9rem !important;
+  margin: 0 auto !important;
+}
+
+.ls-target-emp-card {
+  height: var(--ls-modal-card-h) !important;
+  aspect-ratio: 2 / 3 !important;
+  width: auto !important;
+}
+
+.ls-moded-emp-btn {
+  width: calc(var(--ls-modal-card-h) * 0.667 + 14px) !important;
+  flex-shrink: 0 !important;
+}
+
+.ls-moded-opp-card {
+  width: fit-content !important;
+}
+
+.ls-moded-opp-card .ls-comp-dept-grid {
+  display: flex !important;
+  align-items: center !important;
+  justify-content: center !important;
+  gap: 4px !important;
+  width: fit-content !important;
+}
+
+.ls-moded-opp-card .ls-comp-dept-card {
+  width: var(--ls-comp-card-w) !important;
+  aspect-ratio: 2 / 3 !important;
+  height: auto !important;
+  flex-shrink: 0 !important;
+}

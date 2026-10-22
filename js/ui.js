@@ -122,16 +122,20 @@ function syncLayoutOrientationDOM() {
 
   document.documentElement.style.setProperty("--app-w", `${appW}px`);
   document.documentElement.style.setProperty("--app-h", `${appH}px`);
-  // V14.0 Fluid Responsive Card Sizing (Scales automatically with screen size, tuned smaller & sleeker)
-  const deptCardH = Math.round(Math.max(48, Math.min(102, appH * 0.162)));
-  const pileCardH = Math.round(Math.max(46, Math.min(94, appH * 0.150)));
-  const handCardH = Math.round(Math.max(56, Math.min(114, appH * 0.192)));
-  const modalCardH = Math.round(Math.max(66, Math.min(120, appH * 0.228)));
-  const modedLeftW = Math.round(Math.max(80, Math.min(114, appW * 0.108)));
+  // V14.1 High-Utilization Fluid Responsive Card Sizing (Cards fill 85%-90% of their row height, zero wasted void)
+  const deptCardH = Math.round(Math.max(62, Math.min(114, appH * 0.205)));
+  const myDeptCardH = Math.round(Math.max(74, Math.min(134, appH * 0.246)));
+  const pileCardH = Math.round(Math.max(64, Math.min(116, appH * 0.208)));
+  const handCardH = Math.round(Math.max(84, Math.min(152, appH * 0.292)));
+  const modalCardH = Math.round(Math.max(112, Math.min(186, appH * 0.445)));
+  const compCardW = Math.round(Math.max(46, Math.min(72, appW * 0.062)));
+  const modedLeftW = Math.round(Math.max(96, Math.min(136, appW * 0.132)));
   document.documentElement.style.setProperty("--ls-dept-card-h", `${deptCardH}px`);
+  document.documentElement.style.setProperty("--ls-my-dept-card-h", `${myDeptCardH}px`);
   document.documentElement.style.setProperty("--ls-pile-card-h", `${pileCardH}px`);
   document.documentElement.style.setProperty("--ls-hand-card-h", `${handCardH}px`);
   document.documentElement.style.setProperty("--ls-modal-card-h", `${modalCardH}px`);
+  document.documentElement.style.setProperty("--ls-comp-card-w", `${compCardW}px`);
   document.documentElement.style.setProperty("--ls-moded-left-w", `${modedLeftW}px`);
 
   const pHeader = document.getElementById("portraitHeaderBar");
@@ -2130,7 +2134,8 @@ function renderLsDeptSlotHTML(player, d, opts = {}) {
 
   const isHighlighted = opts.highlightDept === d;
   const isComp = Boolean(opts.isComp);
-  const baseCardCls = isComp ? 'ls-comp-dept-card' : 'ls-dept-card';
+  const isMyBoard = Boolean(opts.isMyBoard);
+  const baseCardCls = isComp ? 'ls-comp-dept-card' : (isMyBoard ? 'ls-dept-card ls-my-dept-card' : 'ls-dept-card');
   const glowCls = isHighlighted ? 'ls-dept-target-glow' : `border ${st.border}`;
   const slotDataAttr = isComp ? '' : `data-ls-dept-slot="${player.id}_${d}"`;
   const clickAttrs = opts.noInspect ? '' : (headUid ? `data-inspect-dept="${d}" data-inspect-player="${player.id}"` : `data-empty-dept="${d}"`);
@@ -2317,9 +2322,12 @@ function renderLsTableMiniActionCardHTML(card, countBadge = null, topSubLabel = 
 
 function renderLsHandCardHTML(card, status, isSelected, isDiscardSel, isHumanStep1) {
   const vis = getActionCategoryVisuals(card);
+  const isEnemyCheck = card.effect === 'BAD_IDEA' || card.effect === 'FORCE_HIRE' || card.effect === 'POACH_ENEMY';
+  const reqPrefix = isEnemyCheck ? '對' : '需';
+  const orbBg = isEnemyCheck ? 'bg-rose-600' : 'bg-amber-600';
   const reqOrbs = (card.reqSkills && card.reqSkills.length > 0)
-    ? `<div class="flex items-center justify-center gap-0.5">${card.reqSkills.map(s => `<span class="w-3 h-3 rounded-full bg-amber-600 text-white text-[7px] font-black flex items-center justify-center leading-none">${s}</span>`).join('')}</div>`
-    : `<span class="text-[7px] font-extrabold text-slate-600">${card.dept === 'PURPLE' ? '2副總' : '免檢定'}</span>`;
+    ? `<div class="flex items-center justify-center gap-0.5"><span class="text-[7px] font-black text-amber-200 mr-0.5">${reqPrefix}</span>${card.reqSkills.map(s => `<span class="w-3.5 h-3.5 rounded-full ${orbBg} border border-white/70 text-white text-[8px] font-black flex items-center justify-center leading-none shadow">${s}</span>`).join('')}</div>`
+    : `<span class="text-[7.5px] font-extrabold text-amber-200">${card.dept === 'PURPLE' ? '👑需2副總' : '✓免檢定'}</span>`;
 
   const isPendingFlight = window.__lsPendingLandings && window.__lsPendingLandings.handUids.has(card.uid);
   const flightHiddenCls = isPendingFlight ? 'ls-card-in-flight-hidden' : '';
@@ -2328,21 +2336,22 @@ function renderLsHandCardHTML(card, status, isSelected, isDiscardSel, isHumanSte
 
   return `
     <div data-act-uid="${card.uid}" class="ls-hand-card ${selCls} ${dimCls} ${flightHiddenCls} select-none">
-      <div class="${vis.headerBg} px-1 py-0.5 text-[7px] font-black text-white flex items-center justify-between leading-none shrink-0">
+      <div class="${vis.headerBg} px-1.5 py-0.5 text-[8px] font-black text-white flex items-center justify-between leading-none shrink-0">
         <span class="truncate">${vis.tag}</span>
-        <span class="shrink-0">${vis.badge}</span>
+        <span class="shrink-0 text-amber-200">${vis.badge}</span>
       </div>
-      <div class="flex-1 min-h-0 ${vis.artBg} flex flex-col items-center justify-center p-0.5 relative overflow-hidden">
-        <div class="text-base sm:text-lg leading-none drop-shadow-md">${card.svg}</div>
-        <div class="mt-0.5 px-1 py-0.2 rounded bg-black/50 text-[7px] font-black text-amber-200 whitespace-nowrap">${vis.badge}</div>
-        ${isDiscardSel ? `<div class="absolute inset-0 bg-orange-600/85 flex items-center justify-center text-[9px] font-black text-white">🗑️待棄</div>` : ''}
-      </div>
-      <div class="bg-ivory-card px-1 py-0.5 flex flex-col gap-0.5 shrink-0 border-t border-stone-300 text-center">
-        <div class="text-[8px] font-black text-slate-900 truncate leading-tight">${card.title}</div>
-        <div class="flex items-center justify-between min-h-[12px]">
-          <span class="text-[6.5px] font-black ${status.playable ? 'text-emerald-700' : 'text-rose-700'} truncate">${status.playable ? '●可出' : status.shortReason}</span>
+      <div class="flex-1 min-h-0 ${vis.artBg} flex flex-col items-center justify-between py-1 px-0.5 relative overflow-hidden">
+        <div class="w-full flex items-center justify-between px-1">
+          <span class="px-1 py-0.2 rounded bg-black/65 text-[7px] font-black ${status.playable ? 'text-emerald-300' : 'text-rose-300'} truncate">${status.playable ? '●可出' : status.shortReason}</span>
+        </div>
+        <div class="text-xl sm:text-2xl leading-none drop-shadow-md my-auto">${card.svg}</div>
+        <div class="px-1.5 py-0.5 rounded-full bg-black/65 border border-white/15 flex items-center justify-center">
           ${reqOrbs}
         </div>
+        ${isDiscardSel ? `<div class="absolute inset-0 bg-orange-600/85 flex items-center justify-center text-[10px] font-black text-white">🗑️待棄</div>` : ''}
+      </div>
+      <div class="bg-ivory-card px-1 py-1 shrink-0 border-t border-stone-300 text-center flex items-center justify-center min-h-[20px]">
+        <div class="text-[8.5px] sm:text-[9.5px] font-black text-slate-900 truncate leading-tight w-full">${card.title}</div>
       </div>
     </div>
   `;
@@ -2537,36 +2546,24 @@ function renderLandscapeArena() {
     if (myPanelEl.getAttribute('data-render-sig') !== mySig) {
       myPanelEl.setAttribute('data-render-sig', mySig);
       myPanelEl.innerHTML = `
-        <div class="ls-seat-panel ${mySeatHiddenCls} ${isMyTurnNow ? 'ls-seat-active' : ''} w-full h-full flex flex-col justify-between gap-0.5 overflow-hidden">
+        <div class="ls-seat-panel ls-my-seat-panel ${mySeatHiddenCls} ${isMyTurnNow ? 'ls-seat-active' : ''} h-full flex flex-col justify-between gap-1 overflow-hidden">
           <div class="flex items-center justify-between gap-1 px-0.5 shrink-0">
             <div class="flex items-center gap-1 min-w-0">
               <span class="text-[11px] font-black text-stone-100 truncate">你·${getShortPlayerName(localPlayer.name)}</span>
               <span class="text-xs sm:text-sm font-black text-amber-300 leading-none whitespace-nowrap">${localPlayer.crystals}</span>
               <span class="text-[9px] font-bold text-stone-400 whitespace-nowrap">手${myVisibleHandCnt}</span>
             </div>
-            <div class="flex items-center gap-1 shrink-0">
-              <span class="px-1 py-0.2 rounded bg-purple-950/90 border border-purple-400/60 text-[8px] font-black text-purple-200 whitespace-nowrap">${terms.vpIcon || '👑'}${terms.vpName || '副總'}:${getTotalVPCount(localPlayer)}</span>
-              <span class="px-1 py-0.2 rounded bg-rose-950/90 border border-rose-500/60 text-[8px] font-black text-rose-300 whitespace-nowrap">🔥-${myBurn}/回</span>
+            <div class="flex items-center gap-1 shrink-0 text-[8px] font-black">
+              <span class="px-1 py-0.2 rounded bg-purple-950/90 border border-purple-400/60 text-purple-200 whitespace-nowrap">${terms.vpIcon || '👑'}${getTotalVPCount(localPlayer)}</span>
+              <span class="px-1 py-0.2 rounded bg-red-950/80 border border-red-500/40 text-red-200 whitespace-nowrap">${terms.engIcon || '⚒'}${localPlayer.engineers.length}</span>
+              <button data-inspect-crises="${myId}" class="px-1 py-0.2 rounded ${myCrisisCnt > 0 ? 'bg-amber-950/95 border border-amber-400 text-amber-200' : 'bg-stone-900 border border-stone-700 text-stone-400'} whitespace-nowrap">${terms.crisisIcon || '💥'}${myCrisisCnt}(需${myCrisisReq})🔍</button>
+              ${localPlayer.outsourcedCount > 0 ? `<span class="px-1 py-0.2 rounded bg-rose-700 text-white whitespace-nowrap">包${localPlayer.outsourcedCount}</span>` : ''}
+              <span class="px-1 py-0.2 rounded bg-rose-950/90 border border-rose-500/60 text-rose-300 whitespace-nowrap">🔥-${myBurn}/回</span>
             </div>
           </div>
 
           <div class="ls-dept-row py-0.5">
-            ${LS_DEPT_ORDER.map(d => renderLsDeptSlotHTML(localPlayer, d)).join('')}
-          </div>
-
-          <div class="grid grid-cols-3 gap-1 w-full shrink-0">
-            <div class="rounded bg-red-950/70 border border-red-500/40 px-1 py-0.2 flex items-center justify-between text-[8px] font-bold text-red-200">
-              <span class="truncate">${terms.engIcon || '⚒'}${terms.engName || '工程師'}:${localPlayer.engineers.length}</span>
-              <span class="text-rose-300 font-black">-${localPlayer.engineers.length}</span>
-            </div>
-            <button data-inspect-crises="${myId}" class="rounded ${myCrisisCnt > 0 ? 'bg-amber-950/90 border border-amber-400 text-amber-200' : 'bg-stone-900 border border-stone-700 text-stone-400'} px-1 py-0.2 flex items-center justify-between text-[8px] font-bold">
-              <span class="truncate">${terms.crisisIcon || '💥'}${terms.crisisName || '爛點子'}:${myCrisisCnt}</span>
-              <span class="font-black">需${myCrisisReq}🔍</span>
-            </button>
-            <div class="rounded ${localPlayer.outsourcedCount > 0 ? 'bg-rose-900/90 border border-rose-400 text-white' : 'bg-stone-900 border border-stone-700 text-stone-400'} px-1 py-0.2 flex items-center justify-between text-[8px] font-bold">
-              <span class="truncate">${terms.outIcon || '💸'}${terms.outName || '外包'}:${localPlayer.outsourcedCount}</span>
-              <span class="font-black">-${localPlayer.outsourcedCount * 3}</span>
-            </div>
+            ${LS_DEPT_ORDER.map(d => renderLsDeptSlotHTML(localPlayer, d, { isMyBoard: true })).join('')}
           </div>
         </div>
       `;
@@ -2664,7 +2661,7 @@ function renderLsOpponentComparisonCardHTML(opp, checkDept, isValid, actionAttr,
 
   if (!isValid) {
     return `
-      <div class="rounded-xl bg-stone-900/75 border border-stone-700 p-1.5 opacity-60 flex flex-col justify-between gap-1 min-w-0 overflow-hidden">
+      <div class="ls-moded-opp-card rounded-xl bg-stone-900/75 border border-stone-700 p-2 opacity-60 flex flex-col justify-between gap-1.5 overflow-hidden shrink-0">
         <div class="flex items-center justify-between gap-1 px-0.5">
           <span class="text-xs font-black text-stone-200 truncate">${shortOpp}</span>
           <span class="text-xs font-black text-amber-300 whitespace-nowrap">💵${opp.crystals}</span>
@@ -2672,14 +2669,14 @@ function renderLsOpponentComparisonCardHTML(opp, checkDept, isValid, actionAttr,
         <div class="ls-comp-dept-grid">
           ${deptStrip}
         </div>
-        <div class="text-[9px] font-bold text-stone-400 truncate px-0.5">${subFooterText}</div>
+        <div class="text-[9.5px] font-bold text-stone-400 truncate px-0.5">${subFooterText}</div>
         <div class="w-full py-1 rounded-lg bg-stone-800 text-center text-[10px] font-bold text-sky-300 truncate px-1">${btnLabel}</div>
       </div>
     `;
   }
 
   return `
-    <button ${actionAttr} class="rounded-xl bg-stone-950/95 border-2 border-amber-400/85 hover:border-amber-300 p-1.5 text-left shadow-xl flex flex-col justify-between gap-1 min-w-0 overflow-hidden transition hover:-translate-y-0.5">
+    <button ${actionAttr} class="ls-moded-opp-card rounded-xl bg-stone-950/95 border-2 border-amber-400/85 hover:border-amber-300 p-2 text-left shadow-xl flex flex-col justify-between gap-1.5 overflow-hidden shrink-0 transition hover:-translate-y-0.5">
       <div class="flex items-center justify-between gap-1 w-full px-0.5">
         <span class="text-xs font-black text-white truncate">🎯 ${shortOpp}</span>
         <span class="text-xs font-black text-amber-300 whitespace-nowrap">💵${opp.crystals}</span>
@@ -2687,8 +2684,8 @@ function renderLsOpponentComparisonCardHTML(opp, checkDept, isValid, actionAttr,
       <div class="ls-comp-dept-grid pointer-events-none">
         ${deptStrip}
       </div>
-      <div class="text-[9px] font-bold text-stone-200 truncate w-full px-0.5">${subFooterText}</div>
-      <div class="w-full py-1 rounded-lg bg-gradient-to-r text-center text-[10px] font-black text-slate-950 shadow truncate px-1">
+      <div class="text-[9.5px] font-bold text-stone-200 truncate w-full px-0.5">${subFooterText}</div>
+      <div class="w-full py-1.5 rounded-lg bg-gradient-to-r text-center text-[10.5px] font-black text-slate-950 shadow truncate px-1">
         ${btnLabel}
       </div>
     </button>
@@ -3068,12 +3065,73 @@ function renderModeDDrawer() {
     }).join('');
   }
 
-  // In Landscape Tabletop Mode, render custom 2-column non-overlapping target pickers for ALL 9 card effect types
+  // In Landscape Tabletop Mode, render custom high-density, card-hugging 2-column target pickers for ALL 9 card effect types
   if (isLandscapeModeActive()) {
     const terms = typeof getThemeTerms === 'function' ? getThemeTerms() : {};
     let rightPanelHTML = '';
 
-    if (card.effect === 'BAD_IDEA') {
+    // Dynamically localize Mode D header pill & title to the active theme!
+    if (card.effect === 'GAIN_FUNDS') {
+      if (pillEl) pillEl.textContent = `💰 ${DEPT_META.GREEN.short}入帳`;
+      titleEl.textContent = `「${card.title}」— 點擊立即入帳（或再點一次手牌秒出）：`;
+    } else if (card.effect === 'RELEASE_CRISIS') {
+      if (pillEl) pillEl.textContent = `🍾 解除${terms.crisisName || '危機'}`;
+      titleEl.textContent = `「${card.title}」— 點選要解除的${terms.crisisName || '危機'}：`;
+    } else if (card.effect === 'HIRE_BANK') {
+      if (pillEl) pillEl.textContent = `🤝 標準聘僱`;
+      titleEl.textContent = `「${card.title}」— 點選人才池頂牌加入我方部門：`;
+    } else if (card.effect === 'FIRE_OWN') {
+      if (pillEl) pillEl.textContent = `🚪 解僱裁員`;
+      titleEl.textContent = `「${card.title}」— 點選要解僱退回人才池的我方成員：`;
+    } else if (card.effect === 'BAD_IDEA') {
+      if (pillEl) pillEl.textContent = `💥 丟出${terms.crisisName || '危機'}`;
+      titleEl.textContent = `「${card.title}（對手${DEPT_META.YELLOW.short} ${card.reqSkills.join('/')} 級）」— 點選目標對手：`;
+    } else if (card.effect === 'FORCE_HIRE') {
+      if (pillEl) pillEl.textContent = `🪤 強塞人員`;
+      if (!uiSelection.step2OpponentId) {
+        titleEl.textContent = `步驟 1/2：「${card.title}（對手${DEPT_META.BLUE.short} ${card.reqSkills.join('/')} 級）」— 先選對手：`;
+      } else {
+        const opp = state.players.find(p => p.id === uiSelection.step2OpponentId);
+        titleEl.textContent = `步驟 2/2：點選人才池頂牌強塞給【${opp ? getShortPlayerName(opp.name) : ''}】：`;
+      }
+    } else if (card.effect === 'POACH_ENEMY') {
+      if (pillEl) pillEl.textContent = `🕸️ 高薪挖角`;
+      titleEl.textContent = `「${card.title}（對手${DEPT_META.BLUE.short} ${card.reqSkills.join('/')} 級）」— 點選挖角目標：`;
+    } else if (card.effect === 'VP_KICK_ENEMY') {
+      if (pillEl) pillEl.textContent = `⚡ 放逐${terms.vpName || '副總'}`;
+      titleEl.textContent = `「${card.title}」— 點選要放逐回人才池的敵方${terms.vpName || '副總'}：`;
+    } else if (card.effect === 'VP_DOUBLE_PAY') {
+      if (pillEl) pillEl.textContent = `🔥 雙倍支出`;
+      titleEl.textContent = `「${card.title}」— 點選下回合發薪支出翻倍 (×2) 的對手：`;
+    }
+
+    if (card.effect === 'GAIN_FUNDS') {
+      const gHeadUid = localPlayer.departments.GREEN[0];
+      const gHeadCard = gHeadUid ? CARDS_BY_ID[gHeadUid] : null;
+      const gSkill = getEffectiveSkill(localPlayer, 'GREEN');
+      const nextCrystals = localPlayer.crystals + card.val;
+      const headArtHTML = gHeadCard
+        ? `<div class="ls-target-emp-card shrink-0">${getCardImgTag(gHeadCard.artKey || gHeadCard.tplId, gHeadCard.title, 'w-full h-full object-cover block')}</div>`
+        : `<div class="ls-target-emp-card shrink-0 bg-emerald-950/60 border border-dashed border-emerald-500/50 flex flex-col items-center justify-center p-2 text-center"><span class="text-xl">🏢</span><span class="text-[9px] font-black text-emerald-300 mt-1">${DEPT_META.GREEN.short}空缺</span><span class="text-[8px] text-stone-400">0級</span></div>`;
+
+      rightPanelHTML = `
+        <button data-d-action="CONFIRM_FUNDS" class="rounded-2xl bg-emerald-950/85 border-2 border-emerald-400 hover:border-amber-300 p-2.5 text-left shadow-2xl flex items-center gap-3 min-w-0 my-auto transition hover:-translate-y-0.5">
+          ${headArtHTML}
+          <div class="flex flex-col justify-between gap-2 min-w-[180px] max-w-[240px]">
+            <div>
+              <span class="px-2 py-0.5 rounded-full bg-emerald-700 text-white text-[9.5px] font-black">${DEPT_META.GREEN.short} ${gSkill} 級認證 · ${gHeadCard ? gHeadCard.title : '0級'}</span>
+              <div class="text-sm font-black text-white mt-1.5">${card.title}</div>
+              <div class="text-xs font-bold text-amber-200 mt-1">
+                目前資金：<span class="text-white font-black">${localPlayer.crystals}</span> ➔ <span class="text-emerald-300 font-black text-sm">${nextCrystals}</span>
+              </div>
+            </div>
+            <div class="w-full py-2 px-3 rounded-xl bg-emerald-500 hover:bg-emerald-400 text-slate-950 font-black text-xs text-center shadow-lg">
+              💰 +${card.val} 立即入帳
+            </div>
+          </div>
+        </button>
+      `;
+    } else if (card.effect === 'BAD_IDEA') {
       const oppGridHTML = aliveOpponents.map(opp => {
         const oppSkill = getEffectiveSkill(opp, 'YELLOW');
         const isValid = status.validOpponents.includes(opp.id);
@@ -3089,7 +3147,7 @@ function renderModeDDrawer() {
       }).join('');
       rightPanelHTML = `
         <div class="text-[11px] font-bold text-amber-200 truncate">看對方的【${DEPT_META.YELLOW.name}】（亮黃框部門），點選目標立即施放：</div>
-        <div class="grid ${aliveOpponents.length >= 3 ? 'grid-cols-3' : aliveOpponents.length === 2 ? 'grid-cols-2' : 'grid-cols-1'} gap-2 w-full min-w-0 my-auto">
+        <div class="flex items-stretch justify-center gap-2.5 min-w-0 my-auto">
           ${oppGridHTML}
         </div>
       `;
@@ -3104,7 +3162,7 @@ function renderModeDDrawer() {
       }).join('');
       rightPanelHTML = `
         <div class="text-[11px] font-bold text-amber-200 truncate">步驟 1/2：看對方的【${DEPT_META.BLUE.name}】（亮黃框部門），點選要強塞人員的對手：</div>
-        <div class="grid ${aliveOpponents.length >= 3 ? 'grid-cols-3' : aliveOpponents.length === 2 ? 'grid-cols-2' : 'grid-cols-1'} gap-2 w-full min-w-0 my-auto">
+        <div class="flex items-stretch justify-center gap-2.5 min-w-0 my-auto">
           ${oppGridHTML}
         </div>
       `;
@@ -3120,7 +3178,7 @@ function renderModeDDrawer() {
         const isSabotageVP = emp.isVP && emp.skill < oppCurSkill;
         if (!isAllowed) {
           return `
-            <div class="rounded-xl bg-stone-900/70 border border-stone-700 p-1.5 opacity-45 flex flex-col items-center justify-between gap-1 min-w-0">
+            <div class="ls-moded-emp-btn rounded-xl bg-stone-900/70 border border-stone-700 p-1.5 opacity-45 flex flex-col items-center justify-between gap-1">
               <div class="ls-target-emp-card">
                 ${getCardImgTag(emp.artKey || emp.tplId, emp.title, 'w-full h-full object-cover block')}
               </div>
@@ -3129,11 +3187,11 @@ function renderModeDDrawer() {
           `;
         }
         return `
-          <button data-d-action="CONFIRM_FORCE_HIRE" data-opp-id="${opp.id}" data-dept="${d}" class="rounded-xl bg-stone-950 border-2 border-amber-400 p-1.5 text-center shadow-lg flex flex-col items-center justify-between gap-1 min-w-0 transition hover:-translate-y-0.5">
+          <button data-d-action="CONFIRM_FORCE_HIRE" data-opp-id="${opp.id}" data-dept="${d}" class="ls-moded-emp-btn rounded-xl bg-stone-950 border-2 border-amber-400 p-1.5 text-center shadow-lg flex flex-col items-center justify-between gap-1 transition hover:-translate-y-0.5">
             <div class="ls-target-emp-card pointer-events-none">
               ${getCardImgTag(emp.artKey || emp.tplId, emp.title, 'w-full h-full object-cover block')}
             </div>
-            <div class="text-[9px] font-bold text-amber-200 truncate w-full">${isSabotageVP ? `😈壓低至${emp.skill}級!` : `🔥害他-${emp.salary}/回`}</div>
+            <div class="text-[9.5px] font-bold text-amber-200 truncate w-full">${isSabotageVP ? `😈壓低至${emp.skill}級!` : `🔥害他-${emp.salary}/回`}</div>
             <div class="w-full py-1 rounded-lg bg-rose-600 text-center text-[10px] font-black text-white shadow truncate px-1">🪤 強塞 ${emp.title}</div>
           </button>
         `;
@@ -3143,7 +3201,7 @@ function renderModeDDrawer() {
           <span class="text-[11px] font-bold text-amber-200 truncate">步驟 2/2：點選人才池頂牌強塞給【${getShortPlayerName(opp.name)}】：</span>
           <button data-d-action="BACK_FORCE_STEP1" class="px-2 py-0.5 rounded bg-stone-800 border border-stone-600 text-[10px] font-bold text-sky-300 shrink-0">⬅ 重選對手</button>
         </div>
-        <div class="grid grid-cols-4 gap-2 w-full min-w-0 my-auto">
+        <div class="flex items-stretch justify-center gap-2 min-w-0 my-auto">
           ${bankCardsHTML}
         </div>
       `;
@@ -3160,7 +3218,7 @@ function renderModeDDrawer() {
 
         if (!isValid) {
           return `
-            <div class="rounded-xl bg-stone-900/70 border border-stone-700 p-1.5 opacity-45 flex flex-col items-center justify-between gap-1 min-w-0">
+            <div class="ls-moded-emp-btn rounded-xl bg-stone-900/70 border border-stone-700 p-1.5 opacity-45 flex flex-col items-center justify-between gap-1">
               <div class="ls-target-emp-card">
                 ${getCardImgTag(emp.artKey || emp.tplId, emp.title, 'w-full h-full object-cover block')}
               </div>
@@ -3169,18 +3227,18 @@ function renderModeDDrawer() {
           `;
         }
         return `
-          <button data-d-action="CONFIRM_HIRE" data-dept="${d}" class="rounded-xl bg-stone-950 border-2 border-emerald-400 p-1.5 text-center shadow-lg flex flex-col items-center justify-between gap-1 min-w-0 transition hover:-translate-y-0.5">
+          <button data-d-action="CONFIRM_HIRE" data-dept="${d}" class="ls-moded-emp-btn rounded-xl bg-stone-950 border-2 border-emerald-400 p-1.5 text-center shadow-lg flex flex-col items-center justify-between gap-1 transition hover:-translate-y-0.5">
             <div class="ls-target-emp-card pointer-events-none">
               ${getCardImgTag(emp.artKey || emp.tplId, emp.title, 'w-full h-full object-cover block')}
             </div>
-            <div class="text-[9px] font-bold text-emerald-300 truncate w-full">${impactHint}</div>
-            <div class="w-full py-1 rounded-lg bg-emerald-600 text-center text-[10px] font-black text-white shadow truncate px-1">⚡ 招募 ${emp.title}</div>
+            <div class="text-[9.5px] font-bold text-emerald-300 truncate w-full">${impactHint}</div>
+            <div class="w-full py-1 rounded-lg bg-emerald-600 text-center text-[10px] font-black text-white shadow truncate px-1">⚡ 聘請 ${emp.title}</div>
           </button>
         `;
       }).join('');
       rightPanelHTML = `
-        <div class="text-[11px] font-bold text-amber-200 truncate">點選中央人才池翻開的應徵者加入我方部門：</div>
-        <div class="grid grid-cols-4 gap-2 w-full min-w-0 my-auto">
+        <div class="text-[11px] font-bold text-amber-200 truncate">點選人才池翻開的應徵者加入我方部門：</div>
+        <div class="flex items-stretch justify-center gap-2 min-w-0 my-auto">
           ${bankCardsHTML}
         </div>
       `;
@@ -3192,8 +3250,8 @@ function renderModeDDrawer() {
           const emp = CARDS_BY_ID[eUid];
           const meta = DEPT_META[emp.dept];
           poachItems.push(`
-            <button data-d-action="CONFIRM_POACH" data-opp-id="${opp.id}" data-emp-uid="${eUid}" class="rounded-xl bg-stone-950 border-2 ${meta.border} p-1.5 text-center shadow-lg flex flex-col items-center justify-between gap-1 min-w-0 transition hover:-translate-y-0.5">
-              <div class="text-[9px] font-black text-amber-300 truncate w-full">🎯 ${getShortPlayerName(opp.name)} ${emp.isVP ? '· 👑耗2張' : ''}</div>
+            <button data-d-action="CONFIRM_POACH" data-opp-id="${opp.id}" data-emp-uid="${eUid}" class="ls-moded-emp-btn rounded-xl bg-stone-950 border-2 ${meta.border} p-1.5 text-center shadow-lg flex flex-col items-center justify-between gap-1 transition hover:-translate-y-0.5 shrink-0">
+              <div class="text-[9.5px] font-black text-amber-300 truncate w-full">🎯 ${getShortPlayerName(opp.name)} ${emp.isVP ? '· 👑耗2張' : ''}</div>
               <div class="ls-target-emp-card pointer-events-none">
                 ${getCardImgTag(emp.artKey || emp.tplId, emp.title, 'w-full h-full object-cover block')}
               </div>
@@ -3202,10 +3260,9 @@ function renderModeDDrawer() {
           `);
         });
       });
-      const colCls = poachItems.length >= 4 ? 'grid-cols-4' : poachItems.length === 3 ? 'grid-cols-3' : 'grid-cols-2';
       rightPanelHTML = `
         <div class="text-[11px] font-bold text-amber-200 truncate">點選要從對手部門挖角過來的目標人員：</div>
-        <div class="grid ${colCls} gap-2 w-full min-w-0 max-h-[68vh] overflow-y-auto pr-1 my-auto">
+        <div class="flex items-stretch justify-center gap-2 overflow-x-auto pb-1 my-auto">
           ${poachItems.join('')}
         </div>
       `;
@@ -3214,19 +3271,18 @@ function renderModeDDrawer() {
         const emp = CARDS_BY_ID[eUid];
         const meta = DEPT_META[emp.dept];
         return `
-          <button data-d-action="CONFIRM_FIRE" data-emp-uid="${eUid}" class="rounded-xl bg-stone-950 border-2 ${meta.border} p-1.5 text-center shadow-lg flex flex-col items-center justify-between gap-1 min-w-0 transition hover:-translate-y-0.5">
-            <div class="text-[9px] font-black text-rose-300 truncate w-full">🔥省-${emp.salary}/回 ${emp.isVP ? '· 👑耗2張' : ''}</div>
+          <button data-d-action="CONFIRM_FIRE" data-emp-uid="${eUid}" class="ls-moded-emp-btn rounded-xl bg-stone-950 border-2 ${meta.border} p-1.5 text-center shadow-lg flex flex-col items-center justify-between gap-1 transition hover:-translate-y-0.5 shrink-0">
+            <div class="text-[9.5px] font-black text-rose-300 truncate w-full">🔥省-${emp.salary}/回 ${emp.isVP ? '· 👑耗2張' : ''}</div>
             <div class="ls-target-emp-card pointer-events-none">
               ${getCardImgTag(emp.artKey || emp.tplId, emp.title, 'w-full h-full object-cover block')}
             </div>
-            <div class="w-full py-1 rounded-lg bg-rose-600 text-center text-[10px] font-black text-white shadow truncate px-1">🚪 遣散 ${emp.title}</div>
+            <div class="w-full py-1 rounded-lg bg-rose-600 text-center text-[10px] font-black text-white shadow truncate px-1">🚪 解僱 ${emp.title}</div>
           </button>
         `;
       });
-      const colCls = fireItems.length >= 4 ? 'grid-cols-4' : fireItems.length === 3 ? 'grid-cols-3' : 'grid-cols-2';
       rightPanelHTML = `
         <div class="text-[11px] font-bold text-amber-200 truncate">點選我方要解僱／遣散回人才池底部的成員：</div>
-        <div class="grid ${colCls} gap-2 w-full min-w-0 max-h-[68vh] overflow-y-auto pr-1 my-auto">
+        <div class="flex items-stretch justify-center gap-2 overflow-x-auto pb-1 my-auto">
           ${fireItems.join('')}
         </div>
       `;
@@ -3235,8 +3291,8 @@ function renderModeDDrawer() {
         const opp = state.players.find(p => p.id === item.opponentId);
         const vpCard = CARDS_BY_ID[item.empUid];
         return `
-          <button data-d-action="CONFIRM_VP_KICK" data-opp-id="${opp.id}" data-emp-uid="${item.empUid}" class="rounded-xl bg-stone-950 border-2 border-purple-400 p-1.5 text-center shadow-lg flex flex-col items-center justify-between gap-1 min-w-0 transition hover:-translate-y-0.5">
-            <div class="text-[9px] font-black text-purple-200 truncate w-full">🎯 ${getShortPlayerName(opp.name)} · ${DEPT_META[vpCard.dept].short}</div>
+          <button data-d-action="CONFIRM_VP_KICK" data-opp-id="${opp.id}" data-emp-uid="${item.empUid}" class="ls-moded-emp-btn rounded-xl bg-stone-950 border-2 border-purple-400 p-1.5 text-center shadow-lg flex flex-col items-center justify-between gap-1 transition hover:-translate-y-0.5 shrink-0">
+            <div class="text-[9.5px] font-black text-purple-200 truncate w-full">🎯 ${getShortPlayerName(opp.name)} · ${DEPT_META[vpCard.dept].short}</div>
             <div class="ls-target-emp-card pointer-events-none">
               ${getCardImgTag(vpCard.artKey || vpCard.tplId, vpCard.title, 'w-full h-full object-cover block')}
             </div>
@@ -3244,10 +3300,9 @@ function renderModeDDrawer() {
           </button>
         `;
       });
-      const colCls = kickItems.length >= 4 ? 'grid-cols-4' : kickItems.length === 3 ? 'grid-cols-3' : 'grid-cols-2';
       rightPanelHTML = `
         <div class="text-[11px] font-bold text-amber-200 truncate">點選一名敵方在職${terms.vpName || '副總'}直接放逐回人才池底：</div>
-        <div class="grid ${colCls} gap-2 w-full min-w-0 max-h-[68vh] overflow-y-auto pr-1 my-auto">
+        <div class="flex items-stretch justify-center gap-2 overflow-x-auto pb-1 my-auto">
           ${kickItems.join('')}
         </div>
       `;
@@ -3255,18 +3310,17 @@ function renderModeDDrawer() {
       const crisisItems = status.validCrises.map(cUid => {
         const cCard = CARDS_BY_ID[cUid];
         return `
-          <button data-d-action="CONFIRM_RELEASE" data-crisis-uid="${cUid}" class="rounded-xl bg-stone-950 border-2 border-amber-400 p-2 text-center shadow-lg flex flex-col items-center justify-between gap-1.5 min-w-0 transition hover:-translate-y-0.5">
-            <div class="text-2xl leading-none">${cCard.svg}</div>
+          <button data-d-action="CONFIRM_RELEASE" data-crisis-uid="${cUid}" class="ls-moded-emp-btn rounded-xl bg-stone-950 border-2 border-amber-400 p-2.5 text-center shadow-lg flex flex-col items-center justify-between gap-2 min-w-[140px] transition hover:-translate-y-0.5">
+            <div class="text-3xl leading-none my-1">${cCard.svg}</div>
             <div class="text-xs font-black text-white truncate w-full">${cCard.title}</div>
-            <div class="text-[10px] font-bold text-amber-300">佔用 ${terms.engName || '工程師'} ×${cCard.val}</div>
-            <div class="w-full py-1 rounded-lg bg-emerald-600 text-center text-[10px] font-black text-white shadow">🍾 立即解除</div>
+            <div class="text-[10px] font-bold text-amber-300">省下 ${terms.engName || '工程師'} ×${cCard.val}</div>
+            <div class="w-full py-1.5 rounded-lg bg-emerald-600 text-center text-[10px] font-black text-white shadow">🍾 立即解除</div>
           </button>
         `;
       });
-      const colCls = crisisItems.length >= 3 ? 'grid-cols-3' : 'grid-cols-2';
       rightPanelHTML = `
-        <div class="text-[11px] font-bold text-amber-200 truncate">點選我方場上要結案／解除的危機卡：</div>
-        <div class="grid ${colCls} gap-2 w-full min-w-0 my-auto">
+        <div class="text-[11px] font-bold text-amber-200 truncate">點選我方場上要結案／解除的${terms.crisisName || '危機'}卡：</div>
+        <div class="flex items-stretch justify-center gap-2.5 min-w-0 my-auto">
           ${crisisItems.join('')}
         </div>
       `;
@@ -3279,7 +3333,7 @@ function renderModeDDrawer() {
       }).join('');
       rightPanelHTML = `
         <div class="text-[11px] font-bold text-amber-200 truncate">點選一名對手，使其下回合發薪支出強制翻倍（×2）：</div>
-        <div class="grid ${aliveOpponents.length >= 3 ? 'grid-cols-3' : aliveOpponents.length === 2 ? 'grid-cols-2' : 'grid-cols-1'} gap-2 w-full min-w-0 my-auto">
+        <div class="flex items-stretch justify-center gap-2.5 min-w-0 my-auto">
           ${oppGridHTML}
         </div>
       `;
@@ -3292,11 +3346,11 @@ function renderModeDDrawer() {
       `;
     }
 
-    container.className = 'w-full min-w-0';
+    container.className = 'w-fit max-w-full min-w-0 mx-auto';
     container.innerHTML = `
-      <div class="flex items-stretch gap-2.5 w-full min-w-0">
+      <div class="flex items-stretch justify-center gap-3 w-fit max-w-full min-w-0">
         ${renderLsModeDLeftCardColumnHTML(card)}
-        <div class="flex-1 min-w-0 flex flex-col justify-between gap-1.5">
+        <div class="flex flex-col justify-between gap-1.5 min-w-0">
           ${rightPanelHTML}
         </div>
       </div>

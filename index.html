@@ -162,27 +162,27 @@
     <!-- V14.0 Physical Flying Cards & Tabletop Trajectory Layer -->
     <div id="lsFxLayer" class="ls-fx-layer"></div>
 
-    <!-- ROW 1 (TOP): [Left: 3-Line Live Log] + [Center: 12 o'clock Opponent] + [Right: Top Controls & 1x4 Talent Pool] -->
+    <!-- ROW 1 (TOP): [Left: Framed Live Log] + [Center: 12 o'clock Opponent] + [Right: Top Controls & 1x4 Talent Pool] -->
     <div class="ls-row-top w-full min-h-0 flex items-stretch justify-between gap-2">
       <!-- Top-Left: Live 3-Line Log & Turn Status -->
-      <div id="lsLogPanel" class="w-[26%] min-w-0 flex flex-col justify-between py-0.5 pr-1 cursor-pointer group" title="點擊展開完整歷史戰況日誌">
+      <div id="lsLogPanel" class="flex-1 min-w-0 rounded-xl bg-stone-950/75 border border-amber-500/25 px-2 py-1 flex flex-col justify-between cursor-pointer group shadow-lg" title="點擊展開完整歷史戰況日誌">
         <div class="flex items-center gap-1.5 min-w-0 shrink-0">
           <span id="lsPhaseBadge" class="px-1.5 py-0.5 rounded-full bg-amber-500/20 border border-amber-400/50 text-[10px] font-black text-amber-300 whitespace-nowrap">R1</span>
           <span id="lsActiveTurnBadge" class="px-1.5 py-0.5 rounded bg-emerald-950/90 border border-emerald-500/40 text-[10px] font-black text-emerald-300 truncate">👑 我方回合</span>
-          <span class="text-[10px] text-amber-400/80 font-bold whitespace-nowrap ml-auto group-hover:underline">📜日誌 ▸</span>
+          <span class="text-[10px] text-amber-400/90 font-bold whitespace-nowrap ml-auto group-hover:underline">📜日誌 ▸</span>
         </div>
         <div id="lsLiveLogLines" class="flex-1 min-h-0 flex flex-col justify-center gap-0.5 overflow-hidden mt-0.5">
         </div>
       </div>
 
-      <!-- Top-Center: 12 o'clock Opponent Seat -->
-      <div id="lsSeatTop" class="w-[41%] min-w-0 h-full flex items-stretch justify-center">
+      <!-- Top-Center: 12 o'clock Opponent Seat (Tight Fit Around 4 Cards) -->
+      <div id="lsSeatTop" class="shrink-0 h-full flex items-stretch justify-center">
       </div>
 
-      <!-- Top-Right: Pill Controls + 1x4 Talent Pool -->
-      <div id="lsTopRightPanel" class="w-[33%] min-w-0 h-full flex flex-col justify-between items-end gap-1">
-        <div class="flex items-center justify-end gap-1.5 shrink-0 w-full">
-          <span id="lsTalentPoolLabel" class="text-[11px] font-black text-amber-300/90 mr-auto truncate">🏢 人才池</span>
+      <!-- Top-Right: Pill Controls + 1x4 Talent Pool (Tight Fit Around 4 Cards) -->
+      <div id="lsTopRightPanel" class="shrink-0 h-full rounded-xl bg-stone-950/75 border border-amber-500/25 px-2 py-1 flex flex-col justify-between items-end gap-0.5 shadow-lg">
+        <div class="flex items-center justify-end gap-1 shrink-0 w-full">
+          <span id="lsTalentPoolLabel" class="text-[10.5px] font-black text-amber-300 mr-auto truncate">🏢 人才池</span>
           <button id="btnLsFullscreen" class="ls-pill-btn">全屏</button>
           <button id="btnLsRoomMenu" class="ls-pill-btn">房間</button>
           <button id="btnLsToPortrait" class="ls-pill-btn ls-pill-btn-gold">直向</button>
@@ -192,10 +192,10 @@
       </div>
     </div>
 
-    <!-- ROW 2 (MIDDLE): [Left: 9 o'clock Opponent] + [Center: Oval Board-Game Table] + [Right: 3 o'clock Opponent] -->
+    <!-- ROW 2 (MIDDLE): [Left: 9 o'clock Opponent] + [Center: Compact Oval Board-Game Table] + [Right: 3 o'clock Opponent] -->
     <div class="ls-row-mid w-full min-h-0 flex items-center justify-between gap-2">
       <!-- Middle-Left: 9 o'clock Opponent Seat -->
-      <div id="lsSeatLeft" class="w-[29%] min-w-0 h-full flex items-stretch">
+      <div id="lsSeatLeft" class="shrink-0 h-full flex items-stretch">
       </div>
 
       <!-- Middle-Center: Oval Board-Game Table (Discard / Just Played / Draw Deck, or Initial Draft) -->
@@ -203,21 +203,21 @@
       </div>
 
       <!-- Middle-Right: 3 o'clock Opponent Seat -->
-      <div id="lsSeatRight" class="w-[29%] min-w-0 h-full flex items-stretch justify-end">
+      <div id="lsSeatRight" class="shrink-0 h-full flex items-stretch justify-end">
       </div>
     </div>
 
-    <!-- ROW 3 (BOTTOM): [Bottom-Left: My Company 1x4 Board] + [Bottom-Right: 6 Vertical Hand Cards + Action Controls] -->
+    <!-- ROW 3 (BOTTOM): [Bottom-Left: My Company 1x4 Board] + [Bottom-Right: 6 Large Vertical Hand Cards + Action Controls] -->
     <div class="ls-row-bot w-full min-h-0 flex items-stretch justify-between gap-2">
-      <!-- Bottom-Left: My Company Panel -->
-      <div id="lsMyCompanyPanel" class="w-[39%] min-w-0 h-full flex flex-col justify-between">
+      <!-- Bottom-Left: My Company Panel (Tight Fit Around 4 Larger My-Dept Cards) -->
+      <div id="lsMyCompanyPanel" class="shrink-0 h-full flex flex-col justify-between">
       </div>
 
       <!-- Bottom-Right: My 6 Hand Cards + Right-Side Quota/Discard/End Controls -->
-      <div id="lsMyHandDock" class="w-[61%] min-w-0 h-full rounded-2xl bg-stone-950/90 border border-amber-500/35 px-2.5 py-1.5 flex items-stretch justify-between gap-2 shadow-2xl">
-        <div id="lsHandContainer" class="ls-hand-strip py-0.5">
+      <div id="lsMyHandDock" class="flex-1 min-w-0 h-full rounded-2xl bg-stone-950/92 border border-amber-500/40 px-2 py-1 flex items-stretch justify-between gap-2 shadow-2xl">
+        <div id="lsHandContainer" class="ls-hand-strip">
         </div>
-        <div id="lsActionControlsCol" class="w-[84px] sm:w-[96px] shrink-0 h-full flex flex-col justify-between items-center border-l border-amber-500/20 pl-2 py-0.5">
+        <div id="lsActionControlsCol" class="w-[74px] sm:w-[86px] shrink-0 h-full flex flex-col justify-between items-center border-l border-amber-500/20 pl-1.5 py-0.5">
         </div>
       </div>
     </div>
