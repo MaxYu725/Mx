@@ -1917,3 +1917,63 @@ body.is-landscape-active #inspectorCardsGrid .modal-pure-card {
   0%   { opacity: 0; transform: scale(0.92); }
   100% { opacity: 1; transform: scale(1); }
 }
+
+/* === V14.0.1 LANDSCAPE FX LAYER, FLYING CARD TAG & TABLETOP RIBBON === */
+.ls-fx-layer {
+  position: absolute !important;
+  inset: 0 !important;
+  width: 100% !important;
+  height: 100% !important;
+  pointer-events: none !important;
+  z-index: 95 !important;
+  overflow: hidden !important;
+}
+
+.ls-flying-card-tag {
+  position: absolute !important;
+  top: -15px !important;
+  left: 50% !important;
+  transform: translateX(-50%) !important;
+  background: rgba(9, 13, 22, 0.96) !important;
+  border: 1.5px solid #fbbf24 !important;
+  border-radius: 9999px !important;
+  padding: 1px 6px !important;
+  font-size: 8px !important;
+  font-weight: 900 !important;
+  color: #fef08a !important;
+  white-space: nowrap !important;
+  box-shadow: 0 3px 8px rgba(0, 0, 0, 0.85) !important;
+  z-index: 98 !important;
+}
+
+.ls-table-ribbon {
+  position: absolute !important;
+  top: 26% !important;
+  left: 50% !important;
+  transform: translate(-50%, -50%) !important;
+  background: rgba(12, 10, 9, 0.94) !important;
+  border-radius: 9999px !important;
+  padding: 3px 14px !important;
+  font-size: 10.5px !important;
+  font-weight: 900 !important;
+  color: #fde68a !important;
+  white-space: nowrap !important;
+  box-shadow: 0 8px 22px rgba(0, 0, 0, 0.88), 0 0 14px rgba(251, 191, 36, 0.35) !important;
+  z-index: 92 !important;
+  animation: lsRibbonPop 0.22s cubic-bezier(0.22, 1, 0.36, 1);
+}
+
+@keyframes lsRibbonPop {
+  0%   { opacity: 0; transform: translate(-50%, -50%) scale(0.88); }
+  100% { opacity: 1; transform: translate(-50%, -50%) scale(1); }
+}
+
+.ls-sub-peek-strip {
+  height: 12px !important;
+  padding: 0 3px !important;
+}
+
+.ls-sub-peek-sal,
+.ls-sub-peek-skl {
+  font-size: 8px !important;
+}
