@@ -2291,3 +2291,129 @@ body.is-landscape-active .mode-d-sheet-card.ls-moded-sheet-wide {
   overflow: hidden !important;
   text-overflow: ellipsis !important;
 }
+
+/* === V14.1.2 SAFE HORIZONTAL SCROLL TRACK & COLOR-CODED OPPONENT POACH GROUPS === */
+/* Safe Horizontal Scroll Container: Centers when content is narrower than modal, starts at left=0 when wider so left edge is NEVER clipped! */
+.ls-moded-scroll-row {
+  width: 100% !important;
+  min-width: 0 !important;
+  overflow-x: auto !important;
+  overflow-y: hidden !important;
+  padding: 2px 4px 6px 4px !important;
+  -webkit-overflow-scrolling: touch;
+}
+
+.ls-moded-scroll-track {
+  display: flex !important;
+  align-items: stretch !important;
+  justify-content: flex-start !important;
+  gap: 0.55rem !important;
+  width: max-content !important;
+  margin: 0 auto !important;
+}
+
+/* Opponent Filter Pills Bar at Top of Poach Modal */
+.ls-poach-filter-pill {
+  padding: 0.22rem 0.6rem !important;
+  border-radius: 9999px !important;
+  background: rgba(28, 25, 23, 0.92) !important;
+  border: 1.5px solid rgba(120, 113, 108, 0.55) !important;
+  color: #e7e5e4 !important;
+  font-size: 9.5px !important;
+  font-weight: 900 !important;
+  white-space: nowrap !important;
+  flex-shrink: 0 !important;
+  transition: all 0.14s ease !important;
+}
+
+.ls-poach-tab-all-active {
+  background: linear-gradient(135deg, #f59e0b, #d97706) !important;
+  border-color: #fef08a !important;
+  color: #0f172a !important;
+  box-shadow: 0 0 10px rgba(245, 158, 11, 0.45) !important;
+}
+
+.ls-poach-tab-rose {
+  background: rgba(159, 18, 57, 0.92) !important;
+  border-color: #fb7185 !important;
+  color: #fff1f2 !important;
+  box-shadow: 0 0 10px rgba(244, 63, 94, 0.45) !important;
+}
+
+.ls-poach-tab-purple {
+  background: rgba(107, 33, 168, 0.92) !important;
+  border-color: #c084fc !important;
+  color: #faf5ff !important;
+  box-shadow: 0 0 10px rgba(168, 85, 247, 0.45) !important;
+}
+
+.ls-poach-tab-sky {
+  background: rgba(3, 105, 161, 0.92) !important;
+  border-color: #38bdf8 !important;
+  color: #f0f9ff !important;
+  box-shadow: 0 0 10px rgba(14, 165, 233, 0.45) !important;
+}
+
+/* Color-Coded Opponent Group Trays inside Poach / VP Kick Modal */
+.ls-poach-opp-group {
+  display: flex !important;
+  flex-direction: column !important;
+  justify-content: space-between !important;
+  border-radius: 0.85rem !important;
+  overflow: hidden !important;
+  flex-shrink: 0 !important;
+  box-shadow: 0 6px 16px rgba(0, 0, 0, 0.75) !important;
+}
+
+.ls-poach-group-rose {
+  background: rgba(76, 5, 25, 0.45) !important;
+  border: 2px solid #fb7185 !important;
+}
+
+.ls-poach-group-purple {
+  background: rgba(59, 7, 100, 0.45) !important;
+  border: 2px solid #c084fc !important;
+}
+
+.ls-poach-group-sky {
+  background: rgba(8, 47, 73, 0.45) !important;
+  border: 2px solid #38bdf8 !important;
+}
+
+.ls-poach-opp-header {
+  padding: 0.22rem 0.6rem !important;
+  font-size: 10px !important;
+  font-weight: 900 !important;
+  color: #ffffff !important;
+  display: flex !important;
+  align-items: center !important;
+  justify-content: space-between !important;
+  white-space: nowrap !important;
+}
+
+.ls-poach-hdr-rose {
+  background: linear-gradient(90deg, #be123c, #881337) !important;
+  border-bottom: 1px solid rgba(251, 113, 133, 0.5) !important;
+}
+
+.ls-poach-hdr-purple {
+  background: linear-gradient(90deg, #7e22ce, #581c87) !important;
+  border-bottom: 1px solid rgba(192, 132, 252, 0.5) !important;
+}
+
+.ls-poach-hdr-sky {
+  background: linear-gradient(90deg, #0284c7, #075985) !important;
+  border-bottom: 1px solid rgba(56, 189, 248, 0.5) !important;
+}
+
+.ls-poach-opp-cards {
+  display: flex !important;
+  align-items: stretch !important;
+  gap: 0.4rem !important;
+  padding: 0.35rem !important;
+}
+
+/* Slightly tune modal card height so Opponent Group Header + Card + Button fits 390px landscape height with zero vertical scroll */
+:root {
+  --ls-modal-card-h: clamp(86px, calc(var(--app-h, 390px) * 0.325), 142px);
+}

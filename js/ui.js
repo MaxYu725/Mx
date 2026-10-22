@@ -127,7 +127,7 @@ function syncLayoutOrientationDOM() {
   const myDeptCardH = Math.round(Math.max(68, Math.min(126, appH * 0.228)));
   const pileCardH = Math.round(Math.max(62, Math.min(114, appH * 0.205)));
   const handCardH = Math.round(Math.max(80, Math.min(146, appH * 0.278)));
-  const modalCardH = Math.round(Math.max(96, Math.min(156, appH * 0.365)));
+  const modalCardH = Math.round(Math.max(88, Math.min(144, appH * 0.330)));
   const compCardW = Math.round(Math.max(42, Math.min(64, appW * 0.055)));
   const modedLeftW = Math.round(Math.max(88, Math.min(122, appW * 0.118)));
   document.documentElement.style.setProperty("--ls-dept-card-h", `${deptCardH}px`);
@@ -1555,6 +1555,7 @@ function resetSelectionState() {
   uiSelection.mode = 'IDLE';
   uiSelection.sourceCardUid = null;
   uiSelection.step2OpponentId = null;
+  uiSelection.poachFilterOppId = 'ALL';
   uiSelection.discardSet.clear();
   uiSelection.layoffSet.clear();
   const drawer = document.getElementById('modeDTargetDrawer');
@@ -3072,23 +3073,24 @@ function renderModeDDrawer() {
     let rightPanelHTML = '';
 
     // Dynamically localize Mode D header pill & title to the active theme!
+    const isDemon = (typeof getActiveTheme === 'function' && getActiveTheme().id === 'DEMON_CASTLE');
     if (card.effect === 'GAIN_FUNDS') {
-      if (pillEl) pillEl.textContent = `💰 ${DEPT_META.GREEN.short}入帳`;
+      if (pillEl) pillEl.textContent = isDemon ? `💎 徵收魔晶` : `💰 ${DEPT_META.GREEN.short}入帳`;
       titleEl.textContent = `「${card.title}」— 點擊立即入帳（或再點一次手牌秒出）：`;
     } else if (card.effect === 'RELEASE_CRISIS') {
       if (pillEl) pillEl.textContent = `🍾 解除${terms.crisisName || '危機'}`;
       titleEl.textContent = `「${card.title}」— 點選要解除的${terms.crisisName || '危機'}：`;
     } else if (card.effect === 'HIRE_BANK') {
-      if (pillEl) pillEl.textContent = `🤝 標準聘僱`;
+      if (pillEl) pillEl.textContent = isDemon ? `🤝 契約召喚` : `🤝 標準聘僱`;
       titleEl.textContent = `「${card.title}」— 點選人才池頂牌加入我方部門：`;
     } else if (card.effect === 'FIRE_OWN') {
-      if (pillEl) pillEl.textContent = `🚪 解僱裁員`;
+      if (pillEl) pillEl.textContent = isDemon ? `🚪 獻祭遣散` : `🚪 解僱裁員`;
       titleEl.textContent = `「${card.title}」— 點選要解僱退回人才池的我方成員：`;
     } else if (card.effect === 'BAD_IDEA') {
       if (pillEl) pillEl.textContent = `💥 丟出${terms.crisisName || '危機'}`;
       titleEl.textContent = `「${card.title}（對手${DEPT_META.YELLOW.short} ${card.reqSkills.join('/')} 級）」— 點選目標對手：`;
     } else if (card.effect === 'FORCE_HIRE') {
-      if (pillEl) pillEl.textContent = `🪤 強塞人員`;
+      if (pillEl) pillEl.textContent = isDemon ? `🪤 強塞魔物` : `🪤 強塞人員`;
       if (!uiSelection.step2OpponentId) {
         titleEl.textContent = `步驟 1/2：「${card.title}（對手${DEPT_META.BLUE.short} ${card.reqSkills.join('/')} 級）」— 先選對手：`;
       } else {
@@ -3096,15 +3098,23 @@ function renderModeDDrawer() {
         titleEl.textContent = `步驟 2/2：點選人才池頂牌強塞給【${opp ? getShortPlayerName(opp.name) : ''}】：`;
       }
     } else if (card.effect === 'POACH_ENEMY') {
-      if (pillEl) pillEl.textContent = `🕸️ 高薪挖角`;
-      titleEl.textContent = `「${card.title}（對手${DEPT_META.BLUE.short} ${card.reqSkills.join('/')} 級）」— 點選挖角目標：`;
+      if (pillEl) pillEl.textContent = isDemon ? `🕸️ 魅惑挖角` : `🕸️ 高薪挖角`;
+      titleEl.textContent = `「${card.title}（對手${DEPT_META.BLUE.short} ${card.reqSkills.join('/')} 級）」— 依對手分組點選挖角目標：`;
     } else if (card.effect === 'VP_KICK_ENEMY') {
       if (pillEl) pillEl.textContent = `⚡ 放逐${terms.vpName || '副總'}`;
       titleEl.textContent = `「${card.title}」— 點選要放逐回人才池的敵方${terms.vpName || '副總'}：`;
     } else if (card.effect === 'VP_DOUBLE_PAY') {
-      if (pillEl) pillEl.textContent = `🔥 雙倍支出`;
+      if (pillEl) pillEl.textContent = isDemon ? `🔥 工會暴動` : `🔥 雙倍支出`;
       titleEl.textContent = `「${card.title}」— 點選下回合發薪支出翻倍 (×2) 的對手：`;
     }
+
+    const getEmpRoleTag = (ownerPlayer, empCard) => {
+      if (empCard.role === 'ENGINEER') return `⚒${terms.engName || '苦工'} · 省-${empCard.salary}`;
+      if (empCard.isVP) return `👑${terms.vpName || '皇室'} (耗2張)`;
+      const deptArr = ownerPlayer.departments[empCard.dept] || [];
+      const isHead = deptArr[0] === empCard.uid;
+      return isHead ? `🏛️現任主管 (${empCard.skill}級)` : `➕部門下屬 (${empCard.skill}級)`;
+    };
 
     if (card.effect === 'GAIN_FUNDS') {
       const gHeadUid = localPlayer.departments.GREEN[0];
@@ -3123,11 +3133,11 @@ function renderModeDDrawer() {
               <span class="px-2 py-0.5 rounded-full bg-emerald-700 text-white text-[9.5px] font-black">${DEPT_META.GREEN.short} ${gSkill} 級認證 · ${gHeadCard ? gHeadCard.title : '0級'}</span>
               <div class="text-sm font-black text-white mt-1.5">${card.title}</div>
               <div class="text-xs font-bold text-amber-200 mt-1">
-                目前資金：<span class="text-white font-black">${localPlayer.crystals}</span> ➔ <span class="text-emerald-300 font-black text-sm">${nextCrystals}</span>
+                目前儲備：<span class="text-white font-black">${localPlayer.crystals}</span> ➔ <span class="text-emerald-300 font-black text-sm">${nextCrystals}</span>
               </div>
             </div>
             <div class="w-full py-2 px-3 rounded-xl bg-emerald-500 hover:bg-emerald-400 text-slate-950 font-black text-xs text-center shadow-lg">
-              💰 +${card.val} 立即入帳
+              ${terms.currencyIcon || '💎'} +${card.val} 立即入帳
             </div>
           </div>
         </button>
@@ -3201,11 +3211,13 @@ function renderModeDDrawer() {
       }).join('');
       rightPanelHTML = `
         <div class="flex items-center justify-between gap-2">
-          <span class="text-[11px] font-bold text-amber-200 truncate">步驟 2/2：點選人才池頂牌強塞給【${getShortPlayerName(opp.name)}】：</span>
+          <span class="text-[10.5px] font-bold text-amber-200 truncate">步驟 2/2：點選人才池頂牌強塞給【${getShortPlayerName(opp.name)}】：</span>
           <button data-d-action="BACK_FORCE_STEP1" class="px-2 py-0.5 rounded bg-stone-800 border border-stone-600 text-[10px] font-bold text-sky-300 shrink-0">⬅ 重選對手</button>
         </div>
-        <div class="flex items-stretch justify-center gap-2 min-w-0 my-auto">
-          ${bankCardsHTML}
+        <div class="ls-moded-scroll-row my-auto">
+          <div class="ls-moded-scroll-track">
+            ${bankCardsHTML}
+          </div>
         </div>
       `;
     } else if (card.effect === 'HIRE_BANK') {
@@ -3240,80 +3252,169 @@ function renderModeDDrawer() {
         `;
       }).join('');
       rightPanelHTML = `
-        <div class="text-[11px] font-bold text-amber-200 truncate">點選人才池翻開的應徵者加入我方部門：</div>
-        <div class="flex items-stretch justify-center gap-2 min-w-0 my-auto">
-          ${bankCardsHTML}
+        <div class="text-[10.5px] font-bold text-amber-200 truncate">點選人才池翻開的應徵者加入我方部門：</div>
+        <div class="ls-moded-scroll-row my-auto">
+          <div class="ls-moded-scroll-track">
+            ${bankCardsHTML}
+          </div>
         </div>
       `;
     } else if (card.effect === 'POACH_ENEMY') {
-      const poachItems = [];
-      aliveOpponents.forEach(opp => {
+      // Palette for up to 3 opponents so each opponent's group tray & filter tab is unmistakably distinct!
+      const oppThemes = [
+        { dot: '🔴', groupCls: 'ls-poach-group-rose', headerCls: 'ls-poach-hdr-rose', tabActiveCls: 'ls-poach-tab-rose' },
+        { dot: '🟣', groupCls: 'ls-poach-group-purple', headerCls: 'ls-poach-hdr-purple', tabActiveCls: 'ls-poach-tab-purple' },
+        { dot: '🔵', groupCls: 'ls-poach-group-sky', headerCls: 'ls-poach-hdr-sky', tabActiveCls: 'ls-poach-tab-sky' }
+      ];
+
+      const poachableOpps = [];
+      const immuneOpps = [];
+      let totalPoachCount = 0;
+
+      aliveOpponents.forEach((opp, idx) => {
         const list = status.targetableByOpponent[opp.id] || [];
-        list.forEach(eUid => {
+        const theme = oppThemes[idx % oppThemes.length];
+        if (list.length > 0) {
+          poachableOpps.push({ opp, list, theme });
+          totalPoachCount += list.length;
+        } else {
+          immuneOpps.push({ opp, blueSkill: getEffectiveSkill(opp, 'BLUE') });
+        }
+      });
+
+      const activeFilter = (uiSelection.poachFilterOppId && poachableOpps.some(o => o.opp.id === uiSelection.poachFilterOppId))
+        ? uiSelection.poachFilterOppId
+        : 'ALL';
+
+      // Build Top Opponent Filter Tabs Bar
+      const filterTabsHTML = [
+        `<button data-d-action="FILTER_POACH_OPP" data-opp-id="ALL" class="ls-poach-filter-pill ${activeFilter === 'ALL' ? 'ls-poach-tab-all-active' : ''}">📋 全部對手 (${totalPoachCount})</button>`,
+        ...poachableOpps.map(({ opp, list, theme }) => {
+          const isAct = activeFilter === opp.id;
+          return `<button data-d-action="FILTER_POACH_OPP" data-opp-id="${opp.id}" class="ls-poach-filter-pill ${isAct ? theme.tabActiveCls : ''}">${theme.dot} ${getShortPlayerName(opp.name)} (${list.length}人 · ${terms.currencyIcon || '💎'}${opp.crystals})</button>`;
+        }),
+        ...immuneOpps.map(({ opp, blueSkill }) => {
+          return `<span class="ls-poach-filter-pill opacity-45 pointer-events-none">🛡️ ${getShortPlayerName(opp.name)} (${DEPT_META.BLUE.short}${blueSkill}級免疫)</span>`;
+        })
+      ].join('');
+
+      // Build Grouped Opponent Trays (Each opponent's cards sit inside a labeled, color-coded player container!)
+      const visibleGroups = activeFilter === 'ALL'
+        ? poachableOpps
+        : poachableOpps.filter(o => o.opp.id === activeFilter);
+
+      const groupsHTML = visibleGroups.map(({ opp, list, theme }) => {
+        const shortOpp = getShortPlayerName(opp.name);
+        const oppBurn = getPlayerBurnRate(opp);
+        const cardsHTML = list.map(eUid => {
           const emp = CARDS_BY_ID[eUid];
           const meta = DEPT_META[emp.dept];
-          poachItems.push(`
-            <button data-d-action="CONFIRM_POACH" data-opp-id="${opp.id}" data-emp-uid="${eUid}" class="ls-moded-emp-btn rounded-xl bg-stone-950 border-2 ${meta.border} p-1.5 text-center shadow-lg flex flex-col items-center justify-between gap-1 transition hover:-translate-y-0.5 shrink-0">
-              <div class="text-[9.5px] font-black text-amber-300 truncate w-full">🎯 ${getShortPlayerName(opp.name)} ${emp.isVP ? '· 👑耗2張' : ''}</div>
+          const roleTag = getEmpRoleTag(opp, emp);
+          return `
+            <button data-d-action="CONFIRM_POACH" data-opp-id="${opp.id}" data-emp-uid="${eUid}" class="ls-moded-emp-btn rounded-xl bg-stone-950 border-2 ${meta.border} p-1 text-center shadow-lg flex flex-col items-center justify-between gap-1 transition hover:-translate-y-0.5 shrink-0">
+              <div class="text-[8.5px] font-black text-amber-200 truncate w-full px-0.5">${roleTag}</div>
               <div class="ls-target-emp-card pointer-events-none">
                 ${getCardImgTag(emp.artKey || emp.tplId, emp.title, 'w-full h-full object-cover block')}
               </div>
-              <div class="w-full py-1 rounded-lg bg-sky-500 text-center text-[10px] font-black text-slate-950 shadow truncate px-1">🕸️ 挖角 ${emp.title}</div>
+              <div class="w-full py-1 rounded-lg bg-sky-500 text-center text-[9.5px] font-black text-slate-950 shadow truncate px-1">🕸️ 挖角 ${emp.title}</div>
             </button>
-          `);
-        });
-      });
+          `;
+        }).join('');
+
+        return `
+          <div class="ls-poach-opp-group ${theme.groupCls}">
+            <div class="ls-poach-opp-header ${theme.headerCls}">
+              <span>${theme.dot} 【${shortOpp}】的部下 (${list.length}人)</span>
+              <span class="text-[9px] font-bold opacity-90 ml-2">${terms.currencyIcon || '💎'}${opp.crystals} · 🔥-${oppBurn}/回</span>
+            </div>
+            <div class="ls-poach-opp-cards">
+              ${cardsHTML}
+            </div>
+          </div>
+        `;
+      }).join('');
+
       rightPanelHTML = `
-        <div class="text-[11px] font-bold text-amber-200 truncate">點選要從對手部門挖角過來的目標人員：</div>
-        <div class="flex items-stretch justify-center gap-2 overflow-x-auto pb-1 my-auto">
-          ${poachItems.join('')}
+        <div class="flex items-center gap-1.5 overflow-x-auto pb-0.5 shrink-0">
+          ${filterTabsHTML}
+        </div>
+        <div class="ls-moded-scroll-row my-auto">
+          <div class="ls-moded-scroll-track">
+            ${groupsHTML}
+          </div>
         </div>
       `;
     } else if (card.effect === 'FIRE_OWN') {
       const fireItems = status.validOwnEmployees.map(eUid => {
         const emp = CARDS_BY_ID[eUid];
         const meta = DEPT_META[emp.dept];
+        const roleTag = getEmpRoleTag(localPlayer, emp);
         return `
-          <button data-d-action="CONFIRM_FIRE" data-emp-uid="${eUid}" class="ls-moded-emp-btn rounded-xl bg-stone-950 border-2 ${meta.border} p-1.5 text-center shadow-lg flex flex-col items-center justify-between gap-1 transition hover:-translate-y-0.5 shrink-0">
-            <div class="text-[9.5px] font-black text-rose-300 truncate w-full">🔥省-${emp.salary}/回 ${emp.isVP ? '· 👑耗2張' : ''}</div>
+          <button data-d-action="CONFIRM_FIRE" data-emp-uid="${eUid}" class="ls-moded-emp-btn rounded-xl bg-stone-950 border-2 ${meta.border} p-1 text-center shadow-lg flex flex-col items-center justify-between gap-1 transition hover:-translate-y-0.5 shrink-0">
+            <div class="text-[8.5px] font-black text-rose-300 truncate w-full px-0.5">${roleTag}</div>
             <div class="ls-target-emp-card pointer-events-none">
               ${getCardImgTag(emp.artKey || emp.tplId, emp.title, 'w-full h-full object-cover block')}
             </div>
-            <div class="w-full py-1 rounded-lg bg-rose-600 text-center text-[10px] font-black text-white shadow truncate px-1">🚪 解僱 ${emp.title}</div>
+            <div class="w-full py-1 rounded-lg bg-rose-600 text-center text-[9.5px] font-black text-white shadow truncate px-1">🚪 解僱(省${emp.salary})</div>
           </button>
         `;
       });
       rightPanelHTML = `
-        <div class="text-[11px] font-bold text-amber-200 truncate">點選我方要解僱／遣散回人才池底部的成員：</div>
-        <div class="flex items-stretch justify-center gap-2 overflow-x-auto pb-1 my-auto">
-          ${fireItems.join('')}
+        <div class="text-[10.5px] font-bold text-amber-200 truncate">點選我方要解僱／遣散回人才池底部的成員（可左右滑動）：</div>
+        <div class="ls-moded-scroll-row my-auto">
+          <div class="ls-moded-scroll-track">
+            ${fireItems.join('')}
+          </div>
         </div>
       `;
     } else if (card.effect === 'VP_KICK_ENEMY') {
-      const kickItems = status.targetVPs.map(item => {
-        const opp = state.players.find(p => p.id === item.opponentId);
-        const vpCard = CARDS_BY_ID[item.empUid];
-        return `
-          <button data-d-action="CONFIRM_VP_KICK" data-opp-id="${opp.id}" data-emp-uid="${item.empUid}" class="ls-moded-emp-btn rounded-xl bg-stone-950 border-2 border-purple-400 p-1.5 text-center shadow-lg flex flex-col items-center justify-between gap-1 transition hover:-translate-y-0.5 shrink-0">
-            <div class="text-[9.5px] font-black text-purple-200 truncate w-full">🎯 ${getShortPlayerName(opp.name)} · ${DEPT_META[vpCard.dept].short}</div>
-            <div class="ls-target-emp-card pointer-events-none">
-              ${getCardImgTag(vpCard.artKey || vpCard.tplId, vpCard.title, 'w-full h-full object-cover block')}
+      const oppThemes = [
+        { dot: '🔴', groupCls: 'ls-poach-group-rose', headerCls: 'ls-poach-hdr-rose' },
+        { dot: '🟣', groupCls: 'ls-poach-group-purple', headerCls: 'ls-poach-hdr-purple' },
+        { dot: '🔵', groupCls: 'ls-poach-group-sky', headerCls: 'ls-poach-hdr-sky' }
+      ];
+      const kickGroups = [];
+      aliveOpponents.forEach((opp, idx) => {
+        const oppVPs = status.targetVPs.filter(t => t.opponentId === opp.id);
+        if (oppVPs.length === 0) return;
+        const theme = oppThemes[idx % oppThemes.length];
+        const shortOpp = getShortPlayerName(opp.name);
+        const cardsHTML = oppVPs.map(item => {
+          const vpCard = CARDS_BY_ID[item.empUid];
+          return `
+            <button data-d-action="CONFIRM_VP_KICK" data-opp-id="${opp.id}" data-emp-uid="${item.empUid}" class="ls-moded-emp-btn rounded-xl bg-stone-950 border-2 border-purple-400 p-1 text-center shadow-lg flex flex-col items-center justify-between gap-1 transition hover:-translate-y-0.5 shrink-0">
+              <div class="text-[8.5px] font-black text-purple-200 truncate w-full">${DEPT_META[vpCard.dept].short} · 👑${vpCard.skill}級</div>
+              <div class="ls-target-emp-card pointer-events-none">
+                ${getCardImgTag(vpCard.artKey || vpCard.tplId, vpCard.title, 'w-full h-full object-cover block')}
+              </div>
+              <div class="w-full py-1 rounded-lg bg-purple-600 text-center text-[9.5px] font-black text-white shadow truncate px-1">⚡ 放逐 ${vpCard.title}</div>
+            </button>
+          `;
+        }).join('');
+        kickGroups.push(`
+          <div class="ls-poach-opp-group ${theme.groupCls}">
+            <div class="ls-poach-opp-header ${theme.headerCls}">
+              <span>${theme.dot} 【${shortOpp}】的${terms.vpName || '副總'}</span>
             </div>
-            <div class="w-full py-1 rounded-lg bg-purple-600 text-center text-[10px] font-black text-white shadow truncate px-1">⚡ 放逐 ${vpCard.title}</div>
-          </button>
-        `;
+            <div class="ls-poach-opp-cards">
+              ${cardsHTML}
+            </div>
+          </div>
+        `);
       });
       rightPanelHTML = `
-        <div class="text-[11px] font-bold text-amber-200 truncate">點選一名敵方在職${terms.vpName || '副總'}直接放逐回人才池底：</div>
-        <div class="flex items-stretch justify-center gap-2 overflow-x-auto pb-1 my-auto">
-          ${kickItems.join('')}
+        <div class="text-[10.5px] font-bold text-amber-200 truncate">點選一名敵方在職${terms.vpName || '副總'}直接放逐回人才池底：</div>
+        <div class="ls-moded-scroll-row my-auto">
+          <div class="ls-moded-scroll-track">
+            ${kickGroups.join('')}
+          </div>
         </div>
       `;
     } else if (card.effect === 'RELEASE_CRISIS') {
       const crisisItems = status.validCrises.map(cUid => {
         const cCard = CARDS_BY_ID[cUid];
         return `
-          <button data-d-action="CONFIRM_RELEASE" data-crisis-uid="${cUid}" class="ls-moded-emp-btn rounded-xl bg-stone-950 border-2 border-amber-400 p-2.5 text-center shadow-lg flex flex-col items-center justify-between gap-2 min-w-[140px] transition hover:-translate-y-0.5">
+          <button data-d-action="CONFIRM_RELEASE" data-crisis-uid="${cUid}" class="ls-moded-emp-btn rounded-xl bg-stone-950 border-2 border-amber-400 p-2.5 text-center shadow-lg flex flex-col items-center justify-between gap-2 min-w-[140px] transition hover:-translate-y-0.5 shrink-0">
             <div class="text-3xl leading-none my-1">${cCard.svg}</div>
             <div class="text-xs font-black text-white truncate w-full">${cCard.title}</div>
             <div class="text-[10px] font-bold text-amber-300">省下 ${terms.engName || '工程師'} ×${cCard.val}</div>
@@ -3322,9 +3423,11 @@ function renderModeDDrawer() {
         `;
       });
       rightPanelHTML = `
-        <div class="text-[11px] font-bold text-amber-200 truncate">點選我方場上要結案／解除的${terms.crisisName || '危機'}卡：</div>
-        <div class="flex items-stretch justify-center gap-2.5 min-w-0 my-auto">
-          ${crisisItems.join('')}
+        <div class="text-[10.5px] font-bold text-amber-200 truncate">點選我方場上要結案／解除的${terms.crisisName || '危機'}卡：</div>
+        <div class="ls-moded-scroll-row my-auto">
+          <div class="ls-moded-scroll-track">
+            ${crisisItems.join('')}
+          </div>
         </div>
       `;
     } else if (card.effect === 'VP_DOUBLE_PAY') {
@@ -3350,10 +3453,10 @@ function renderModeDDrawer() {
       `;
     }
 
-    const isOppCompareMode = card.effect === 'BAD_IDEA' || (card.effect === 'FORCE_HIRE' && !uiSelection.step2OpponentId) || card.effect === 'VP_DOUBLE_PAY';
+    const isWideModalMode = card.effect === 'BAD_IDEA' || card.effect === 'FORCE_HIRE' || card.effect === 'VP_DOUBLE_PAY' || card.effect === 'POACH_ENEMY' || card.effect === 'HIRE_BANK' || card.effect === 'FIRE_OWN';
     const sheetCardEl = document.getElementById('modeDSheetCard');
     if (sheetCardEl) {
-      sheetCardEl.classList.toggle('ls-moded-sheet-wide', isOppCompareMode);
+      sheetCardEl.classList.toggle('ls-moded-sheet-wide', isWideModalMode);
     }
     container.className = 'w-full min-w-0';
     container.innerHTML = `
@@ -3386,6 +3489,10 @@ function renderModeDDrawer() {
         });
       } else if (actType === 'CONFIRM_BAD_IDEA') {
         executePlayCard({ cardUid: card.uid, targetPlayerId: btn.getAttribute('data-opp-id') });
+      } else if (actType === 'FILTER_POACH_OPP') {
+        if (typeof playSfx === 'function') playSfx('click');
+        uiSelection.poachFilterOppId = btn.getAttribute('data-opp-id') || 'ALL';
+        renderModeDDrawer();
       } else if (actType === 'BACK_FORCE_STEP1') {
         uiSelection.step2OpponentId = null;
         renderAll();
