@@ -122,14 +122,14 @@ function syncLayoutOrientationDOM() {
 
   document.documentElement.style.setProperty("--app-w", `${appW}px`);
   document.documentElement.style.setProperty("--app-h", `${appH}px`);
-  // V14.1 High-Utilization Fluid Responsive Card Sizing (Cards fill 85%-90% of their row height, zero wasted void)
-  const deptCardH = Math.round(Math.max(62, Math.min(114, appH * 0.205)));
-  const myDeptCardH = Math.round(Math.max(74, Math.min(134, appH * 0.246)));
-  const pileCardH = Math.round(Math.max(64, Math.min(116, appH * 0.208)));
-  const handCardH = Math.round(Math.max(84, Math.min(152, appH * 0.292)));
-  const modalCardH = Math.round(Math.max(112, Math.min(186, appH * 0.445)));
-  const compCardW = Math.round(Math.max(46, Math.min(72, appW * 0.062)));
-  const modedLeftW = Math.round(Math.max(96, Math.min(136, appW * 0.132)));
+  // V14.1.1 Calibrated Fluid Responsive Card Sizing
+  const deptCardH = Math.round(Math.max(60, Math.min(112, appH * 0.202)));
+  const myDeptCardH = Math.round(Math.max(68, Math.min(126, appH * 0.228)));
+  const pileCardH = Math.round(Math.max(62, Math.min(114, appH * 0.205)));
+  const handCardH = Math.round(Math.max(80, Math.min(146, appH * 0.278)));
+  const modalCardH = Math.round(Math.max(96, Math.min(156, appH * 0.365)));
+  const compCardW = Math.round(Math.max(42, Math.min(64, appW * 0.055)));
+  const modedLeftW = Math.round(Math.max(88, Math.min(122, appW * 0.118)));
   document.documentElement.style.setProperty("--ls-dept-card-h", `${deptCardH}px`);
   document.documentElement.style.setProperty("--ls-my-dept-card-h", `${myDeptCardH}px`);
   document.documentElement.style.setProperty("--ls-pile-card-h", `${pileCardH}px`);
@@ -2326,8 +2326,8 @@ function renderLsHandCardHTML(card, status, isSelected, isDiscardSel, isHumanSte
   const reqPrefix = isEnemyCheck ? '對' : '需';
   const orbBg = isEnemyCheck ? 'bg-rose-600' : 'bg-amber-600';
   const reqOrbs = (card.reqSkills && card.reqSkills.length > 0)
-    ? `<div class="flex items-center justify-center gap-0.5"><span class="text-[7px] font-black text-amber-200 mr-0.5">${reqPrefix}</span>${card.reqSkills.map(s => `<span class="w-3.5 h-3.5 rounded-full ${orbBg} border border-white/70 text-white text-[8px] font-black flex items-center justify-center leading-none shadow">${s}</span>`).join('')}</div>`
-    : `<span class="text-[7.5px] font-extrabold text-amber-200">${card.dept === 'PURPLE' ? '👑需2副總' : '✓免檢定'}</span>`;
+    ? `<div class="ls-hand-req-row"><span class="ls-hand-req-prefix">${reqPrefix}</span>${card.reqSkills.map(s => `<span class="ls-hand-req-orb ${orbBg}">${s}</span>`).join('')}</div>`
+    : `<span class="text-[7px] font-extrabold text-amber-200 leading-none">${card.dept === 'PURPLE' ? '👑需2副總' : '✓免檢定'}</span>`;
 
   const isPendingFlight = window.__lsPendingLandings && window.__lsPendingLandings.handUids.has(card.uid);
   const flightHiddenCls = isPendingFlight ? 'ls-card-in-flight-hidden' : '';
@@ -2336,22 +2336,22 @@ function renderLsHandCardHTML(card, status, isSelected, isDiscardSel, isHumanSte
 
   return `
     <div data-act-uid="${card.uid}" class="ls-hand-card ${selCls} ${dimCls} ${flightHiddenCls} select-none">
-      <div class="${vis.headerBg} px-1.5 py-0.5 text-[8px] font-black text-white flex items-center justify-between leading-none shrink-0">
+      <div class="${vis.headerBg} px-1 py-0.5 text-[7.5px] font-black text-white flex items-center justify-between leading-none shrink-0">
         <span class="truncate">${vis.tag}</span>
         <span class="shrink-0 text-amber-200">${vis.badge}</span>
       </div>
-      <div class="flex-1 min-h-0 ${vis.artBg} flex flex-col items-center justify-between py-1 px-0.5 relative overflow-hidden">
-        <div class="w-full flex items-center justify-between px-1">
-          <span class="px-1 py-0.2 rounded bg-black/65 text-[7px] font-black ${status.playable ? 'text-emerald-300' : 'text-rose-300'} truncate">${status.playable ? '●可出' : status.shortReason}</span>
+      <div class="flex-1 min-h-0 ${vis.artBg} flex flex-col items-center justify-between py-0.5 px-0.5 relative overflow-hidden">
+        <div class="w-full flex items-center justify-center px-0.5">
+          <span class="px-1 py-0.2 rounded bg-black/65 text-[6.5px] font-black ${status.playable ? 'text-emerald-300' : 'text-rose-300'} truncate max-w-full leading-none">${status.playable ? '●可出' : status.shortReason}</span>
         </div>
-        <div class="text-xl sm:text-2xl leading-none drop-shadow-md my-auto">${card.svg}</div>
-        <div class="px-1.5 py-0.5 rounded-full bg-black/65 border border-white/15 flex items-center justify-center">
+        <div class="text-base sm:text-lg leading-none drop-shadow-md my-auto">${card.svg}</div>
+        <div class="ls-hand-req-pill">
           ${reqOrbs}
         </div>
         ${isDiscardSel ? `<div class="absolute inset-0 bg-orange-600/85 flex items-center justify-center text-[10px] font-black text-white">🗑️待棄</div>` : ''}
       </div>
-      <div class="bg-ivory-card px-1 py-1 shrink-0 border-t border-stone-300 text-center flex items-center justify-center min-h-[20px]">
-        <div class="text-[8.5px] sm:text-[9.5px] font-black text-slate-900 truncate leading-tight w-full">${card.title}</div>
+      <div class="bg-ivory-card px-1 py-0.5 shrink-0 border-t border-stone-300 text-center flex items-center justify-center min-h-[16px]">
+        <div class="ls-hand-card-title">${card.title}</div>
       </div>
     </div>
   `;
@@ -2657,35 +2657,36 @@ function renderLsModeDLeftCardColumnHTML(card) {
 
 function renderLsOpponentComparisonCardHTML(opp, checkDept, isValid, actionAttr, subFooterText, btnLabel) {
   const shortOpp = getShortPlayerName(opp.name);
+  const terms = typeof getThemeTerms === 'function' ? getThemeTerms() : {};
   const deptStrip = LS_DEPT_ORDER.map(d => renderLsDeptSlotHTML(opp, d, { highlightDept: checkDept, noInspect: true, isComp: true })).join('');
 
   if (!isValid) {
     return `
-      <div class="ls-moded-opp-card rounded-xl bg-stone-900/75 border border-stone-700 p-2 opacity-60 flex flex-col justify-between gap-1.5 overflow-hidden shrink-0">
-        <div class="flex items-center justify-between gap-1 px-0.5">
-          <span class="text-xs font-black text-stone-200 truncate">${shortOpp}</span>
-          <span class="text-xs font-black text-amber-300 whitespace-nowrap">💵${opp.crystals}</span>
+      <div class="ls-moded-opp-card rounded-xl bg-stone-900/80 border border-stone-700 p-1.5 opacity-60 flex flex-col justify-between gap-1 min-w-0 overflow-hidden">
+        <div class="flex items-center justify-between gap-1 px-0.5 min-w-0">
+          <span class="text-[11px] font-black text-stone-200 truncate">🛡️ ${shortOpp}</span>
+          <span class="text-[11px] font-black text-amber-300 whitespace-nowrap shrink-0">${terms.currencyIcon || '💎'}${opp.crystals}</span>
         </div>
         <div class="ls-comp-dept-grid">
           ${deptStrip}
         </div>
-        <div class="text-[9.5px] font-bold text-stone-400 truncate px-0.5">${subFooterText}</div>
-        <div class="w-full py-1 rounded-lg bg-stone-800 text-center text-[10px] font-bold text-sky-300 truncate px-1">${btnLabel}</div>
+        <div class="ls-moded-opp-sub">${subFooterText}</div>
+        <div class="ls-moded-opp-btn bg-stone-800 text-sky-300">${btnLabel}</div>
       </div>
     `;
   }
 
   return `
-    <button ${actionAttr} class="ls-moded-opp-card rounded-xl bg-stone-950/95 border-2 border-amber-400/85 hover:border-amber-300 p-2 text-left shadow-xl flex flex-col justify-between gap-1.5 overflow-hidden shrink-0 transition hover:-translate-y-0.5">
-      <div class="flex items-center justify-between gap-1 w-full px-0.5">
-        <span class="text-xs font-black text-white truncate">🎯 ${shortOpp}</span>
-        <span class="text-xs font-black text-amber-300 whitespace-nowrap">💵${opp.crystals}</span>
+    <button ${actionAttr} class="ls-moded-opp-card rounded-xl bg-stone-950/95 border-2 border-amber-400/90 hover:border-amber-300 p-1.5 text-left shadow-xl flex flex-col justify-between gap-1 min-w-0 overflow-hidden transition hover:-translate-y-0.5">
+      <div class="flex items-center justify-between gap-1 w-full px-0.5 min-w-0">
+        <span class="text-[11px] font-black text-white truncate">🎯 ${shortOpp}</span>
+        <span class="text-[11px] font-black text-amber-300 whitespace-nowrap shrink-0">${terms.currencyIcon || '💎'}${opp.crystals}</span>
       </div>
       <div class="ls-comp-dept-grid pointer-events-none">
         ${deptStrip}
       </div>
-      <div class="text-[9.5px] font-bold text-stone-200 truncate w-full px-0.5">${subFooterText}</div>
-      <div class="w-full py-1.5 rounded-lg bg-gradient-to-r text-center text-[10.5px] font-black text-slate-950 shadow truncate px-1">
+      <div class="ls-moded-opp-sub text-stone-200">${subFooterText}</div>
+      <div class="ls-moded-opp-btn bg-gradient-to-r text-slate-950 shadow">
         ${btnLabel}
       </div>
     </button>
@@ -3145,9 +3146,10 @@ function renderModeDDrawer() {
         const btnLabel = isValid ? `⚔️ 攻擊 ${getShortPlayerName(opp.name)} (×${card.val})` : `🛡️ ${DEPT_META.YELLOW.short}${oppSkill}級免疫`;
         return renderLsOpponentComparisonCardHTML(opp, 'YELLOW', isValid, `data-d-action="CONFIRM_BAD_IDEA" data-opp-id="${opp.id}"`, subText, btnLabel);
       }).join('');
+      const oppGridCls = aliveOpponents.length >= 3 ? 'ls-moded-opp-grid-3' : aliveOpponents.length === 2 ? 'ls-moded-opp-grid-2' : 'ls-moded-opp-grid-1';
       rightPanelHTML = `
-        <div class="text-[11px] font-bold text-amber-200 truncate">看對方的【${DEPT_META.YELLOW.name}】（亮黃框部門），點選目標立即施放：</div>
-        <div class="flex items-stretch justify-center gap-2.5 min-w-0 my-auto">
+        <div class="text-[10px] font-bold text-amber-200 truncate">看對方的【${DEPT_META.YELLOW.name}】（亮黃框部門），點選目標立即施放：</div>
+        <div class="${oppGridCls} my-auto">
           ${oppGridHTML}
         </div>
       `;
@@ -3160,9 +3162,10 @@ function renderModeDDrawer() {
         const btnLabel = isValid ? `🪤 選 ${getShortPlayerName(opp.name)} ➔ 挑人` : `🛡️ ${DEPT_META.BLUE.short}${oppSkill}級免疫`;
         return renderLsOpponentComparisonCardHTML(opp, 'BLUE', isValid, `data-d-action="STEP2_FORCE_HIRE_OPP" data-opp-id="${opp.id}"`, subText, btnLabel);
       }).join('');
+      const oppGridCls = aliveOpponents.length >= 3 ? 'ls-moded-opp-grid-3' : aliveOpponents.length === 2 ? 'ls-moded-opp-grid-2' : 'ls-moded-opp-grid-1';
       rightPanelHTML = `
-        <div class="text-[11px] font-bold text-amber-200 truncate">步驟 1/2：看對方的【${DEPT_META.BLUE.name}】（亮黃框部門），點選要強塞人員的對手：</div>
-        <div class="flex items-stretch justify-center gap-2.5 min-w-0 my-auto">
+        <div class="text-[10px] font-bold text-amber-200 truncate">步驟 1/2：看對方的【${DEPT_META.BLUE.name}】（亮黃框部門），點選要強塞人員的對手：</div>
+        <div class="${oppGridCls} my-auto">
           ${oppGridHTML}
         </div>
       `;
@@ -3331,9 +3334,10 @@ function renderModeDDrawer() {
         const btnLabel = `🔥 翻倍 ${getShortPlayerName(opp.name)} (-${burn * 2})`;
         return renderLsOpponentComparisonCardHTML(opp, null, true, `data-d-action="CONFIRM_DOUBLE_PAY" data-opp-id="${opp.id}"`, subText, btnLabel);
       }).join('');
+      const oppGridCls = aliveOpponents.length >= 3 ? 'ls-moded-opp-grid-3' : aliveOpponents.length === 2 ? 'ls-moded-opp-grid-2' : 'ls-moded-opp-grid-1';
       rightPanelHTML = `
-        <div class="text-[11px] font-bold text-amber-200 truncate">點選一名對手，使其下回合發薪支出強制翻倍（×2）：</div>
-        <div class="flex items-stretch justify-center gap-2.5 min-w-0 my-auto">
+        <div class="text-[10px] font-bold text-amber-200 truncate">點選一名對手，使其下回合發薪支出強制翻倍（×2）：</div>
+        <div class="${oppGridCls} my-auto">
           ${oppGridHTML}
         </div>
       `;
@@ -3346,11 +3350,16 @@ function renderModeDDrawer() {
       `;
     }
 
-    container.className = 'w-fit max-w-full min-w-0 mx-auto';
+    const isOppCompareMode = card.effect === 'BAD_IDEA' || (card.effect === 'FORCE_HIRE' && !uiSelection.step2OpponentId) || card.effect === 'VP_DOUBLE_PAY';
+    const sheetCardEl = document.getElementById('modeDSheetCard');
+    if (sheetCardEl) {
+      sheetCardEl.classList.toggle('ls-moded-sheet-wide', isOppCompareMode);
+    }
+    container.className = 'w-full min-w-0';
     container.innerHTML = `
-      <div class="flex items-stretch justify-center gap-3 w-fit max-w-full min-w-0">
+      <div class="ls-moded-2col-layout">
         ${renderLsModeDLeftCardColumnHTML(card)}
-        <div class="flex flex-col justify-between gap-1.5 min-w-0">
+        <div class="ls-moded-right-col">
           ${rightPanelHTML}
         </div>
       </div>

@@ -2090,3 +2090,204 @@ body.is-landscape-active .mode-d-sheet-card {
   height: auto !important;
   flex-shrink: 0 !important;
 }
+
+/* === V14.1.1 COMPLETE FONT-SIZE UTILITIES, HAND CARD TYPOGRAPHY & NON-OVERLAPPING MODE D GRIDS === */
+.text-\[6px\]    { font-size: 6px !important; }
+.text-\[6\.5px\]  { font-size: 6.5px !important; }
+.text-\[7\.5px\]  { font-size: 7.5px !important; }
+.text-\[8\.5px\]  { font-size: 8.5px !important; }
+.text-\[9\.5px\]  { font-size: 9.5px !important; }
+.text-\[10\.5px\] { font-size: 10.5px !important; }
+.w-\[74px\]      { width: 74px !important; }
+.min-h-\[16px\]  { min-height: 16px !important; }
+.min-h-\[20px\]  { min-height: 20px !important; }
+.min-w-\[140px\] { min-width: 140px !important; }
+.min-w-\[180px\] { min-width: 180px !important; }
+.max-w-\[240px\] { max-width: 240px !important; }
+.max-w-\[34px\]  { max-width: 34px !important; }
+.w-fit           { width: fit-content !important; }
+.grayscale-\[35\%\] { filter: grayscale(35%); }
+
+@media (min-width: 640px) {
+  .sm\:text-\[9\.5px\] { font-size: 9.5px !important; }
+  .sm\:w-\[86px\]     { width: 86px !important; }
+}
+
+:root {
+  --ls-dept-card-h: clamp(60px, calc(var(--app-h, 390px) * 0.202), 112px);
+  --ls-my-dept-card-h: clamp(68px, calc(var(--app-h, 390px) * 0.228), 126px);
+  --ls-pile-card-h: clamp(62px, calc(var(--app-h, 390px) * 0.205), 114px);
+  --ls-hand-card-h: clamp(80px, calc(var(--app-h, 390px) * 0.278), 146px);
+  --ls-modal-card-h: clamp(96px, calc(var(--app-h, 390px) * 0.365), 156px);
+  --ls-moded-left-w: clamp(88px, calc(var(--app-w, 844px) * 0.118), 122px);
+}
+
+/* Hand Card Title & Skill Orbs: Crisp, proportional, never giant, never clipped */
+.ls-hand-card-title {
+  font-size: clamp(7.8px, calc(var(--ls-hand-card-h, 108px) * 0.080), 10px) !important;
+  line-height: 1.15 !important;
+  font-weight: 900 !important;
+  color: #0f172a !important;
+  white-space: nowrap !important;
+  overflow: hidden !important;
+  text-overflow: ellipsis !important;
+  width: 100% !important;
+  letter-spacing: -0.02em !important;
+}
+
+.ls-hand-req-pill {
+  padding: 1px 4px !important;
+  border-radius: 9999px !important;
+  background: rgba(0, 0, 0, 0.68) !important;
+  border: 1px solid rgba(255, 255, 255, 0.18) !important;
+  display: flex !important;
+  align-items: center !important;
+  justify-content: center !important;
+  max-width: 96% !important;
+}
+
+.ls-hand-req-row {
+  display: flex !important;
+  align-items: center !important;
+  justify-content: center !important;
+  gap: 1.5px !important;
+}
+
+.ls-hand-req-prefix {
+  font-size: 6.5px !important;
+  font-weight: 900 !important;
+  color: #fde68a !important;
+  line-height: 1 !important;
+  margin-right: 1px !important;
+}
+
+.ls-hand-req-orb {
+  width: 11px !important;
+  height: 11px !important;
+  border-radius: 9999px !important;
+  border: 1px solid rgba(255, 255, 255, 0.75) !important;
+  color: #ffffff !important;
+  font-size: 7px !important;
+  font-weight: 900 !important;
+  display: flex !important;
+  align-items: center !important;
+  justify-content: center !important;
+  line-height: 1 !important;
+  flex-shrink: 0 !important;
+}
+
+/* My Company Stacked Card Height: Keep clean bottom clearance inside My Company box */
+.ls-dept-card.ls-my-dept-card.ls-dept-card-stacked {
+  height: calc(var(--ls-my-dept-card-h) + 2px) !important;
+}
+
+/* Mode D 2-Column Layout: Left Action Card Preview + Right Target Picker (100% Non-Overlapping!) */
+body.is-landscape-active .mode-d-sheet-card {
+  width: fit-content !important;
+  min-width: 340px !important;
+  max-width: min(calc(var(--app-w, 100vw) * 0.95), 850px) !important;
+  max-height: calc(var(--app-h, 100vh) * 0.93) !important;
+  padding: 0.5rem 0.75rem !important;
+  margin: 0 auto !important;
+  overflow: hidden !important;
+}
+
+body.is-landscape-active .mode-d-sheet-card.ls-moded-sheet-wide {
+  width: min(calc(var(--app-w, 100vw) * 0.95), 840px) !important;
+}
+
+.ls-moded-2col-layout {
+  display: flex !important;
+  align-items: stretch !important;
+  justify-content: flex-start !important;
+  gap: 0.65rem !important;
+  width: 100% !important;
+  min-width: 0 !important;
+}
+
+.ls-moded-left-col {
+  width: var(--ls-moded-left-w) !important;
+  flex-shrink: 0 !important;
+  position: relative !important;
+  z-index: 20 !important;
+}
+
+.ls-moded-right-col {
+  flex: 1 1 0% !important;
+  min-width: 0 !important;
+  display: flex !important;
+  flex-direction: column !important;
+  justify-content: space-between !important;
+  gap: 0.35rem !important;
+  overflow: hidden !important;
+}
+
+/* Opponent Comparison Grid inside Mode D: Strict 3-Column / 2-Column Grid so cards NEVER overflow or overlap! */
+.ls-moded-opp-grid-3 {
+  display: grid !important;
+  grid-template-columns: repeat(3, minmax(0, 1fr)) !important;
+  gap: 0.45rem !important;
+  width: 100% !important;
+  min-width: 0 !important;
+}
+
+.ls-moded-opp-grid-2 {
+  display: grid !important;
+  grid-template-columns: repeat(2, minmax(0, 1fr)) !important;
+  gap: 0.55rem !important;
+  width: 100% !important;
+  max-width: 480px !important;
+  min-width: 0 !important;
+}
+
+.ls-moded-opp-grid-1 {
+  display: grid !important;
+  grid-template-columns: repeat(1, minmax(0, 1fr)) !important;
+  width: 100% !important;
+  max-width: 260px !important;
+  min-width: 0 !important;
+}
+
+.ls-moded-opp-card {
+  width: 100% !important;
+  min-width: 0 !important;
+}
+
+.ls-moded-opp-card .ls-comp-dept-grid {
+  display: grid !important;
+  grid-template-columns: repeat(4, minmax(0, 1fr)) !important;
+  gap: 3px !important;
+  width: 100% !important;
+  min-width: 0 !important;
+}
+
+.ls-moded-opp-card .ls-comp-dept-card {
+  width: 100% !important;
+  height: auto !important;
+  aspect-ratio: 2 / 3 !important;
+  min-width: 0 !important;
+}
+
+.ls-moded-opp-sub {
+  font-size: 9px !important;
+  line-height: 1.2 !important;
+  font-weight: 800 !important;
+  white-space: nowrap !important;
+  overflow: hidden !important;
+  text-overflow: ellipsis !important;
+  width: 100% !important;
+  padding: 0 2px !important;
+}
+
+.ls-moded-opp-btn {
+  width: 100% !important;
+  padding: 4px 6px !important;
+  border-radius: 0.45rem !important;
+  font-size: 9.5px !important;
+  line-height: 1.2 !important;
+  font-weight: 900 !important;
+  text-align: center !important;
+  white-space: nowrap !important;
+  overflow: hidden !important;
+  text-overflow: ellipsis !important;
+}
