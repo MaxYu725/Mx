@@ -44,10 +44,19 @@ function publicLobbyState() {
 }
 
 const initialClientToken = (() => {
+  // sessionStorage is copied into a new tab opened by window.open. Bind the
+  // reconnect token to a browsing-context marker which is not shared with a
+  // second tab; otherwise the copied token collides with the original seat.
+  const oldWindowName = String(window.name || '');
+  const tabMarker = /^mx-v13-tab-[a-f0-9-]{36}$/i.test(oldWindowName)
+    ? oldWindowName : 'mx-v13-tab-' + window.crypto.randomUUID();
+  window.name = tabMarker;
+  const savedMarker = loadStoredString('session', 'dbr_v13_tab_identity', '');
   let tk = loadStoredString('session', 'dbr_v13_client_token', '');
-  if (!/^tk_[a-f0-9-]{36}$/i.test(tk)) {
+  if (savedMarker !== tabMarker || !/^tk_[a-f0-9-]{36}$/i.test(tk)) {
     tk = 'tk_' + window.crypto.randomUUID();
     saveStoredString('session', 'dbr_v13_client_token', tk);
+    saveStoredString('session', 'dbr_v13_tab_identity', tabMarker);
   }
   return tk;
 })();
