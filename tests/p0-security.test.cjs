@@ -118,8 +118,8 @@ test('PeerJS loader retries another CDN before reporting failure', async () => {
   const loaded = await x.ensurePeerJsReady();
   assert.equal(loaded, FakePeer);
   assert.equal(scripts.length, 2);
-  assert.match(scripts[0], /cdn\\.jsdelivr\\.net/);
-  assert.match(scripts[1], /unpkg\\.com/);
+  assert.match(scripts[0], /cdn\.jsdelivr\.net/);
+  assert.match(scripts[1], /unpkg\.com/);
 });
 
 test('a simulated encrypted PeerJS transport can admit a fog-protected guest', async () => {
