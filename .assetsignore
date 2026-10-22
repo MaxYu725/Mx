@@ -1,0 +1,9 @@
+# Mx static site assets only. Do not publish repository metadata or tests.
+.git/
+.github/
+tests/
+*.md
+wrangler.toml
+wrangler.json
+wrangler.jsonc
+.assetsignore
