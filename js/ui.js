@@ -4149,6 +4149,8 @@ function renderLobbyUI() {
         ? '<span class="online-dot-pulse mr-1"></span>✅ PeerJS 跨網連線就緒，可分享房號'
         : st === 'CONNECTING'
           ? '⏳ 正在連接 PeerJS 訊號伺服器，暫時不可入房'
+          : st === 'RECONNECTING'
+            ? '<span class="text-amber-200">⚠️ PeerJS 訊號連線恢復中；現有對局可繼續，新玩家暫時無法入房</span>'
           : st === 'FAILED'
             ? '<span class="text-rose-300">❌ ' + escapeHtml(gameSession.connectionError || '跨網連線失敗，請重新開房') + '</span>'
             : '⚠️ 跨網連線尚未建立，請重新開房';
