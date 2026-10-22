@@ -4133,7 +4133,7 @@ function renderLobbyUI() {
     hostStartControls?.classList.remove('hidden');
 
     const codeDisplay = document.getElementById('hostRoomCodeText');
-    if (codeDisplay) codeDisplay.textContent = gameSession.roomCode || '----';
+    if (codeDisplay) codeDisplay.textContent = gameSession.roomCode || '--------';
 
     const statusBadge = document.getElementById('hostNetStatusBadge');
     if (statusBadge) {
@@ -4244,7 +4244,7 @@ function renderLobbyUI() {
           `;
         }
       } else {
-        statusBox.innerHTML = `<div class="text-[11px] text-slate-400">輸入房主提供的 4 碼房間通行碼，即可進入房間候戰室並即時查看席位狀態。</div>`;
+        statusBox.innerHTML = `<div class="text-[11px] text-slate-400">輸入房主提供的 8 碼房間通行碼，即可進入房間候戰室並即時查看席位狀態。</div>`;
       }
     }
   }
