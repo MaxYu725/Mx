@@ -4699,6 +4699,11 @@ function initAppOnLoad() {
     syncHostLobbySettingsFromInputs();
   });
 
+  document.getElementById('btnRetryHostConnection')?.addEventListener('click', () => {
+    createOnlineHostRoom();
+    renderLobbyUI();
+  });
+
   document.getElementById('btnCopyRoomCode')?.addEventListener('click', () => {
     if (!gameSession.roomCode) return;
     copyTextSafe(gameSession.roomCode, `📋 已複製房間碼【${gameSession.roomCode}】！`);
