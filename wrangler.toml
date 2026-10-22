@@ -1,0 +1,5 @@
+name = "mx-p0-test"
+compatibility_date = "2026-10-22"
+
+[assets]
+directory = "./"
