@@ -116,13 +116,36 @@ function syncLayoutOrientationDOM() {
   const lsActive = isLandscapeModeActive();
   const vw = window.innerWidth || 390;
   const vh = window.innerHeight || 844;
+  const isRotatedPortrait = Boolean(lsActive && vh > vw);
+  const appW = isRotatedPortrait ? vh : vw;
+  const appH = isRotatedPortrait ? vw : vh;
+
+  document.documentElement.style.setProperty("--app-w", `${appW}px`);
+  document.documentElement.style.setProperty("--app-h", `${appH}px`);
+
   const pHeader = document.getElementById("portraitHeaderBar");
   const pMain = document.getElementById("portraitMainArena");
   const lsRoot = document.getElementById("landscapeArenaRoot");
 
   document.body.classList.toggle("is-landscape-active", lsActive);
-  // If user manually forced LANDSCAPE while holding phone vertically (vh > vw), apply 90deg CSS viewport rotation
-  document.body.classList.toggle("force-landscape-rotate", lsActive && vh > vw);
+  document.body.classList.toggle("force-landscape-rotate", isRotatedPortrait);
+
+  document.documentElement.classList.toggle("has-landscape-rotate", isRotatedPortrait);
+  if (isRotatedPortrait) {
+    document.body.style.setProperty("width", `${vh}px`, "important");
+    document.body.style.setProperty("height", `${vw}px`, "important");
+    document.body.style.setProperty("max-width", "none", "important");
+    document.body.style.setProperty("max-height", "none", "important");
+    document.body.style.setProperty("left", `${vw}px`, "important");
+    document.body.style.setProperty("top", "0px", "important");
+  } else {
+    document.body.style.removeProperty("width");
+    document.body.style.removeProperty("height");
+    document.body.style.removeProperty("max-width");
+    document.body.style.removeProperty("max-height");
+    document.body.style.removeProperty("left");
+    document.body.style.removeProperty("top");
+  }
 
   if (pHeader) pHeader.classList.toggle("hidden", lsActive);
   if (pMain) pMain.classList.toggle("hidden", lsActive);
@@ -1280,7 +1303,7 @@ function renderLsDeptSlotHTML(player, d, opts = {}) {
   return `
     <div ${clickAttrs} class="ls-dept-card ${glowCls} bg-slate-950 select-none">
       ${getCardImgTag(artKey, hCard.title, 'w-full h-full object-cover block')}
-      <div class="absolute top-0 inset-x-0 ${st.headerBg}/90 py-0.5 px-1 flex items-center justify-center z-10 shadow">
+      <div class="absolute top-0 inset-x-0 ${st.headerBg} py-0.5 px-1 flex items-center justify-center z-10 shadow">
         <span class="text-[8px] font-black text-white leading-none truncate">${roleLabel}</span>
       </div>
       ${subCount > 0 ? `<span class="absolute bottom-0.5 left-1/2 -translate-x-1/2 px-1 py-0.2 rounded bg-slate-950/90 border border-amber-400/80 text-[8px] font-black text-amber-300 leading-none z-20 whitespace-nowrap">+${subCount}</span>` : ''}
@@ -1308,7 +1331,7 @@ function renderLsBankCardHTML(d, topUid, deckLen) {
   return `
     <button data-open-bank-dept="${d}" class="ls-dept-card border ${st.border} bg-slate-950">
       ${getCardImgTag(c.artKey || c.tplId, c.title, 'w-full h-full object-cover block')}
-      <div class="absolute top-0 inset-x-0 ${st.headerBg}/90 py-0.5 px-1 flex items-center justify-between z-10">
+      <div class="absolute top-0 inset-x-0 ${st.headerBg} py-0.5 px-1 flex items-center justify-between z-10">
         <span class="text-[8px] font-black text-white leading-none truncate">${roleLabel}</span>
         <span class="text-[7px] font-bold text-amber-200 leading-none">${deckLen}</span>
       </div>
@@ -1360,7 +1383,7 @@ function renderLsOpponentSeatHTML(opp) {
         </div>
       </div>
 
-      <div class="flex-1 min-h-0 w-full grid grid-cols-4 gap-1 items-center justify-items-center py-0.5">
+      <div class="ls-dept-row py-0.5">
         ${LS_DEPT_ORDER.map(d => renderLsDeptSlotHTML(opp, d, { noInspect: true })).join('')}
       </div>
     </div>
@@ -1370,34 +1393,34 @@ function renderLsOpponentSeatHTML(opp) {
 function getActionCategoryVisuals(card) {
   const terms = typeof getThemeTerms === 'function' ? getThemeTerms() : {};
   if (card.effect === 'BAD_IDEA') {
-    return { tag: '攻擊', headerBg: 'bg-amber-600', artBg: 'from-amber-500/90 to-amber-700/95', badge: `×${card.val}`, border: 'border-amber-400', checkDept: 'YELLOW' };
+    return { tag: '攻擊', headerBg: 'bg-amber-600', artBg: 'ls-act-art-atk', badge: `×${card.val}`, border: 'border-amber-400', checkDept: 'YELLOW' };
   }
   if (card.effect === 'RELEASE_CRISIS') {
-    return { tag: '防守', headerBg: 'bg-rose-700', artBg: 'from-rose-600/90 to-stone-800/95', badge: `清×${card.val}`, border: 'border-rose-400', checkDept: 'RED' };
+    return { tag: '防守', headerBg: 'bg-rose-700', artBg: 'ls-act-art-def', badge: `清×${card.val}`, border: 'border-rose-400', checkDept: 'RED' };
   }
   if (card.effect === 'GAIN_FUNDS') {
-    return { tag: '財務', headerBg: 'bg-emerald-700', artBg: 'from-emerald-600/90 to-teal-900/95', badge: `+${card.val}`, border: 'border-emerald-400', checkDept: 'GREEN' };
+    return { tag: '財務', headerBg: 'bg-emerald-700', artBg: 'ls-act-art-fin', badge: `+${card.val}`, border: 'border-emerald-400', checkDept: 'GREEN' };
   }
   if (card.effect === 'HIRE_BANK') {
-    return { tag: '聘僱', headerBg: 'bg-sky-700', artBg: 'from-sky-600/90 to-slate-900/95', badge: '請人', border: 'border-sky-400', checkDept: null };
+    return { tag: '聘僱', headerBg: 'bg-sky-700', artBg: 'ls-act-art-hire', badge: '請人', border: 'border-sky-400', checkDept: null };
   }
   if (card.effect === 'FIRE_OWN') {
-    return { tag: '解僱', headerBg: 'bg-slate-700', artBg: 'from-slate-600/90 to-slate-900/95', badge: '裁員', border: 'border-slate-400', checkDept: null };
+    return { tag: '解僱', headerBg: 'bg-slate-700', artBg: 'ls-act-art-fire', badge: '裁員', border: 'border-slate-400', checkDept: null };
   }
   if (card.effect === 'FORCE_HIRE') {
-    return { tag: '陷害', headerBg: 'bg-orange-700', artBg: 'from-orange-600/90 to-stone-900/95', badge: '塞人', border: 'border-orange-400', checkDept: 'BLUE' };
+    return { tag: '陷害', headerBg: 'bg-orange-700', artBg: 'ls-act-art-force', badge: '塞人', border: 'border-orange-400', checkDept: 'BLUE' };
   }
   if (card.effect === 'POACH_ENEMY') {
-    return { tag: '挖角', headerBg: 'bg-indigo-700', artBg: 'from-indigo-600/90 to-slate-900/95', badge: '奪才', border: 'border-indigo-400', checkDept: 'BLUE' };
+    return { tag: '挖角', headerBg: 'bg-indigo-700', artBg: 'ls-act-art-poach', badge: '奪才', border: 'border-indigo-400', checkDept: 'BLUE' };
   }
-  return { tag: `${terms.vpName || '副總'}大招`, headerBg: 'bg-purple-700', artBg: 'from-purple-600/90 to-slate-950/95', badge: '大招', border: 'border-purple-400', checkDept: null };
+  return { tag: `${terms.vpName || '副總'}大招`, headerBg: 'bg-purple-700', artBg: 'ls-act-art-vp', badge: '大招', border: 'border-purple-400', checkDept: null };
 }
 
 function renderLsTableMiniActionCardHTML(card, countBadge = null, topSubLabel = '') {
   if (!card) return '';
   const vis = getActionCategoryVisuals(card);
   return `
-    <div class="ls-table-pile-card bg-[#f5efe6] border-2 ${vis.border} overflow-hidden flex flex-col justify-between select-none">
+    <div class="ls-table-pile-card bg-ivory-card border-2 ${vis.border} overflow-hidden flex flex-col justify-between select-none">
       <div class="${vis.headerBg} px-1 py-0.5 text-[7px] font-black text-white flex items-center justify-between leading-none">
         <span>${vis.tag}</span>
         ${topSubLabel ? `<span class="truncate max-w-[38px] text-amber-200">${topSubLabel}</span>` : `<span>${vis.badge}</span>`}
@@ -1406,7 +1429,7 @@ function renderLsTableMiniActionCardHTML(card, countBadge = null, topSubLabel = 
         <span class="text-base sm:text-lg leading-none drop-shadow">${card.svg}</span>
         <span class="text-[8px] font-black text-white mt-0.5 drop-shadow">${vis.badge}</span>
       </div>
-      <div class="bg-[#f5efe6] px-1 py-0.5 text-center">
+      <div class="bg-ivory-card px-1 py-0.5 text-center">
         <div class="text-[8px] font-black text-slate-900 truncate leading-tight">${card.title}</div>
       </div>
       ${countBadge !== null ? `<span class="absolute -bottom-1 -right-1 px-1.5 py-0.2 rounded-full bg-stone-950 border border-amber-400/80 text-[9px] font-black text-amber-300 z-20 shadow">${countBadge}</span>` : ''}
@@ -1434,7 +1457,7 @@ function renderLsHandCardHTML(card, status, isSelected, isDiscardSel, isHumanSte
         <div class="mt-1 px-1.5 py-0.2 rounded bg-black/45 text-[9px] font-black text-amber-200 whitespace-nowrap">${vis.badge}</div>
         ${isDiscardSel ? `<div class="absolute inset-0 bg-orange-600/80 flex items-center justify-center text-xs font-black text-white">🗑️待棄置</div>` : ''}
       </div>
-      <div class="bg-[#f5efe6] px-1.5 py-1 flex flex-col gap-0.5 shrink-0 border-t border-stone-300">
+      <div class="bg-ivory-card px-1.5 py-1 flex flex-col gap-0.5 shrink-0 border-t border-stone-300">
         <div class="text-[9px] sm:text-[10px] font-black text-slate-900 truncate leading-tight">${card.title}</div>
         <div class="flex items-center justify-between min-h-[14px]">
           <span class="text-[7px] font-extrabold ${status.playable ? 'text-emerald-700' : 'text-rose-700'} truncate">${status.playable ? '●可出' : status.shortReason}</span>
@@ -1606,7 +1629,7 @@ function renderLandscapeArena() {
             </div>
           </div>
 
-          <div class="flex-1 min-h-0 w-full grid grid-cols-4 gap-1.5 items-center justify-items-center py-0.5">
+          <div class="ls-dept-row py-0.5">
             ${LS_DEPT_ORDER.map(d => renderLsDeptSlotHTML(localPlayer, d)).join('')}
           </div>
 
@@ -1692,7 +1715,7 @@ function renderLsModeDLeftCardColumnHTML(card) {
 
   return `
     <div class="w-[155px] sm:w-[175px] shrink-0 flex flex-col gap-2">
-      <div class="w-full aspect-[2/3] rounded-xl overflow-hidden bg-[#f5efe6] border-2 ${vis.border} flex flex-col justify-between shadow-xl">
+      <div class="w-full aspect-[2/3] rounded-xl overflow-hidden bg-ivory-card border-2 ${vis.border} flex flex-col justify-between shadow-xl">
         <div class="${vis.headerBg} px-2 py-1 text-[10px] font-black text-white flex items-center justify-between">
           <span>${vis.tag}</span>
           <span>${vis.badge}</span>
@@ -1701,7 +1724,7 @@ function renderLsModeDLeftCardColumnHTML(card) {
           <div class="text-4xl leading-none drop-shadow-lg">${card.svg}</div>
           <div class="mt-2 px-2 py-0.5 rounded bg-black/50 text-xs font-black text-amber-200">${vis.badge}</div>
         </div>
-        <div class="bg-[#f5efe6] px-2.5 py-1.5 flex flex-col gap-1 border-t border-stone-300">
+        <div class="bg-ivory-card px-2.5 py-1.5 flex flex-col gap-1 border-t border-stone-300">
           <div class="text-xs font-black text-slate-900 truncate">${card.title}</div>
           <div class="flex items-center justify-between">${reqOrbs}</div>
         </div>
@@ -1727,7 +1750,7 @@ function renderLsOpponentComparisonCardHTML(opp, checkDept, isValid, actionAttr,
           <span class="text-sm font-black text-stone-200 truncate">${shortOpp}</span>
           <span class="text-sm font-black text-amber-300">${opp.crystals}</span>
         </div>
-        <div class="h-[86px] sm:h-[96px] w-full grid grid-cols-4 gap-1 items-center justify-items-center">
+        <div class="h-[86px] sm:h-[96px] w-full flex items-center justify-center gap-1">
           ${deptStrip}
         </div>
         <div class="text-[10px] font-bold text-stone-400 truncate">${terms.engName || '工程師'} ${opp.engineers.length} · ${terms.vpName || '副總'} ${vpCnt} · ${terms.crisisName || '爛點子'} ×${crisisReq}</div>
@@ -1742,7 +1765,7 @@ function renderLsOpponentComparisonCardHTML(opp, checkDept, isValid, actionAttr,
         <span class="text-sm font-black text-white truncate">🎯 ${shortOpp}</span>
         <span class="text-sm font-black text-amber-300">${opp.crystals}</span>
       </div>
-      <div class="h-[86px] sm:h-[96px] w-full grid grid-cols-4 gap-1 items-center justify-items-center pointer-events-none">
+      <div class="h-[86px] sm:h-[96px] w-full flex items-center justify-center gap-1 pointer-events-none">
         ${deptStrip}
       </div>
       <div class="text-[10px] font-bold text-stone-300 truncate w-full">${subFooterText}</div>

@@ -33,10 +33,7 @@ function initArtBlobCache() {
   Object.keys(CLASSIC_FULLCARD_ART).forEach((k) => {
     const url = dataUriToBlobUrl(CLASSIC_FULLCARD_ART[k]);
     __CARD_BLOB_URLS.CLASSIC_BURN_RATE[k] = url;
-    const img = new Image();
-    img.decoding = "async";
-    img.src = url;
-    if (img.decode) img.decode().catch(() => {});
+
   });
   Object.keys(CLASSIC_MINI_AVATAR).forEach((k) => {
     const url = dataUriToBlobUrl(CLASSIC_MINI_AVATAR[k]);
@@ -46,10 +43,7 @@ function initArtBlobCache() {
   Object.keys(GPT_FULLCARD_ART).forEach((k) => {
     const url = dataUriToBlobUrl(GPT_FULLCARD_ART[k]);
     __CARD_BLOB_URLS.DEMON_CASTLE[k] = url;
-    const img = new Image();
-    img.decoding = "async";
-    img.src = url;
-    if (img.decode) img.decode().catch(() => {});
+
   });
   Object.keys(GPT_MINI_AVATAR).forEach((k) => {
     const url = dataUriToBlobUrl(GPT_MINI_AVATAR[k]);

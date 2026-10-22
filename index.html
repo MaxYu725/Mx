@@ -16,7 +16,7 @@
   <!-- PeerJS WebRTC DataChannel CDN for Cross-Device Room Code Multiplayer -->
   <script src="https://unpkg.com/peerjs@1.5.4/dist/peerjs.min.js" async></script>
 </head>
-<body class="flex flex-col h-full w-full max-w-full overflow-hidden safe-area-body">
+<body class="flex flex-col h-full w-full overflow-hidden safe-area-body">
 
   <!-- ===================================================================
        1. COMPACT SINGLE-LINE HEADER BAR (Fullscreen / PWA + Unified Settings)
@@ -185,7 +185,7 @@
           <button id="btnLsRoomMenu" class="ls-pill-btn">房間</button>
           <button id="btnLsToPortrait" class="ls-pill-btn ls-pill-btn-gold">直向</button>
         </div>
-        <div id="lsJobBankGrid" class="flex-1 min-h-0 w-full grid grid-cols-4 gap-1.5 items-center justify-items-center">
+        <div id="lsJobBankGrid" class="ls-dept-row">
         </div>
       </div>
     </div>
@@ -245,113 +245,120 @@
        =================================================================== -->
 
   <!-- MODAL 00: HOME SCREEN OVERLAY (首頁 — 首次載入顯示，支援首次設定、開局與教學) -->
-  <div id="homeScreenModal" class="fixed inset-0 bg-black/90 backdrop-blur-md flex items-center justify-center z-50 p-3">
-    <div class="home-screen-card bg-slate-900 border-2 border-amber-400 rounded-2xl max-w-md w-full p-4 shadow-2xl max-h-[94vh] overflow-y-auto space-y-3">
+  <div id="homeScreenModal" class="fixed inset-0 bg-black/90 backdrop-blur-md flex items-center justify-center z-50 p-2 sm:p-3">
+    <div class="home-screen-card bg-slate-900 border-2 border-amber-400 rounded-2xl max-w-md w-full p-3.5 sm:p-4 shadow-2xl max-h-[94vh] overflow-y-auto">
+      <div class="ls-home-layout space-y-2.5">
 
-      <!-- 1. Hero Emblem, Card Fan & Game Title -->
-      <div class="text-center space-y-1.5 pt-0.5">
-        <div id="homeHeroCardsFan" class="flex items-center justify-center gap-2 py-1">
-          <!-- Populated dynamically with 3 iconic 2:3 Royal cards -->
-        </div>
-        <div class="inline-flex items-center gap-1 px-2.5 py-0.5 rounded-full bg-purple-950 border border-amber-400/60 text-[10px] font-black text-amber-300">
-          🔥 BURN RATE MULTI-THEME · V13.7 連線對戰版
-        </div>
-        <h2 id="homeAppTitle" class="text-lg sm:text-xl font-black text-amber-400 leading-tight">💼 Burn Rate：矽谷新創燒錢爭霸戰</h2>
-        <p id="homeAppSubtitle" class="text-[11px] text-slate-300">經營四大企業部門、高薪挖角人才、把爛點子塞給對手，撐到最後不破產！</p>
-      </div>
-
-      <!-- 2. First-Time Setup & Match Configuration Panel (首次設定區) -->
-      <div class="rounded-xl bg-slate-950/90 border border-slate-700 p-3 space-y-2.5 text-xs">
-        <div class="flex items-center justify-between border-b border-slate-800 pb-1.5">
-          <span class="font-black text-amber-300">⚙️ 首次設定 ＆ 對局參數</span>
-          <span class="text-[10px] text-slate-400">設定將自動記憶</span>
-        </div>
-
-        <!-- Theme Switcher -->
-        <div class="flex items-center gap-2">
-          <label for="homeSelectTheme" class="text-amber-300 font-black whitespace-nowrap shrink-0">🎨 遊戲主題：</label>
-          <select id="homeSelectTheme" class="flex-1 bg-slate-900 border-2 border-amber-400 rounded-lg px-2 py-1 text-amber-300 font-black text-xs min-w-0">
-            <option value="CLASSIC_BURN_RATE" selected>💼 原版 Burn Rate (新創商戰·全卡插畫)</option>
-            <option value="DEMON_CASTLE">🏰 深淵魔王城 (魔界奇幻·全卡插畫)</option>
-          </select>
-        </div>
-
-        <!-- Player Nickname -->
-        <div class="flex items-center gap-2">
-          <label id="homeLordLabel" for="homeInputNickname" class="text-slate-300 font-bold whitespace-nowrap shrink-0">👔 執行長名號：</label>
-          <input id="homeInputNickname" type="text" maxlength="16" value="新創執行長" class="flex-1 bg-slate-900 border border-amber-500/50 rounded-lg px-2.5 py-1 text-white font-black text-xs min-w-0" />
-        </div>
-
-        <!-- Player Count & Play/Discard Rule -->
-        <div class="grid grid-cols-2 gap-2">
-          <div>
-            <label for="homeSelectPlayerCount" class="block text-[10px] font-bold text-slate-400 mb-1">👥 單機對戰人數：</label>
-            <select id="homeSelectPlayerCount" class="w-full bg-slate-900 border border-slate-700 rounded-lg px-2 py-1.5 text-white font-bold text-xs">
-              <option value="2">2 人對決 (1v1)</option>
-              <option value="3" selected>3 人混戰 (推薦)</option>
-              <option value="4">4 人標準局</option>
-            </select>
+        <!-- LEFT COLUMN IN LANDSCAPE: Hero Fan + Title + Start Buttons + Tutorial/Gallery -->
+        <div class="ls-home-col-left space-y-2">
+          <!-- 1. Hero Emblem, Card Fan & Game Title -->
+          <div class="text-center space-y-1 pt-0.5">
+            <div id="homeHeroCardsFan" class="flex items-center justify-center gap-2 py-0.5">
+              <!-- Populated dynamically with 3 iconic 2:3 Royal cards -->
+            </div>
+            <div class="inline-flex items-center gap-1 px-2.5 py-0.5 rounded-full bg-purple-950 border border-amber-400/60 text-[10px] font-black text-amber-300">
+              🔥 BURN RATE MULTI-THEME · V13.9 橫屏圓桌版
+            </div>
+            <h2 id="homeAppTitle" class="text-base sm:text-xl font-black text-amber-400 leading-tight">💼 Burn Rate：矽谷新創燒錢爭霸戰</h2>
+            <p id="homeAppSubtitle" class="text-[11px] text-slate-300 leading-tight">經營四大企業部門、高薪挖角人才、把爛點子塞給對手，撐到最後不破產！</p>
           </div>
-          <div>
-            <label for="homeSelectRule" class="block text-[10px] font-bold text-slate-400 mb-1">⚖️ 出牌/棄牌規則：</label>
-            <select id="homeSelectRule" class="w-full bg-slate-900 border border-slate-700 rounded-lg px-2 py-1.5 text-amber-300 font-bold text-xs">
-              <option value="STRICT_EITHER" selected>標準二選一</option>
-              <option value="SHARED_QUOTA_4">流暢共用4額度</option>
-            </select>
+
+          <!-- 3. Primary Start & Multiplayer Buttons -->
+          <div class="space-y-1.5">
+            <div class="grid grid-cols-2 gap-2">
+              <button id="btnHomeQuickStart" class="py-2 px-2 rounded-xl bg-amber-500 text-slate-950 font-black text-xs shadow-lg flex flex-col items-center justify-center gap-0.5">
+                <span>⚡ 單機快速開局</span>
+                <span class="text-[10px] font-bold opacity-85">自動發牌・立即開戰</span>
+              </button>
+              <button id="btnHomeDraftStart" class="py-2 px-2 rounded-xl bg-indigo-600 border border-indigo-400 text-white font-black text-xs shadow-lg flex flex-col items-center justify-center gap-0.5">
+                <span>🎲 單機輪抽開局</span>
+                <span class="text-[10px] font-bold text-indigo-200">首輪輪流挑選4部下</span>
+              </button>
+            </div>
+
+            <button id="btnHomeOpenLobby" class="w-full py-2 px-3 rounded-xl bg-emerald-950/90 border-2 border-emerald-400 text-emerald-300 font-black text-xs shadow-lg flex items-center justify-center gap-1.5">
+              🌐 多人連線對戰大廳（建立房間 ／ 輸入房號加入）
+            </button>
+
+            <button id="btnHomeResumeGame" class="hidden w-full py-1.5 px-3 rounded-xl bg-slate-800 border border-slate-600 text-slate-200 font-bold text-xs">
+              ▶️ 返回目前進行中的對局
+            </button>
+          </div>
+
+          <!-- 4. Tutorial & Card Gallery Entry Buttons -->
+          <div class="grid grid-cols-2 gap-2 pt-1 border-t border-slate-800">
+            <button id="btnHomeOpenRules" class="py-1.5 px-2 rounded-xl bg-slate-800 border border-amber-400/60 text-xs font-black text-amber-300 flex items-center justify-center gap-1.5 shadow">
+              <span>📖</span>
+              <span>新手教學與規則</span>
+            </button>
+            <button id="btnHomeOpenGallery" class="py-1.5 px-2 rounded-xl bg-slate-800 border border-indigo-400/60 text-xs font-black text-indigo-200 flex items-center justify-center gap-1.5 shadow">
+              <span>🃏</span>
+              <span>144張卡牌圖鑑</span>
+            </button>
           </div>
         </div>
 
-        <!-- Quick Device Preferences: Orientation / Speed / Audio / Fullscreen -->
-        <div class="grid grid-cols-2 gap-1.5 pt-0.5">
-          <button id="btnHomeToggleOrientation" class="py-1.5 px-2 rounded-lg bg-amber-950/80 border border-amber-400/70 text-[10px] font-black text-amber-300 truncate">
-            🖥️ 切換橫屏牌桌模式
-          </button>
-          <button id="btnHomeFullscreen" class="py-1.5 px-2 rounded-lg bg-slate-900 border border-sky-500/40 text-[10px] font-black text-sky-300 truncate">
-            ⛶ 全螢幕 / 安裝PWA
-          </button>
-          <button id="btnHomeToggleSpeed" class="py-1.5 px-2 rounded-lg bg-slate-900 border border-amber-500/40 text-[10px] font-black text-amber-300 truncate">
-            ⏩ 1x 標準速度
-          </button>
-          <button id="btnHomeToggleMute" class="py-1.5 px-2 rounded-lg bg-slate-900 border border-emerald-500/40 text-[10px] font-black text-emerald-300 truncate">
-            🔊 音效開啟
-          </button>
+        <!-- RIGHT COLUMN IN LANDSCAPE: First-Time Setup & Match Configuration Panel -->
+        <div class="ls-home-col-right">
+          <div class="rounded-xl bg-slate-950/90 border border-slate-700 p-2.5 sm:p-3 space-y-2 text-xs">
+            <div class="flex items-center justify-between border-b border-slate-800 pb-1">
+              <span class="font-black text-amber-300">⚙️ 首次設定 ＆ 對局參數</span>
+              <span class="text-[10px] text-slate-400">設定將自動記憶</span>
+            </div>
+
+            <!-- Theme Switcher -->
+            <div class="flex items-center gap-2">
+              <label for="homeSelectTheme" class="text-amber-300 font-black whitespace-nowrap shrink-0">🎨 遊戲主題：</label>
+              <select id="homeSelectTheme" class="flex-1 bg-slate-900 border-2 border-amber-400 rounded-lg px-2 py-1 text-amber-300 font-black text-xs min-w-0">
+                <option value="CLASSIC_BURN_RATE" selected>💼 原版 Burn Rate (新創商戰·全卡插畫)</option>
+                <option value="DEMON_CASTLE">🏰 深淵魔王城 (魔界奇幻·全卡插畫)</option>
+              </select>
+            </div>
+
+            <!-- Player Nickname -->
+            <div class="flex items-center gap-2">
+              <label id="homeLordLabel" for="homeInputNickname" class="text-slate-300 font-bold whitespace-nowrap shrink-0">👔 執行長名號：</label>
+              <input id="homeInputNickname" type="text" maxlength="16" value="新創執行長" class="flex-1 bg-slate-900 border border-amber-500/50 rounded-lg px-2.5 py-1 text-white font-black text-xs min-w-0" />
+            </div>
+
+            <!-- Player Count & Play/Discard Rule -->
+            <div class="grid grid-cols-2 gap-2">
+              <div>
+                <label for="homeSelectPlayerCount" class="block text-[10px] font-bold text-slate-400 mb-0.5">👥 單機對戰人數：</label>
+                <select id="homeSelectPlayerCount" class="w-full bg-slate-900 border border-slate-700 rounded-lg px-2 py-1 text-white font-bold text-xs">
+                  <option value="2">2 人對決 (1v1)</option>
+                  <option value="3" selected>3 人混戰 (推薦)</option>
+                  <option value="4">4 人標準局</option>
+                </select>
+              </div>
+              <div>
+                <label for="homeSelectRule" class="block text-[10px] font-bold text-slate-400 mb-0.5">⚖️ 出牌/棄牌規則：</label>
+                <select id="homeSelectRule" class="w-full bg-slate-900 border border-slate-700 rounded-lg px-2 py-1 text-amber-300 font-bold text-xs">
+                  <option value="STRICT_EITHER" selected>標準二選一</option>
+                  <option value="SHARED_QUOTA_4">流暢共用4額度</option>
+                </select>
+              </div>
+            </div>
+
+            <!-- Quick Device Preferences: Orientation / Fullscreen / Speed / Audio -->
+            <div class="grid grid-cols-2 gap-1.5 pt-0.5">
+              <button id="btnHomeToggleOrientation" class="py-1.5 px-2 rounded-lg bg-amber-950/90 border border-amber-400/70 text-[10px] font-black text-amber-300 truncate">
+                🖥️ 切換橫屏牌桌模式
+              </button>
+              <button id="btnHomeFullscreen" class="py-1.5 px-2 rounded-lg bg-slate-900 border border-sky-500/40 text-[10px] font-black text-sky-300 truncate">
+                ⛶ 全螢幕 / 安裝PWA
+              </button>
+              <button id="btnHomeToggleSpeed" class="py-1.5 px-2 rounded-lg bg-slate-900 border border-amber-500/40 text-[10px] font-black text-amber-300 truncate">
+                ⏩ 1x 標準速度
+              </button>
+              <button id="btnHomeToggleMute" class="py-1.5 px-2 rounded-lg bg-slate-900 border border-emerald-500/40 text-[10px] font-black text-emerald-300 truncate">
+                🔊 音效開啟
+              </button>
+            </div>
+          </div>
         </div>
+
       </div>
-
-      <!-- 3. Primary Start & Multiplayer Buttons -->
-      <div class="space-y-2">
-        <div class="grid grid-cols-2 gap-2">
-          <button id="btnHomeQuickStart" class="py-2.5 px-2 rounded-xl bg-amber-500 text-slate-950 font-black text-xs shadow-lg flex flex-col items-center justify-center gap-0.5">
-            <span>⚡ 單機快速開局</span>
-            <span class="text-[10px] font-bold opacity-85">自動發牌・立即開戰</span>
-          </button>
-          <button id="btnHomeDraftStart" class="py-2.5 px-2 rounded-xl bg-indigo-600 border border-indigo-400 text-white font-black text-xs shadow-lg flex flex-col items-center justify-center gap-0.5">
-            <span>🎲 單機輪抽開局</span>
-            <span class="text-[10px] font-bold text-indigo-200">首輪輪流挑選4部下</span>
-          </button>
-        </div>
-
-        <button id="btnHomeOpenLobby" class="w-full py-2.5 px-3 rounded-xl bg-emerald-950/90 border-2 border-emerald-400 text-emerald-300 font-black text-xs shadow-lg flex items-center justify-center gap-1.5">
-          🌐 多人連線對戰大廳（建立房間 ／ 輸入房號加入）
-        </button>
-
-        <button id="btnHomeResumeGame" class="hidden w-full py-2 px-3 rounded-xl bg-slate-800 border border-slate-600 text-slate-200 font-bold text-xs">
-          ▶️ 返回目前進行中的對局
-        </button>
-      </div>
-
-      <!-- 4. Tutorial & Card Gallery Entry Buttons -->
-      <div class="grid grid-cols-2 gap-2 pt-1 border-t border-slate-800">
-        <button id="btnHomeOpenRules" class="py-2 px-2.5 rounded-xl bg-slate-800 border border-amber-400/60 text-xs font-black text-amber-300 flex items-center justify-center gap-1.5 shadow">
-          <span>📖</span>
-          <span>新手教學與規則</span>
-        </button>
-        <button id="btnHomeOpenGallery" class="py-2 px-2.5 rounded-xl bg-slate-800 border border-indigo-400/60 text-xs font-black text-indigo-200 flex items-center justify-center gap-1.5 shadow">
-          <span>🃏</span>
-          <span>144張卡牌圖鑑</span>
-        </button>
-      </div>
-
     </div>
   </div>
 
