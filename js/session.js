@@ -45,7 +45,7 @@ function publicLobbyState() {
 
 const initialClientToken = (() => {
   let tk = loadStoredString('session', 'dbr_v13_client_token', '');
-  if (!tk) {
+  if (!/^tk_[a-f0-9-]{36}$/i.test(tk)) {
     tk = 'tk_' + window.crypto.randomUUID();
     saveStoredString('session', 'dbr_v13_client_token', tk);
   }
@@ -697,18 +697,19 @@ function syncMasterStateToClientsAndRender() {
 
 function handleHostReceiveAction(actorSeatId, action) {
   const state = getActiveMasterState();
-  if (!state || state.phase === 'GAME_OVER') return;
+  if (!state || state.phase === 'GAME_OVER' || state.turn.isSettling ||
+      !action || typeof action !== 'object' || Array.isArray(action)) return;
 
   if (action.type === 'DRAFT_PICK') {
     const picker = state.players[state.draft.pickerIndex];
-    if (!picker || (picker.id !== actorSeatId && !action.fromAI)) return;
+    if (!picker || picker.id !== actorSeatId) return;
     authoritativeDraftPick(state, action.dept);
     return;
   }
 
   if (state.phase !== 'STEP1_PLAY_OR_DISCARD') return;
   const activePlayer = state.players[state.turn.activePlayerIndex];
-  if (!activePlayer || (activePlayer.id !== actorSeatId && !action.fromAI)) return;
+  if (!activePlayer || activePlayer.id !== actorSeatId || activePlayer.isAI) return;
 
   if (action.type === 'PLAY_CARD') {
     authoritativePlayCard(state, action);
@@ -720,6 +721,43 @@ function handleHostReceiveAction(actorSeatId, action) {
 }
 
 // === Authoritative Rule Mutations on Master State ===
+// Validate network supplied targets BEFORE mutating any game state.
+function validatePlayActionTargets(state, player, card, action, status) {
+  const target = action.targetPlayerId;
+  const empUid = action.targetEmpUid;
+  const emp = CARDS_BY_ID[empUid];
+  const owns = uid => getAllPlayerEmployeeUids(player).includes(uid);
+  const validOpp = () => Array.isArray(status.validOpponents) && status.validOpponents.includes(target);
+  switch (card.effect) {
+    case 'GAIN_FUNDS': return true;
+    case 'RELEASE_CRISIS':
+      return status.validCrises.includes(action.targetCrisisUid);
+    case 'HIRE_BANK':
+      return status.validBankDepts.includes(action.targetDept);
+    case 'FIRE_OWN':
+      if (!status.validOwnEmployees.includes(empUid)) return false;
+      return !emp.isVP || status.companionFireUids.includes(
+        action.secondaryCardUid || status.companionFireUids[0]);
+    case 'BAD_IDEA': return validOpp();
+    case 'FORCE_HIRE':
+      return validOpp() && (status.validBankByOpponent[target] || []).includes(action.targetDept);
+    case 'POACH_ENEMY':
+      if (!validOpp() || !(status.targetableByOpponent[target] || []).includes(empUid)) return false;
+      return !emp.isVP || (status.companionsByOpponent[target] || []).includes(
+        action.secondaryCardUid || (status.companionsByOpponent[target] || [])[0]);
+    case 'VP_KICK_ENEMY':
+      return status.targetVPs.some(t => t.opponentId === target && t.empUid === empUid);
+    case 'VP_DOUBLE_PAY': return validOpp();
+    case 'VP_MASS_LAYOFF': {
+      const ids = action.layoffUids;
+      if (!Array.isArray(ids) || ids.length === 0 ||
+          new Set(ids).size !== ids.length || !ids.every(owns)) return false;
+      return getTotalVPCount(player) - ids.filter(uid => CARDS_BY_ID[uid]?.isVP).length >= 2;
+    }
+    default: return false;
+  }
+}
+
 function authoritativeDraftPick(state, dept) {
   if (!state || state.phase !== 'INITIAL_DRAFT') return;
   const picker = state.players[state.draft.pickerIndex];
@@ -775,7 +813,7 @@ function authoritativePlayCard(state, action) {
   if (!card) return;
 
   const status = evaluateCardPlayability(state, player, card.uid);
-  if (!status.playable) return;
+  if (!status.playable || !validatePlayActionTargets(state, player, card, action, status)) return;
 
   state.turn.hasPlayedCard = true;
   state.lastPlayedCard = { uid: card.uid, tplId: card.tplId, actorId: player.id, actorName: player.name };
@@ -1011,14 +1049,15 @@ function authoritativePlayCard(state, action) {
 }
 
 function authoritativeDiscardCards(state, cardUids) {
-  if (!state || !cardUids || cardUids.length === 0) return;
+  if (!state || !Array.isArray(cardUids) || cardUids.length === 0 ||
+      new Set(cardUids).size !== cardUids.length || state.turn.isSettling) return;
   const player = state.players[state.turn.activePlayerIndex];
   const canDiscard = state.config.playDiscardMode === 'SHARED_QUOTA_4' || !state.turn.hasPlayedCard;
   if (!canDiscard) return;
 
   const remaining = state.turn.maxActions - state.turn.actionsUsed;
-  const validToDiscard = cardUids.filter(uid => player.hand.includes(uid)).slice(0, remaining);
-  if (validToDiscard.length === 0) return;
+  if (cardUids.length > remaining || !cardUids.every(uid => player.hand.includes(uid))) return;
+  const validToDiscard = cardUids;
 
   validToDiscard.forEach(uid => consumeHandCard(state, player, uid, true));
   state.turn.actionsUsed += validToDiscard.length;
@@ -1043,7 +1082,8 @@ function authoritativeDiscardCards(state, cardUids) {
 }
 
 function authoritativeSettleAndAdvanceTurn(state) {
-  if (!state || state.phase === 'GAME_OVER') return;
+  if (!state || state.phase === 'GAME_OVER' || state.turn.isSettling) return;
+  state.turn.isSettling = true;
   clearTimeout(aiTimer);
   const player = state.players[state.turn.activePlayerIndex];
 
@@ -1114,6 +1154,7 @@ function authoritativeSettleAndAdvanceTurn(state) {
     }
 
     activeState.turn.activePlayerIndex = nextIdx;
+    activeState.turn.isSettling = false;
     activeState.turn.actionsUsed = 0;
     activeState.turn.hasPlayedCard = false;
     activeState.turn.hasDiscardedCard = false;
@@ -1152,7 +1193,7 @@ function endPlayPhaseAndSettleTurn() {
 function checkAndScheduleHostAI(customDelayMs = null) {
   if (gameSession.mode === 'CLIENT') return;
   const state = getActiveMasterState();
-  if (!state || state.phase === 'GAME_OVER') return;
+  if (!state || state.phase === 'GAME_OVER' || state.turn.isSettling) return;
 
   if (state.phase === 'INITIAL_DRAFT') {
     const picker = state.players[state.draft.pickerIndex];
@@ -1180,7 +1221,7 @@ function scheduleNextAITick(customDelayMs = null) {
 function runAIStep() {
   if (gameSession.mode === 'CLIENT') return;
   const state = getActiveMasterState();
-  if (!state || state.phase === 'GAME_OVER') return;
+  if (!state || state.phase === 'GAME_OVER' || state.turn.isSettling) return;
 
   if (state.phase === 'INITIAL_DRAFT') {
     const picker = state.players[state.draft.pickerIndex];
