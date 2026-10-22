@@ -7,9 +7,19 @@ const path = require('node:path');
 const vm = require('node:vm');
 const { webcrypto } = require('node:crypto');
 
-function gameHarness() {
-  const storage = () => ({ getItem: () => null, setItem: () => {} });
-  const window = { crypto: webcrypto, localStorage: storage(), sessionStorage: storage() };
+function gameHarness(options = {}) {
+  const localData = new Map();
+  const sessionData = new Map(Object.entries(options.sessionSeed || {}));
+  const storage = map => ({
+    getItem: key => map.has(key) ? map.get(key) : null,
+    setItem: (key, value) => { map.set(key, value); }
+  });
+  const window = {
+    name: options.windowName || '',
+    crypto: webcrypto,
+    localStorage: storage(localData),
+    sessionStorage: storage(sessionData)
+  };
   const document = { getElementById: () => null, querySelector: () => null, querySelectorAll: () => [] };
   const sandbox = vm.createContext({
     window, document, setTimeout: () => 1, clearTimeout: () => {},
@@ -21,6 +31,7 @@ function gameHarness() {
   const game = vm.runInContext('({ createInitialGameState, evaluateCardPlayability, consumeHandCard, sanitizeStateForSeat, escapeHtml, validatePlayActionTargets, handleIncomingNetworkPacket, authoritativeDiscardCards, authoritativeSettleAndAdvanceTurn, gameSession, publicLobbyState, CARDS_BY_ID, generateRandomCode, ensurePeerJsReady, createOnlineHostRoom, joinOnlineRoomAsClient })', sandbox);
   game.window = window;
   game.document = document;
+  game.sessionSnapshot = () => Object.fromEntries(sessionData);
   return game;
 }
 
@@ -182,4 +193,49 @@ test('a simulated encrypted PeerJS transport can admit a fog-protected guest', a
   assert.equal(host.gameSession.lobbyState.seats[1].role, 'HUMAN');
   assert.equal(guest.gameSession.lobbyState.fogOfWar, true);
   assert.equal(JSON.stringify(guest.gameSession.lobbyState).includes(host.gameSession.clientToken), false);
+});
+
+test('a new tab does not inherit the opener session token, but reload preserves it', () => {
+  const original = gameHarness();
+  const sessionCopy = original.sessionSnapshot();
+  const childTab = gameHarness({ sessionSeed: sessionCopy });
+  assert.notEqual(original.gameSession.clientToken, childTab.gameSession.clientToken);
+  const reload = gameHarness({ sessionSeed: sessionCopy, windowName: original.window.name });
+  assert.equal(original.gameSession.clientToken, reload.gameSession.clientToken);
+});
+
+test('duplicate live seat token is explicitly refused without displacing existing peer', () => {
+  const host = gameHarness();
+  host.gameSession.mode = 'HOST';
+  host.gameSession.roomCode = 'AB88QX27';
+  const token = 'tk_aaaaaaaa-aaaa-4aaa-aaaa-aaaaaaaaaaaa';
+  host.gameSession.lobbyState.seats[1] = {
+    id: 'p2', role: 'HUMAN', connected: true, isAI: false, clientToken: token, name: 'original'
+  };
+  const existing = {open: true, send() {}};
+  const received = [];
+  const duplicate = {open: true, send: packet => received.push(packet)};
+  host.gameSession.peerConns.p2 = existing;
+  host.handleIncomingNetworkPacket({
+    msgType: 'HELLO_JOIN', roomCode: 'AB88QX27',
+    clientToken: token, playerName: 'intruder'
+  }, 'PEER', duplicate);
+  assert.equal(received.length, 1);
+  assert.equal(received[0].msgType, 'JOIN_REJECTED');
+  assert.equal(host.gameSession.peerConns.p2, existing);
+  assert.equal(host.gameSession.lobbyState.seats[1].name, 'original');
+});
+
+test('host cannot accidentally destroy their own room by joining it', () => {
+  const host = gameHarness();
+  host.document.createElement = () => ({className: '', textContent: '', style: {}});
+  host.document.body = {appendChild() {}};
+  host.gameSession.mode = 'HOST';
+  host.gameSession.roomCode = 'AB88QX27';
+  const existingPeer = {destroy() { throw Error('destroy was called'); }};
+  host.gameSession.peer = existingPeer;
+  host.joinOnlineRoomAsClient('AB88QX27', 'the host');
+  assert.equal(host.gameSession.mode, 'HOST');
+  assert.equal(host.gameSession.peer, existingPeer);
+  assert.equal(host.gameSession.roomCode, 'AB88QX27');
 });
