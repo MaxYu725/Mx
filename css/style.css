@@ -1340,16 +1340,17 @@ body.is-landscape-active .mode-d-sheet-card {
   box-shadow: 0 0 16px rgba(249, 115, 22, 0.8);
 }
 
-/* Landscape Mode D 2-Column Command Sheet */
+/* Landscape Mode D 2-Column Command Sheet (Uses --app-w and --app-h so rotated portrait gets full 844px width!) */
 body.is-landscape-active .mode-d-sheet-card {
-  max-width: min(94vw, 880px) !important;
-  width: min(94vw, 880px) !important;
-  max-height: 90vh !important;
+  max-width: min(calc(var(--app-w, 100vw) * 0.94), 840px) !important;
+  width: min(calc(var(--app-w, 100vw) * 0.94), 840px) !important;
+  max-height: calc(var(--app-h, 100vh) * 0.92) !important;
   background: rgba(24, 20, 15, 0.98) !important;
   border: 2px solid rgba(245, 158, 11, 0.65) !important;
-  border-radius: 1.15rem !important;
-  padding: 0.75rem 0.9rem !important;
+  border-radius: 1.1rem !important;
+  padding: 0.55rem 0.8rem !important;
   box-shadow: 0 20px 50px rgba(0, 0, 0, 0.92) !important;
+  overflow-y: auto !important;
 }
 
 /* === V13.9.1 COMPLETE UTILITY COVERAGE FOR LANDSCAPE & MODALS === */
@@ -1607,27 +1608,24 @@ body.is-landscape-active .home-hero-fan-card {
   box-shadow: 0 0 10px rgba(245, 158, 11, 0.28);
 }
 
-/* 6-Card Hand Strip in Landscape Mode: fits all 6 cards side-by-side without clipping */
+/* 6-Card Hand Strip in Landscape Mode: fits all 6 cards side-by-side, and centers 1-5 cards cleanly */
 .ls-hand-strip {
   flex: 1 1 0% !important;
   min-width: 0 !important;
   height: 100% !important;
   display: flex !important;
   align-items: center !important;
-  justify-content: space-between !important;
-  gap: 0.3rem !important;
-  overflow-x: auto !important;
-  overflow-y: hidden !important;
+  justify-content: center !important;
+  gap: 0.35rem !important;
+  overflow: hidden !important;
 }
 
 .ls-hand-strip .ls-hand-card {
   flex: 1 1 0% !important;
   min-width: 0 !important;
-  max-width: calc((100% - 1.5rem) / 6) !important;
-  width: auto !important;
+  max-width: 82px !important;
   height: 96% !important;
   max-height: 96% !important;
-  aspect-ratio: auto !important;
 }
 
 /* Mode D Left Card Column & Width-Constrained 4-Department Opponent Comparison Grid */
@@ -1684,4 +1682,58 @@ body.is-landscape-active .sm\:grid-cols-4 {
 }
 body.is-landscape-active .lg\:grid-cols-5 {
   grid-template-columns: repeat(5, minmax(0, 1fr)) !important;
+}
+
+/* Action Card Header Background Colors (Fix white-on-white headers on Action Cards) */
+.bg-amber-600   { background-color: #d97706 !important; }
+.bg-amber-700   { background-color: #b45309 !important; }
+.bg-rose-700    { background-color: #be123c !important; }
+.bg-emerald-700 { background-color: #047857 !important; }
+.bg-sky-700     { background-color: #0369a1 !important; }
+.bg-slate-700   { background-color: #334155 !important; }
+.bg-orange-700  { background-color: #c2410c !important; }
+.bg-indigo-700  { background-color: #4338ca !important; }
+.bg-purple-700  { background-color: #7e22ce !important; }
+.bg-orange-900  { background-color: #7c2d12 !important; }
+
+/* Landscape Modal Sizing & Card Height Constraints so no modal overflows 390px landscape height */
+body.is-landscape-active #jobBankModal > div,
+body.is-landscape-active #inspectorModal > div,
+body.is-landscape-active #galleryModal > div,
+body.is-landscape-active #logModal > div,
+body.is-landscape-active #lobbyModal > div,
+body.is-landscape-active #settingsMenuModal > div {
+  max-width: min(calc(var(--app-w, 100vw) * 0.92), 780px) !important;
+  max-height: calc(var(--app-h, 100vh) * 0.92) !important;
+  overflow-y: auto !important;
+  padding: 0.65rem 0.9rem !important;
+}
+
+body.is-landscape-active #jobBankModalGrid .modal-pure-card,
+body.is-landscape-active #inspectorCardsGrid .modal-pure-card {
+  max-width: 118px !important;
+  margin-left: auto !important;
+  margin-right: auto !important;
+}
+
+.ls-target-emp-card {
+  height: clamp(82px, calc(var(--app-h, 390px) * 0.34), 124px) !important;
+  aspect-ratio: 2 / 3 !important;
+  width: auto !important;
+  margin-left: auto !important;
+  margin-right: auto !important;
+  position: relative !important;
+  border-radius: 0.45rem !important;
+  overflow: hidden !important;
+  background: #0f172a;
+  box-shadow: 0 3px 8px rgba(0, 0, 0, 0.7);
+}
+.ls-target-emp-card > img {
+  position: absolute !important;
+  top: 0 !important;
+  left: 0 !important;
+  width: 100% !important;
+  height: 100% !important;
+  object-fit: cover !important;
+  display: block !important;
 }

@@ -2174,7 +2174,6 @@ function renderModeDDrawer() {
       const allowedDepts = status.validBankByOpponent[opp.id] || [];
       const bankCardsHTML = LS_DEPT_ORDER.map(d => {
         const topUid = state.jobBank[d][0];
-        const meta = DEPT_META[d];
         if (!topUid) return '';
         const emp = CARDS_BY_ID[topUid];
         const isAllowed = allowedDepts.includes(d);
@@ -2182,21 +2181,21 @@ function renderModeDDrawer() {
         const isSabotageVP = emp.isVP && emp.skill < oppCurSkill;
         if (!isAllowed) {
           return `
-            <div class="rounded-xl bg-stone-900/70 border border-stone-700 p-1.5 opacity-45 flex flex-col items-center gap-1 min-w-0">
-              <div class="w-full aspect-[2/3] rounded-lg overflow-hidden bg-slate-950 relative">
+            <div class="rounded-xl bg-stone-900/70 border border-stone-700 p-1.5 opacity-45 flex flex-col items-center justify-between gap-1 min-w-0">
+              <div class="ls-target-emp-card">
                 ${getCardImgTag(emp.artKey || emp.tplId, emp.title, 'w-full h-full object-cover block')}
               </div>
-              <div class="w-full py-0.5 rounded bg-stone-800 text-center text-[9px] font-bold text-rose-300 truncate">🔒 已有${terms.vpName || '副總'}</div>
+              <div class="w-full py-1 rounded bg-stone-800 text-center text-[9px] font-bold text-rose-300 truncate px-1">🔒 已有${terms.vpName || '副總'}</div>
             </div>
           `;
         }
         return `
-          <button data-d-action="CONFIRM_FORCE_HIRE" data-opp-id="${opp.id}" data-dept="${d}" class="rounded-xl bg-stone-950 border-2 border-amber-400 p-1.5 text-left shadow-lg flex flex-col justify-between gap-1 min-w-0 transition hover:-translate-y-0.5">
-            <div class="w-full aspect-[2/3] rounded-lg overflow-hidden bg-slate-950 relative pointer-events-none">
+          <button data-d-action="CONFIRM_FORCE_HIRE" data-opp-id="${opp.id}" data-dept="${d}" class="rounded-xl bg-stone-950 border-2 border-amber-400 p-1.5 text-center shadow-lg flex flex-col items-center justify-between gap-1 min-w-0 transition hover:-translate-y-0.5">
+            <div class="ls-target-emp-card pointer-events-none">
               ${getCardImgTag(emp.artKey || emp.tplId, emp.title, 'w-full h-full object-cover block')}
             </div>
-            <div class="text-[9px] font-bold text-amber-200 truncate text-center w-full">${isSabotageVP ? `😈壓低至${emp.skill}級!` : `🔥害他-${emp.salary}/回`}</div>
-            <div class="w-full py-1 rounded-lg bg-rose-600 text-center text-[10px] font-black text-white shadow truncate">🪤 強塞 ${emp.title}</div>
+            <div class="text-[9px] font-bold text-amber-200 truncate w-full">${isSabotageVP ? `😈壓低至${emp.skill}級!` : `🔥害他-${emp.salary}/回`}</div>
+            <div class="w-full py-1 rounded-lg bg-rose-600 text-center text-[10px] font-black text-white shadow truncate px-1">🪤 強塞 ${emp.title}</div>
           </button>
         `;
       }).join('');
@@ -2212,7 +2211,6 @@ function renderModeDDrawer() {
     } else if (card.effect === 'HIRE_BANK') {
       const bankCardsHTML = LS_DEPT_ORDER.map(d => {
         const topUid = state.jobBank[d][0];
-        const meta = DEPT_META[d];
         if (!topUid) return '';
         const emp = CARDS_BY_ID[topUid];
         const isValid = status.validBankDepts.includes(d);
@@ -2223,21 +2221,21 @@ function renderModeDDrawer() {
 
         if (!isValid) {
           return `
-            <div class="rounded-xl bg-stone-900/70 border border-stone-700 p-1.5 opacity-45 flex flex-col items-center gap-1 min-w-0">
-              <div class="w-full aspect-[2/3] rounded-lg overflow-hidden bg-slate-950 relative">
+            <div class="rounded-xl bg-stone-900/70 border border-stone-700 p-1.5 opacity-45 flex flex-col items-center justify-between gap-1 min-w-0">
+              <div class="ls-target-emp-card">
                 ${getCardImgTag(emp.artKey || emp.tplId, emp.title, 'w-full h-full object-cover block')}
               </div>
-              <div class="w-full py-0.5 rounded bg-stone-800 text-center text-[9px] font-bold text-rose-300 truncate">🔒 已有${terms.vpName || '副總'}</div>
+              <div class="w-full py-1 rounded bg-stone-800 text-center text-[9px] font-bold text-rose-300 truncate px-1">🔒 已有${terms.vpName || '副總'}</div>
             </div>
           `;
         }
         return `
-          <button data-d-action="CONFIRM_HIRE" data-dept="${d}" class="rounded-xl bg-stone-950 border-2 border-emerald-400 p-1.5 text-left shadow-lg flex flex-col justify-between gap-1 min-w-0 transition hover:-translate-y-0.5">
-            <div class="w-full aspect-[2/3] rounded-lg overflow-hidden bg-slate-950 relative pointer-events-none">
+          <button data-d-action="CONFIRM_HIRE" data-dept="${d}" class="rounded-xl bg-stone-950 border-2 border-emerald-400 p-1.5 text-center shadow-lg flex flex-col items-center justify-between gap-1 min-w-0 transition hover:-translate-y-0.5">
+            <div class="ls-target-emp-card pointer-events-none">
               ${getCardImgTag(emp.artKey || emp.tplId, emp.title, 'w-full h-full object-cover block')}
             </div>
-            <div class="text-[9px] font-bold text-emerald-300 truncate text-center w-full">${impactHint}</div>
-            <div class="w-full py-1 rounded-lg bg-emerald-600 text-center text-[10px] font-black text-white shadow truncate">⚡ 招募 ${emp.title}</div>
+            <div class="text-[9px] font-bold text-emerald-300 truncate w-full">${impactHint}</div>
+            <div class="w-full py-1 rounded-lg bg-emerald-600 text-center text-[10px] font-black text-white shadow truncate px-1">⚡ 招募 ${emp.title}</div>
           </button>
         `;
       }).join('');
@@ -2245,6 +2243,92 @@ function renderModeDDrawer() {
         <div class="text-[11px] font-bold text-amber-200 truncate">點選中央人才池翻開的應徵者加入我方部門：</div>
         <div class="grid grid-cols-4 gap-2 w-full min-w-0 my-auto">
           ${bankCardsHTML}
+        </div>
+      `;
+    } else if (card.effect === 'POACH_ENEMY') {
+      const poachItems = [];
+      aliveOpponents.forEach(opp => {
+        const list = status.targetableByOpponent[opp.id] || [];
+        list.forEach(eUid => {
+          const emp = CARDS_BY_ID[eUid];
+          const meta = DEPT_META[emp.dept];
+          poachItems.push(`
+            <button data-d-action="CONFIRM_POACH" data-opp-id="${opp.id}" data-emp-uid="${eUid}" class="rounded-xl bg-stone-950 border-2 ${meta.border} p-1.5 text-center shadow-lg flex flex-col items-center justify-between gap-1 min-w-0 transition hover:-translate-y-0.5">
+              <div class="text-[9px] font-black text-amber-300 truncate w-full">🎯 ${getShortPlayerName(opp.name)} ${emp.isVP ? '· 👑耗2張' : ''}</div>
+              <div class="ls-target-emp-card pointer-events-none">
+                ${getCardImgTag(emp.artKey || emp.tplId, emp.title, 'w-full h-full object-cover block')}
+              </div>
+              <div class="w-full py-1 rounded-lg bg-sky-500 text-center text-[10px] font-black text-slate-950 shadow truncate px-1">🕸️ 挖角 ${emp.title}</div>
+            </button>
+          `);
+        });
+      });
+      const colCls = poachItems.length >= 4 ? 'grid-cols-4' : poachItems.length === 3 ? 'grid-cols-3' : 'grid-cols-2';
+      rightPanelHTML = `
+        <div class="text-[11px] font-bold text-amber-200 truncate">點選要從對手部門挖角過來的目標人員：</div>
+        <div class="grid ${colCls} gap-2 w-full min-w-0 max-h-[68vh] overflow-y-auto pr-1 my-auto">
+          ${poachItems.join('')}
+        </div>
+      `;
+    } else if (card.effect === 'FIRE_OWN') {
+      const fireItems = status.validOwnEmployees.map(eUid => {
+        const emp = CARDS_BY_ID[eUid];
+        const meta = DEPT_META[emp.dept];
+        return `
+          <button data-d-action="CONFIRM_FIRE" data-emp-uid="${eUid}" class="rounded-xl bg-stone-950 border-2 ${meta.border} p-1.5 text-center shadow-lg flex flex-col items-center justify-between gap-1 min-w-0 transition hover:-translate-y-0.5">
+            <div class="text-[9px] font-black text-rose-300 truncate w-full">🔥省-${emp.salary}/回 ${emp.isVP ? '· 👑耗2張' : ''}</div>
+            <div class="ls-target-emp-card pointer-events-none">
+              ${getCardImgTag(emp.artKey || emp.tplId, emp.title, 'w-full h-full object-cover block')}
+            </div>
+            <div class="w-full py-1 rounded-lg bg-rose-600 text-center text-[10px] font-black text-white shadow truncate px-1">🚪 遣散 ${emp.title}</div>
+          </button>
+        `;
+      });
+      const colCls = fireItems.length >= 4 ? 'grid-cols-4' : fireItems.length === 3 ? 'grid-cols-3' : 'grid-cols-2';
+      rightPanelHTML = `
+        <div class="text-[11px] font-bold text-amber-200 truncate">點選我方要解僱／遣散回人才池底部的成員：</div>
+        <div class="grid ${colCls} gap-2 w-full min-w-0 max-h-[68vh] overflow-y-auto pr-1 my-auto">
+          ${fireItems.join('')}
+        </div>
+      `;
+    } else if (card.effect === 'VP_KICK_ENEMY') {
+      const kickItems = status.targetVPs.map(item => {
+        const opp = state.players.find(p => p.id === item.opponentId);
+        const vpCard = CARDS_BY_ID[item.empUid];
+        return `
+          <button data-d-action="CONFIRM_VP_KICK" data-opp-id="${opp.id}" data-emp-uid="${item.empUid}" class="rounded-xl bg-stone-950 border-2 border-purple-400 p-1.5 text-center shadow-lg flex flex-col items-center justify-between gap-1 min-w-0 transition hover:-translate-y-0.5">
+            <div class="text-[9px] font-black text-purple-200 truncate w-full">🎯 ${getShortPlayerName(opp.name)} · ${DEPT_META[vpCard.dept].short}</div>
+            <div class="ls-target-emp-card pointer-events-none">
+              ${getCardImgTag(vpCard.artKey || vpCard.tplId, vpCard.title, 'w-full h-full object-cover block')}
+            </div>
+            <div class="w-full py-1 rounded-lg bg-purple-600 text-center text-[10px] font-black text-white shadow truncate px-1">⚡ 放逐 ${vpCard.title}</div>
+          </button>
+        `;
+      });
+      const colCls = kickItems.length >= 4 ? 'grid-cols-4' : kickItems.length === 3 ? 'grid-cols-3' : 'grid-cols-2';
+      rightPanelHTML = `
+        <div class="text-[11px] font-bold text-amber-200 truncate">點選一名敵方在職${terms.vpName || '副總'}直接放逐回人才池底：</div>
+        <div class="grid ${colCls} gap-2 w-full min-w-0 max-h-[68vh] overflow-y-auto pr-1 my-auto">
+          ${kickItems.join('')}
+        </div>
+      `;
+    } else if (card.effect === 'RELEASE_CRISIS') {
+      const crisisItems = status.validCrises.map(cUid => {
+        const cCard = CARDS_BY_ID[cUid];
+        return `
+          <button data-d-action="CONFIRM_RELEASE" data-crisis-uid="${cUid}" class="rounded-xl bg-stone-950 border-2 border-amber-400 p-2 text-center shadow-lg flex flex-col items-center justify-between gap-1.5 min-w-0 transition hover:-translate-y-0.5">
+            <div class="text-2xl leading-none">${cCard.svg}</div>
+            <div class="text-xs font-black text-white truncate w-full">${cCard.title}</div>
+            <div class="text-[10px] font-bold text-amber-300">佔用 ${terms.engName || '工程師'} ×${cCard.val}</div>
+            <div class="w-full py-1 rounded-lg bg-emerald-600 text-center text-[10px] font-black text-white shadow">🍾 立即解除</div>
+          </button>
+        `;
+      });
+      const colCls = crisisItems.length >= 3 ? 'grid-cols-3' : 'grid-cols-2';
+      rightPanelHTML = `
+        <div class="text-[11px] font-bold text-amber-200 truncate">點選我方場上要結案／解除的危機卡：</div>
+        <div class="grid ${colCls} gap-2 w-full min-w-0 my-auto">
+          ${crisisItems.join('')}
         </div>
       `;
     } else if (card.effect === 'VP_DOUBLE_PAY') {
@@ -2261,14 +2345,9 @@ function renderModeDDrawer() {
         </div>
       `;
     } else {
-      // FIRE_OWN, POACH_ENEMY, VP_KICK_ENEMY, RELEASE_CRISIS, GAIN_FUNDS: use 3 columns for multi-item lists in Landscape Mode
       const rightContent = container.innerHTML;
-      const itemCount = (container.children && container.children.length) || 2;
-      const lsGridCls = card.effect === 'GAIN_FUNDS'
-        ? 'grid grid-cols-1 gap-2 w-full'
-        : `grid ${itemCount >= 3 ? 'grid-cols-3' : 'grid-cols-2'} gap-1.5 w-full`;
       rightPanelHTML = `
-        <div class="${lsGridCls} max-h-[68vh] overflow-y-auto pr-1 my-auto">
+        <div class="w-full my-auto">
           ${rightContent}
         </div>
       `;
