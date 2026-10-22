@@ -92,6 +92,502 @@ let clientConnectRetryTimer = null;
 let clientHelloRetryTimer = null;
 let clientRetryCount = 0;
 
+
+// ============================================================================
+// V14.4: SESSION PERSISTENCE, HEARTBEAT MONITOR, AUTO-REJOIN & LEAVE/RETURN
+// ============================================================================
+const SESSION_SNAPSHOT_KEY = 'dbr_v14_saved_session';
+const SESSION_SNAPSHOT_TTL_MS = 2 * 60 * 60 * 1000; // 2 hours
+const DISCONNECT_WARN_MS = 9000;   // Show reconnect countdown banner after 9s silence
+const DISCONNECT_ABORT_MS = 35000; // Auto-return everyone to lobby after 35s disconnect
+
+let hostLifecycleTimer = null;
+let clientHeartbeatTimer = null;
+let clientActionRetryTimer = null;
+let pendingClientActionPkt = null;
+let lastHostPacketTs = Date.now();
+
+// Tracks per-seat heartbeat on Host: { [seatId]: { lastSeen: ms, warned: bool, playerName: str } }
+const seatHeartbeatMap = {};
+// Prevents stale retained MQTT HELLO_JOIN packets from re-adding a player who explicitly left or was kicked
+const ignoredClientJoinTs = {};
+
+function touchSeatHeartbeat(seatId, playerName) {
+  if (!seatId || seatId === 'p1') return;
+  const prev = seatHeartbeatMap[seatId];
+  const wasWarned = prev && prev.warned;
+  seatHeartbeatMap[seatId] = {
+    lastSeen: Date.now(),
+    warned: false,
+    playerName: playerName || (prev && prev.playerName) || seatId.toUpperCase()
+  };
+  if (gameSession.mode === 'HOST') {
+    const seat = (gameSession.lobbyState.seats || []).find(s => s.id === seatId);
+    if (seat && seat.role === 'HUMAN' && !seat.connected) {
+      seat.connected = true;
+      if (typeof renderLobbyUI === 'function') renderLobbyUI();
+    }
+    if (wasWarned) {
+      broadcastDisconnectStatusBanner();
+    }
+  }
+}
+
+function saveActiveSessionSnapshot() {
+  if (typeof window === 'undefined') return;
+  if (gameSession.mode !== 'HOST' && gameSession.mode !== 'CLIENT') {
+    return;
+  }
+  if (!gameSession.roomCode) return;
+  const snapshot = {
+    version: '14.4',
+    savedAt: Date.now(),
+    mode: gameSession.mode,
+    roomCode: gameSession.roomCode,
+    localSeatId: gameSession.localSeatId,
+    clientToken: gameSession.clientToken,
+    playerName: gameSession.playerName,
+    hasSimulatedHotSeat: Boolean(gameSession.hasSimulatedHotSeat),
+    lobbyState: gameSession.lobbyState,
+    hostMasterState: (gameSession.mode === 'HOST' && gameSession.lobbyState.matchStarted) ? gameSession.hostMasterState : null,
+    clientGameState: (gameSession.mode === 'CLIENT' && gameSession.lobbyState.matchStarted) ? gameState : null
+  };
+  try {
+    const raw = JSON.stringify(snapshot);
+    window.sessionStorage.setItem(SESSION_SNAPSHOT_KEY, raw);
+    window.localStorage.setItem(SESSION_SNAPSHOT_KEY, raw);
+  } catch (e) {}
+}
+
+function clearActiveSessionSnapshot() {
+  if (typeof window === 'undefined') return;
+  try {
+    window.sessionStorage.removeItem(SESSION_SNAPSHOT_KEY);
+    window.localStorage.removeItem(SESSION_SNAPSHOT_KEY);
+  } catch (e) {}
+}
+
+function loadSavedSessionSnapshot() {
+  if (typeof window === 'undefined') return null;
+  try {
+    const raw = window.sessionStorage.getItem(SESSION_SNAPSHOT_KEY) || window.localStorage.getItem(SESSION_SNAPSHOT_KEY);
+    if (!raw) return null;
+    const snap = JSON.parse(raw);
+    if (!snap || !snap.roomCode || !snap.savedAt) return null;
+    if (Date.now() - snap.savedAt > SESSION_SNAPSHOT_TTL_MS) {
+      clearActiveSessionSnapshot();
+      return null;
+    }
+    return snap;
+  } catch (e) {
+    return null;
+  }
+}
+
+// Clear a client's retained HELLO_JOIN topic on MQTT so it doesn't ghost-rejoin after leaving
+function clearClientRetainedJoinOnMqtt(roomCode, clientToken) {
+  if (!roomCode || !clientToken) return;
+  const topics = getCloudTopics(roomCode);
+  activeMqttClients.forEach(client => {
+    if (client && client.connected) {
+      try {
+        client.publish(topics.toHostJoinPrefix + clientToken, '', { qos: 1, retain: true });
+      } catch (e) {}
+    }
+  });
+}
+
+// Publish lightweight packet (MQTT WSS + PeerJS + BC, skipping ntfy.sh HTTP POST for frequent heartbeats)
+function publishFastPacket(pkt) {
+  if (!pkt || !gameSession.roomCode) return;
+  stampPacket(pkt);
+  const topics = getCloudTopics(gameSession.roomCode);
+  const jsonStr = JSON.stringify(pkt);
+
+  activeMqttClients.forEach(client => {
+    if (client && client.connected) {
+      try {
+        const targetTopic = gameSession.mode === 'HOST' ? topics.toClientEvent : topics.toHost;
+        client.publish(targetTopic, jsonStr, { qos: 0, retain: false });
+      } catch (e) {}
+    }
+  });
+
+  if (gameSession.mode === 'HOST') {
+    Object.values(gameSession.peerConns).forEach(conn => {
+      if (conn && conn.open) {
+        try { conn.send(pkt); } catch (e) {}
+      }
+    });
+  } else if (gameSession.mode === 'CLIENT') {
+    if (gameSession.clientHostConn && gameSession.clientHostConn.open) {
+      try { gameSession.clientHostConn.send(pkt); } catch (e) {}
+    }
+  }
+
+  if (gameSession.bc) {
+    try { gameSession.bc.postMessage(pkt); } catch (e) {}
+  }
+}
+
+function updateFloatingDisconnectBannerUI(disconnectedNames, remainingSec, isHostView) {
+  const banner = document.getElementById('onlineDisconnectBanner');
+  const textEl = document.getElementById('onlineDisconnectBannerText');
+  const btnEl = document.getElementById('btnBannerReturnLobbyNow');
+  if (!banner || !textEl) return;
+
+  if (!disconnectedNames || disconnectedNames.length === 0) {
+    banner.classList.add('hidden');
+    return;
+  }
+  const namesStr = disconnectedNames.join('、');
+  textEl.textContent = `📡 玩家【${namesStr}】連線中斷，等待重連中（剩餘 ${remainingSec} 秒，逾時將全員返回房間候戰室）...`;
+  banner.classList.remove('hidden');
+  if (btnEl) {
+    btnEl.classList.toggle('hidden', !isHostView);
+  }
+}
+
+function broadcastDisconnectStatusBanner() {
+  if (gameSession.mode !== 'HOST') return;
+  const pCount = gameSession.lobbyState.playerCount || 3;
+  const activeSeats = (gameSession.lobbyState.seats || []).slice(1, pCount);
+  const now = Date.now();
+  const disconnectedNames = [];
+  let minRemainingSec = 999;
+
+  if (gameSession.lobbyState.matchStarted && gameSession.hostMasterState) {
+    activeSeats.forEach(s => {
+      if (s.role === 'HUMAN' && !s.isAI && s.clientToken && !String(s.clientToken).startsWith('sim_tk_')) {
+        const hb = seatHeartbeatMap[s.id];
+        const elapsed = hb ? (now - hb.lastSeen) : 0;
+        if (elapsed >= DISCONNECT_WARN_MS || !s.connected) {
+          disconnectedNames.push(s.name || s.id.toUpperCase());
+          const rem = Math.max(1, Math.ceil((DISCONNECT_ABORT_MS - elapsed) / 1000));
+          if (rem < minRemainingSec) minRemainingSec = rem;
+        }
+      }
+    });
+  }
+
+  if (disconnectedNames.length === 0) minRemainingSec = 0;
+  updateFloatingDisconnectBannerUI(disconnectedNames, minRemainingSec, true);
+
+  publishFastPacket({
+    msgType: 'DISCONNECT_STATUS',
+    roomCode: gameSession.roomCode,
+    disconnectedNames,
+    remainingSec: minRemainingSec
+  });
+}
+
+function startHostLifecycleMonitor() {
+  clearInterval(hostLifecycleTimer);
+  let tickCount = 0;
+  hostLifecycleTimer = setInterval(() => {
+    if (gameSession.mode !== 'HOST' || !gameSession.roomCode) {
+      clearInterval(hostLifecycleTimer);
+      hostLifecycleTimer = null;
+      return;
+    }
+    tickCount += 1;
+    const now = Date.now();
+
+    // Every 4 seconds, send HOST_HEARTBEAT to all connected clients
+    if (tickCount % 4 === 0) {
+      publishFastPacket({
+        msgType: 'HOST_HEARTBEAT',
+        roomCode: gameSession.roomCode,
+        matchStarted: Boolean(gameSession.lobbyState.matchStarted),
+        ts: now
+      });
+    }
+
+    const pCount = gameSession.lobbyState.playerCount || 3;
+    const activeSeats = (gameSession.lobbyState.seats || []).slice(1, pCount);
+    let anyWarned = false;
+
+    for (const s of activeSeats) {
+      if (s.role !== 'HUMAN' || s.isAI || !s.clientToken || String(s.clientToken).startsWith('sim_tk_')) {
+        continue;
+      }
+      if (!seatHeartbeatMap[s.id]) {
+        seatHeartbeatMap[s.id] = { lastSeen: now, warned: false, playerName: s.name };
+      }
+      const hb = seatHeartbeatMap[s.id];
+      const elapsed = now - hb.lastSeen;
+
+      if (gameSession.lobbyState.matchStarted && gameSession.hostMasterState) {
+        if (elapsed >= DISCONNECT_ABORT_MS) {
+          // Player disconnected too long mid-game -> free their seat and return everyone to the Waiting Room!
+          const dcName = s.name || s.id.toUpperCase();
+          const oldToken = s.clientToken;
+          ignoredClientJoinTs[oldToken] = now;
+          clearClientRetainedJoinOnMqtt(gameSession.roomCode, oldToken);
+          delete seatHeartbeatMap[s.id];
+          delete gameSession.peerConns[s.id];
+          s.role = 'OPEN';
+          s.isAI = false;
+          s.connected = false;
+          s.clientToken = null;
+          s.name = '等待真人加入...';
+          abortMatchAndReturnAllToLobby(`⚠️ 玩家【${dcName}】斷線過久未歸，本局已中止，全員返回房間【${gameSession.roomCode}】候戰室等候！`);
+          return;
+        } else if (elapsed >= DISCONNECT_WARN_MS) {
+          s.connected = false;
+          hb.warned = true;
+          anyWarned = true;
+        }
+      } else {
+        // In waiting lobby: mark offline after 16s without heartbeat so Host knows status
+        if (elapsed >= 16000 && s.connected) {
+          s.connected = false;
+          if (typeof renderLobbyUI === 'function') renderLobbyUI();
+        }
+      }
+    }
+
+    if (anyWarned) {
+      broadcastDisconnectStatusBanner();
+    } else {
+      updateFloatingDisconnectBannerUI([], 0, true);
+    }
+  }, 1000);
+}
+
+function startClientHeartbeatLoop() {
+  clearInterval(clientHeartbeatTimer);
+  lastHostPacketTs = Date.now();
+  clientHeartbeatTimer = setInterval(() => {
+    if (gameSession.mode !== 'CLIENT' || !gameSession.roomCode) {
+      clearInterval(clientHeartbeatTimer);
+      clientHeartbeatTimer = null;
+      return;
+    }
+    publishFastPacket({
+      msgType: 'CLIENT_HEARTBEAT',
+      roomCode: gameSession.roomCode,
+      seatId: gameSession.localSeatId,
+      clientToken: gameSession.clientToken,
+      playerName: gameSession.playerName
+    });
+
+    // Check if Host has been unreachable for too long during an active match
+    if (gameSession.lobbyState.matchStarted) {
+      const hostSilenceMs = Date.now() - lastHostPacketTs;
+      if (hostSilenceMs >= 42000) {
+        // Return client to waiting room lobby if Host is unreachable for 42s
+        gameSession.lobbyState.matchStarted = false;
+        updateFloatingDisconnectBannerUI([], 0, false);
+        showReturnToLobbyOnScreen(`⚠️ 房主連線中斷過久，已返回房間【${gameSession.roomCode}】候戰室等候房主重連（或可點擊退出房間）。`);
+        lastHostPacketTs = Date.now();
+      } else if (hostSilenceMs >= 12000) {
+        const rem = Math.max(1, Math.ceil((42000 - hostSilenceMs) / 1000));
+        updateFloatingDisconnectBannerUI(['房主'], rem, false);
+      }
+    }
+  }, 3500);
+}
+
+// Show the Lobby Modal with a prominent notice banner when a match is aborted/returned to lobby
+function showReturnToLobbyOnScreen(reasonText) {
+  updateFloatingDisconnectBannerUI([], 0, false);
+  ['jobBankModal', 'inspectorModal', 'galleryModal', 'logModal', 'gameOverModal', 'settingsMenuModal', 'homeScreenModal'].forEach(id => {
+    document.getElementById(id)?.classList.add('hidden');
+  });
+  const noticeBanner = document.getElementById('lobbyNoticeBanner');
+  const noticeText = document.getElementById('lobbyNoticeBannerText');
+  if (noticeBanner && noticeText && reasonText) {
+    noticeText.textContent = reasonText;
+    noticeBanner.classList.remove('hidden');
+  }
+  document.getElementById('lobbyModal')?.classList.remove('hidden');
+  if (typeof renderLobbyUI === 'function') renderLobbyUI();
+  if (typeof renderAll === 'function') renderAll();
+  if (reasonText && typeof showToast === 'function') {
+    showToast(reasonText);
+  }
+}
+
+// Host aborts current match (or triggered by player leave / disconnect timeout) and returns all players to Waiting Room
+function abortMatchAndReturnAllToLobby(reasonText) {
+  if (gameSession.mode !== 'HOST') return;
+  clearTimeout(aiTimer);
+  const msg = reasonText || `⏪ 房主已中止本局，全員返回房間【${gameSession.roomCode}】候戰室等候！`;
+  gameSession.lobbyState.matchStarted = false;
+  gameSession.lobbyState.lastReturnReason = msg;
+  gameSession.hostMasterState = null;
+  updateFloatingDisconnectBannerUI([], 0, true);
+
+  const returnPkt = stampPacket({
+    msgType: 'RETURN_TO_LOBBY',
+    roomCode: gameSession.roomCode,
+    lobbyState: gameSession.lobbyState,
+    reason: msg
+  });
+  publishCloudPacket(returnPkt, false);
+  Object.values(gameSession.peerConns).forEach(conn => {
+    if (conn && conn.open) {
+      try { conn.send(returnPkt); } catch (e) {}
+    }
+  });
+  if (gameSession.bc) {
+    try { gameSession.bc.postMessage(returnPkt); } catch (e) {}
+  }
+
+  // Overwrite retained cloud state with the updated Lobby state (matchStarted: false)
+  broadcastLobbyState();
+  saveActiveSessionSnapshot();
+  showReturnToLobbyOnScreen(msg);
+}
+
+// Host kicks / releases a seat in the Lobby
+function kickPlayerFromHostLobby(seatId) {
+  if (gameSession.mode !== 'HOST' || seatId === 'p1') return;
+  const seat = (gameSession.lobbyState.seats || []).find(s => s.id === seatId);
+  if (!seat) return;
+  const oldToken = seat.clientToken;
+  const oldName = seat.name;
+  if (oldToken) {
+    ignoredClientJoinTs[oldToken] = Date.now();
+    clearClientRetainedJoinOnMqtt(gameSession.roomCode, oldToken);
+    const kickPkt = stampPacket({
+      msgType: 'PLAYER_KICKED',
+      roomCode: gameSession.roomCode,
+      targetToken: oldToken,
+      targetSeatId: seatId,
+      reason: `房主已釋放你在房間【${gameSession.roomCode}】的座位`
+    });
+    publishCloudPacket(kickPkt, false);
+    if (gameSession.peerConns[seatId] && gameSession.peerConns[seatId].open) {
+      try { gameSession.peerConns[seatId].send(kickPkt); } catch (e) {}
+    }
+    if (gameSession.bc) {
+      try { gameSession.bc.postMessage(kickPkt); } catch (e) {}
+    }
+  }
+  delete seatHeartbeatMap[seatId];
+  delete gameSession.peerConns[seatId];
+  seat.role = 'OPEN';
+  seat.isAI = false;
+  seat.connected = false;
+  seat.clientToken = null;
+  seat.name = '等待真人加入...';
+  broadcastLobbyState();
+  saveActiveSessionSnapshot();
+  showToast(`🪑 已釋放座位 ${seatId.toUpperCase()}（原玩家：${oldName}）。`);
+}
+
+// Host completely disbands and closes the online room
+function disbandOnlineRoomByHost() {
+  if (gameSession.mode !== 'HOST' || !gameSession.roomCode) return;
+  const oldCode = gameSession.roomCode;
+  const closePkt = stampPacket({
+    msgType: 'ROOM_CLOSED',
+    roomCode: oldCode,
+    reason: `房主已解散並關閉房間【${oldCode}】`
+  });
+  publishCloudPacket(closePkt, false);
+  // Clear retained room state on MQTT broker
+  const topics = getCloudTopics(oldCode);
+  activeMqttClients.forEach(client => {
+    if (client && client.connected) {
+      try {
+        client.publish(topics.toClientState, '', { qos: 1, retain: true });
+      } catch (e) {}
+    }
+  });
+  Object.values(gameSession.peerConns).forEach(conn => {
+    if (conn && conn.open) {
+      try { conn.send(closePkt); } catch (e) {}
+    }
+  });
+  if (gameSession.bc) {
+    try { gameSession.bc.postMessage(closePkt); } catch (e) {}
+  }
+
+  clearActiveSessionSnapshot();
+  setTimeout(() => {
+    cleanupNetworkChannels();
+    gameSession.mode = 'SOLO';
+    gameSession.roomCode = null;
+    gameSession.localSeatId = 'p1';
+    gameSession.hostMasterState = null;
+    gameSession.lobbyState.matchStarted = false;
+    updateFloatingDisconnectBannerUI([], 0, false);
+    if (typeof activeLobbyTab !== 'undefined') activeLobbyTab = 'SOLO';
+    document.getElementById('settingsMenuModal')?.classList.add('hidden');
+    document.getElementById('lobbyModal')?.classList.remove('hidden');
+    if (typeof renderLobbyUI === 'function') renderLobbyUI();
+    if (typeof updateSettingsMenuUI === 'function') updateSettingsMenuUI();
+    showToast(`🚪 已解散並關閉房間【${oldCode}】。`);
+  }, 160);
+}
+
+// Client voluntarily leaves the current room or ongoing match
+function leaveOnlineRoom(reasonText = '主動退出房間') {
+  if (gameSession.mode === 'HOST') {
+    disbandOnlineRoomByHost();
+    return;
+  }
+  if (gameSession.mode !== 'CLIENT' || !gameSession.roomCode) return;
+  const oldCode = gameSession.roomCode;
+  const leavePkt = stampPacket({
+    msgType: 'PLAYER_LEAVE',
+    roomCode: oldCode,
+    seatId: gameSession.localSeatId,
+    clientToken: gameSession.clientToken,
+    playerName: gameSession.playerName,
+    reason: reasonText
+  });
+  sendPacketToHost(leavePkt);
+  clearClientRetainedJoinOnMqtt(oldCode, gameSession.clientToken);
+  clearActiveSessionSnapshot();
+
+  // Remove ?room=XXXX from URL so refreshing won't auto-join the room we just left
+  if (typeof window !== 'undefined' && window.history && window.history.replaceState) {
+    try {
+      window.history.replaceState({}, '', window.location.pathname);
+    } catch (e) {}
+  }
+
+  setTimeout(() => {
+    cleanupNetworkChannels();
+    gameSession.mode = 'SOLO';
+    gameSession.roomCode = null;
+    gameSession.localSeatId = 'p1';
+    gameSession.lobbyState.roomCode = null;
+    gameSession.lobbyState.matchStarted = false;
+    gameSession.lobbyState.seats = [];
+    updateFloatingDisconnectBannerUI([], 0, false);
+    document.getElementById('settingsMenuModal')?.classList.add('hidden');
+    const joinInput = document.getElementById('inputJoinRoomCode');
+    if (joinInput) joinInput.value = '';
+    if (typeof renderLobbyUI === 'function') renderLobbyUI();
+    if (typeof updateSettingsMenuUI === 'function') updateSettingsMenuUI();
+    showToast(`🚪 你已退出房間【${oldCode}】。`);
+  }, 180);
+}
+
+// Notify Host immediately when tab refreshes or closes so Host can handle reconnect or grace countdown
+if (typeof window !== 'undefined' && !window.__dbrUnloadBound) {
+  window.__dbrUnloadBound = true;
+  const handlePageUnload = () => {
+    saveActiveSessionSnapshot();
+    if (gameSession.mode === 'CLIENT' && gameSession.roomCode) {
+      publishFastPacket({
+        msgType: 'CLIENT_TEMP_AWAY',
+        roomCode: gameSession.roomCode,
+        seatId: gameSession.localSeatId,
+        clientToken: gameSession.clientToken,
+        playerName: gameSession.playerName
+      });
+    }
+  };
+  window.addEventListener('pagehide', handlePageUnload);
+  window.addEventListener('beforeunload', handlePageUnload);
+}
+
 // Packet Deduplication Set so running 4 parallel channels (MQTT WSS + HTTPS SSE + PeerJS + BC) never double-executes
 const seenPacketIds = new Set();
 function stampPacket(pkt) {
@@ -195,7 +691,8 @@ function openCloudRelayForRoom(roomCode) {
               msgType: 'HELLO_JOIN',
               roomCode: code,
               clientToken: gameSession.clientToken,
-              playerName: gameSession.playerName
+              playerName: gameSession.playerName,
+              joinTs: Date.now()
             });
             try {
               client.publish(topics.toHostJoinPrefix + gameSession.clientToken, JSON.stringify(helloPkt), { qos: 1, retain: true });
@@ -340,6 +837,13 @@ function clearNetworkTimers() {
   clientConnectRetryTimer = null;
   clearInterval(clientHelloRetryTimer);
   clientHelloRetryTimer = null;
+  clearInterval(hostLifecycleTimer);
+  hostLifecycleTimer = null;
+  clearInterval(clientHeartbeatTimer);
+  clientHeartbeatTimer = null;
+  clearInterval(clientActionRetryTimer);
+  clientActionRetryTimer = null;
+  pendingClientActionPkt = null;
 }
 
 function cleanupNetworkChannels() {
@@ -567,9 +1071,14 @@ function createOnlineHostRoom(customCode = null) {
     ]
   };
 
+  Object.keys(seatHeartbeatMap).forEach(k => delete seatHeartbeatMap[k]);
   openBroadcastChannelForRoom(code);
   openCloudRelayForRoom(code);
+  startClientHeartbeatLoop();
+  saveActiveSessionSnapshot();
   mountHostPeerServer(code);
+  startHostLifecycleMonitor();
+  saveActiveSessionSnapshot();
   setTimeout(() => broadcastLobbyState(), 250);
 
   // Periodic keep-alive check so if Host phone wakes up from LINE/WhatsApp, it immediately reconnects
@@ -618,16 +1127,20 @@ function joinOnlineRoomAsClient(rawCode, playerName) {
   clientRetryCount = 0;
   if (typeof renderLobbyUI === 'function') renderLobbyUI();
 
+  const joinStartedAt = Date.now();
   const buildHelloPacket = () => ({
     msgType: 'HELLO_JOIN',
     roomCode: code,
     clientToken: gameSession.clientToken,
-    playerName: gameSession.playerName
+    playerName: gameSession.playerName,
+    joinTs: joinStartedAt
   });
 
   // 1. BroadcastChannel + Cloud WSS/HTTPS Relay (Instant mobile 4G/5G connection)
   openBroadcastChannelForRoom(code);
   openCloudRelayForRoom(code);
+  startClientHeartbeatLoop();
+  saveActiveSessionSnapshot();
   const initialHello = stampPacket(buildHelloPacket());
   if (gameSession.bc) {
     gameSession.bc.postMessage(initialHello);
@@ -816,15 +1329,10 @@ function handlePeerDisconnect(conn) {
 
   const lobbySeat = gameSession.lobbyState.seats.find(s => s.id === seatId);
   if (lobbySeat) {
-    lobbySeat.connected = false;
-  }
-  if (gameSession.lobbyState.matchStarted && gameSession.hostMasterState) {
-    const pl = gameSession.hostMasterState.players.find(p => p.id === seatId);
-    if (pl) {
-      pl.connected = false;
-      addLog(gameSession.hostMasterState, `⚠️ 玩家【${pl.name}】連線中斷（可使用原房間碼重連，或由房主切換 AI 暫代）。`);
+    const hb = seatHeartbeatMap[seatId];
+    if (!hb || (Date.now() - hb.lastSeen > 5000)) {
+      lobbySeat.connected = false;
     }
-    broadcastHostState();
   }
   broadcastLobbyState();
 }
@@ -901,6 +1409,7 @@ function sendPacketToHost(packet) {
 
 function broadcastLobbyState() {
   if (gameSession.mode !== 'HOST') return;
+  saveActiveSessionSnapshot();
   const packet = stampPacket({
     msgType: 'LOBBY_SYNC',
     roomCode: gameSession.roomCode,
@@ -920,6 +1429,7 @@ function broadcastLobbyState() {
 
 function broadcastHostState() {
   if (gameSession.mode !== 'HOST' || !gameSession.lobbyState.matchStarted || !gameSession.hostMasterState) return;
+  saveActiveSessionSnapshot();
   const master = gameSession.hostMasterState;
 
   gameState = sanitizeStateForSeat(master, getLocalPlayerId());
@@ -975,6 +1485,23 @@ function broadcastHostState() {
 // === Network Packet Router ===
 function handleIncomingNetworkPacket(packet, transport, peerConn) {
   if (!packet || packet.roomCode !== gameSession.roomCode) return;
+
+  if (gameSession.mode === 'HOST' && packet.seatId) {
+    touchSeatHeartbeat(packet.seatId, packet.playerName);
+  }
+  if (gameSession.mode === 'CLIENT') {
+    lastHostPacketTs = Date.now();
+  }
+
+  if (gameSession.mode === 'HOST' && packet.msgType === 'CLIENT_ACTION' && packet._pktId) {
+    publishFastPacket({
+      msgType: 'ACTION_ACK',
+      roomCode: gameSession.roomCode,
+      targetSeatId: packet.seatId,
+      ackPktId: packet._pktId
+    });
+  }
+
   if (packet._pktId && packet.msgType !== 'HELLO_JOIN') {
     if (seenPacketIds.has(packet._pktId)) return;
     seenPacketIds.add(packet._pktId);
@@ -986,8 +1513,54 @@ function handleIncomingNetworkPacket(packet, transport, peerConn) {
 
   // --- HOST HANDLERS ---
   if (gameSession.mode === 'HOST') {
+    if (packet.msgType === 'CLIENT_HEARTBEAT') {
+      touchSeatHeartbeat(packet.seatId, packet.playerName);
+      return;
+    }
+
+    if (packet.msgType === 'CLIENT_TEMP_AWAY') {
+      const seatId = packet.seatId;
+      if (seatId && seatHeartbeatMap[seatId]) {
+        seatHeartbeatMap[seatId].lastSeen = Math.min(seatHeartbeatMap[seatId].lastSeen, Date.now() - (DISCONNECT_WARN_MS - 3000));
+      }
+      return;
+    }
+
+    if (packet.msgType === 'PLAYER_LEAVE') {
+      const { seatId, clientToken, playerName } = packet;
+      const pCount = gameSession.lobbyState.playerCount || 3;
+      const activeSeats = gameSession.lobbyState.seats.slice(0, pCount);
+      const leavingSeat = activeSeats.find(s => (clientToken && s.clientToken === clientToken) || (seatId && s.id === seatId));
+      if (!leavingSeat || leavingSeat.id === 'p1') return;
+
+      const leaverName = playerName || leavingSeat.name || leavingSeat.id.toUpperCase();
+      if (clientToken) {
+        ignoredClientJoinTs[clientToken] = Date.now();
+        clearClientRetainedJoinOnMqtt(gameSession.roomCode, clientToken);
+      }
+      delete seatHeartbeatMap[leavingSeat.id];
+      delete gameSession.peerConns[leavingSeat.id];
+
+      leavingSeat.role = 'OPEN';
+      leavingSeat.isAI = false;
+      leavingSeat.connected = false;
+      leavingSeat.clientToken = null;
+      leavingSeat.name = '等待真人加入...';
+
+      if (gameSession.lobbyState.matchStarted) {
+        abortMatchAndReturnAllToLobby(`⚠️ 玩家【${leaverName}】已主動退出遊戲，本局已中止，全員返回房間【${gameSession.roomCode}】候戰室等候！`);
+      } else {
+        broadcastLobbyState();
+        showToast(`👋 玩家【${leaverName}】已退出房間，座位 ${leavingSeat.id.toUpperCase()} 重新開放。`);
+      }
+      return;
+    }
+
     if (packet.msgType === 'HELLO_JOIN') {
-      const { clientToken, playerName } = packet;
+      const { clientToken, playerName, joinTs } = packet;
+      if (clientToken && ignoredClientJoinTs[clientToken] && (!joinTs || joinTs <= ignoredClientJoinTs[clientToken])) {
+        return;
+      }
       const pCount = gameSession.lobbyState.playerCount;
       const activeSeats = gameSession.lobbyState.seats.slice(0, pCount);
       const isMatchRunning = Boolean(gameSession.lobbyState.matchStarted && gameSession.hostMasterState);
@@ -1024,6 +1597,7 @@ function handleIncomingNetworkPacket(packet, transport, peerConn) {
       assignedSeat.connected = true;
       assignedSeat.clientToken = clientToken;
       assignedSeat.name = playerName || `深淵魔王 (${assignedSeat.id.toUpperCase()})`;
+      touchSeatHeartbeat(assignedSeat.id, assignedSeat.name);
 
       if (peerConn) {
         gameSession.peerConns[assignedSeat.id] = peerConn;
@@ -1082,6 +1656,57 @@ function handleIncomingNetworkPacket(packet, transport, peerConn) {
 
   // --- CLIENT HANDLERS ---
   if (gameSession.mode === 'CLIENT') {
+    if (packet.msgType === 'HOST_HEARTBEAT') {
+      lastHostPacketTs = Date.now();
+      return;
+    }
+
+    if (packet.msgType === 'ACTION_ACK' && packet.targetSeatId === gameSession.localSeatId) {
+      if (pendingClientActionPkt && pendingClientActionPkt._pktId === packet.ackPktId) {
+        pendingClientActionPkt = null;
+        clearInterval(clientActionRetryTimer);
+        clientActionRetryTimer = null;
+      }
+      return;
+    }
+
+    if (packet.msgType === 'DISCONNECT_STATUS') {
+      updateFloatingDisconnectBannerUI(packet.disconnectedNames || [], packet.remainingSec || 0, false);
+      return;
+    }
+
+    if (packet.msgType === 'RETURN_TO_LOBBY') {
+      pendingClientActionPkt = null;
+      clearInterval(clientActionRetryTimer);
+      clientActionRetryTimer = null;
+      if (packet.lobbyState) {
+        gameSession.lobbyState = packet.lobbyState;
+      } else {
+        gameSession.lobbyState.matchStarted = false;
+      }
+      saveActiveSessionSnapshot();
+      showReturnToLobbyOnScreen(packet.reason || `⏪ 本局已中止，全員返回房間【${gameSession.roomCode}】候戰室等候！`);
+      return;
+    }
+
+    if (packet.msgType === 'ROOM_CLOSED' || (packet.msgType === 'PLAYER_KICKED' && packet.targetToken === gameSession.clientToken)) {
+      const msg = packet.reason || '房間已關閉';
+      clearClientRetainedJoinOnMqtt(gameSession.roomCode, gameSession.clientToken);
+      clearActiveSessionSnapshot();
+      if (typeof window !== 'undefined' && window.history && window.history.replaceState) {
+        try { window.history.replaceState({}, '', window.location.pathname); } catch (e) {}
+      }
+      cleanupNetworkChannels();
+      gameSession.mode = 'SOLO';
+      gameSession.roomCode = null;
+      gameSession.localSeatId = 'p1';
+      gameSession.lobbyState.roomCode = null;
+      gameSession.lobbyState.matchStarted = false;
+      gameSession.lobbyState.seats = [];
+      updateFloatingDisconnectBannerUI([], 0, false);
+      showReturnToLobbyOnScreen(`🚪 ${msg}`);
+      return;
+    }
     if (packet.msgType === 'JOIN_ACCEPTED' && packet.targetToken === gameSession.clientToken) {
       clearNetworkTimers();
       gameSession.localSeatId = packet.assignedSeatId;
@@ -1129,8 +1754,15 @@ function handleIncomingNetworkPacket(packet, transport, peerConn) {
         applyThemeToRegistry(packet.lobbyState.themeId);
         if (typeof renderAll === 'function') renderAll();
       }
+      saveActiveSessionSnapshot();
       if (!gameSession.lobbyState.matchStarted) {
-        document.getElementById('lobbyModal')?.classList.remove('hidden');
+        const lobbyEl = document.getElementById('lobbyModal');
+        const wasHidden = lobbyEl && lobbyEl.classList.contains('hidden');
+        if (wasHidden && packet.lobbyState && packet.lobbyState.lastReturnReason) {
+          showReturnToLobbyOnScreen(packet.lobbyState.lastReturnReason);
+        } else {
+          lobbyEl?.classList.remove('hidden');
+        }
       }
       if (typeof renderLobbyUI === 'function') renderLobbyUI();
       return;
@@ -1153,6 +1785,9 @@ function handleIncomingNetworkPacket(packet, transport, peerConn) {
 
 function applyClientReceivedState(newState) {
   if (!newState) return;
+  pendingClientActionPkt = null;
+  clearInterval(clientActionRetryTimer);
+  clientActionRetryTimer = null;
   window.hasStartedActiveMatch = true;
   document.getElementById('homeScreenModal')?.classList.add('hidden');
   gameSession.lobbyState.matchStarted = true;
@@ -1167,6 +1802,7 @@ function applyClientReceivedState(newState) {
     applyThemeToRegistry(newState.config.themeId);
   }
   gameState = newState;
+  saveActiveSessionSnapshot();
 
   if (newState.lastVfxEvent && newState.lastVfxEvent.seq > lastPlayedVfxSeq) {
     lastPlayedVfxSeq = newState.lastVfxEvent.seq;
@@ -1190,13 +1826,32 @@ function applyClientReceivedState(newState) {
 // === Unified Action Dispatcher (Called by UI or Host AI) ===
 function dispatchPlayerAction(action) {
   if (gameSession.mode === 'CLIENT') {
-    sendPacketToHost({
+    const pkt = stampPacket({
       msgType: 'CLIENT_ACTION',
       roomCode: gameSession.roomCode,
       seatId: gameSession.localSeatId,
       clientToken: gameSession.clientToken,
+      playerName: gameSession.playerName,
       action
     });
+    pendingClientActionPkt = pkt;
+    sendPacketToHost(pkt);
+    clearInterval(clientActionRetryTimer);
+    let retries = 0;
+    clientActionRetryTimer = setInterval(() => {
+      if (!pendingClientActionPkt || pendingClientActionPkt._pktId !== pkt._pktId || gameSession.mode !== 'CLIENT') {
+        clearInterval(clientActionRetryTimer);
+        clientActionRetryTimer = null;
+        return;
+      }
+      retries += 1;
+      if (retries > 4) {
+        clearInterval(clientActionRetryTimer);
+        clientActionRetryTimer = null;
+        return;
+      }
+      sendPacketToHost(pkt);
+    }, 1600);
     return;
   }
   const actorSeatId = getLocalPlayerId();
@@ -1916,6 +2571,9 @@ function startMatchFromLobby(quickStart = false) {
     });
 
     gameSession.lobbyState.matchStarted = true;
+    gameSession.lobbyState.lastReturnReason = null;
+    document.getElementById('lobbyNoticeBanner')?.classList.add('hidden');
+    (gameSession.lobbyState.seats || []).forEach(s => { if (s.role === 'HUMAN' && !s.isAI) touchSeatHeartbeat(s.id, s.name); });
     gameSession.localSeatId = 'p1';
     gameSession.hostMasterState = createInitialGameState(pCount, mode, quickStart, customSeats, fogOfWar);
     lastPlayedVfxSeq = 0;
@@ -1987,3 +2645,105 @@ window.startMatchFromLobby = startMatchFromLobby;
 window.switchLocalSeatPerspective = switchLocalSeatPerspective;
 window.scheduleNextAITick = scheduleNextAITick;
 window.runAIStep = runAIStep;
+
+
+// === V14.4: Auto-Restore Session on Page Refresh / Reopen ===
+function tryRestoreSavedSessionOnBoot(urlRoomCode) {
+  const saved = loadSavedSessionSnapshot();
+  const cleanUrlRoom = urlRoomCode ? String(urlRoomCode).trim().toUpperCase() : null;
+
+  // Case 1: Host refreshed the page (either with no ?room= or matching ?room=)
+  if (saved && saved.mode === 'HOST' && saved.roomCode && (!cleanUrlRoom || cleanUrlRoom === saved.roomCode)) {
+    gameSession.mode = 'HOST';
+    gameSession.roomCode = saved.roomCode;
+    gameSession.localSeatId = 'p1';
+    gameSession.playerName = saved.playerName || gameSession.playerName;
+    gameSession.hasSimulatedHotSeat = Boolean(saved.hasSimulatedHotSeat);
+    if (saved.lobbyState) {
+      gameSession.lobbyState = saved.lobbyState;
+    }
+    if (gameSession.lobbyState.themeId && typeof applyThemeToRegistry === 'function') {
+      applyThemeToRegistry(gameSession.lobbyState.themeId);
+    }
+    Object.keys(seatHeartbeatMap).forEach(k => delete seatHeartbeatMap[k]);
+    (gameSession.lobbyState.seats || []).forEach(s => {
+      if (s.role === 'HUMAN' && !s.isAI) {
+        touchSeatHeartbeat(s.id, s.name);
+      }
+    });
+
+    openBroadcastChannelForRoom(gameSession.roomCode);
+    openCloudRelayForRoom(gameSession.roomCode);
+    mountHostPeerServer(gameSession.roomCode);
+    startHostLifecycleMonitor();
+
+    if (gameSession.lobbyState.matchStarted && saved.hostMasterState) {
+      gameSession.hostMasterState = saved.hostMasterState;
+      window.hasStartedActiveMatch = true;
+      document.getElementById('homeScreenModal')?.classList.add('hidden');
+      document.getElementById('lobbyModal')?.classList.add('hidden');
+      broadcastHostState();
+      checkAndScheduleHostAI();
+      setTimeout(() => showToast(`🔄 已自動恢復房主房間【${gameSession.roomCode}】與進行中對局！`), 200);
+    } else {
+      gameSession.hostMasterState = null;
+      gameSession.lobbyState.matchStarted = false;
+      document.getElementById('homeScreenModal')?.classList.add('hidden');
+      if (typeof activeLobbyTab !== 'undefined') activeLobbyTab = 'HOST';
+      document.getElementById('lobbyModal')?.classList.remove('hidden');
+      broadcastLobbyState();
+      setTimeout(() => showToast(`🔄 已自動恢復房主房間【${gameSession.roomCode}】候戰室！`), 200);
+    }
+    return true;
+  }
+
+  // Case 2: Client refreshed the page (or opened ?room=XXXX matching their saved session)
+  const targetClientRoom = cleanUrlRoom || (saved && saved.mode === 'CLIENT' ? saved.roomCode : null);
+  if (targetClientRoom) {
+    if (saved && saved.mode === 'CLIENT' && saved.roomCode === targetClientRoom) {
+      if (saved.clientToken) {
+        gameSession.clientToken = saved.clientToken;
+        saveStoredString('session', 'dbr_v13_client_token', saved.clientToken);
+      }
+      if (saved.localSeatId) {
+        gameSession.localSeatId = saved.localSeatId;
+        viewedPlayerId = saved.localSeatId;
+      }
+      if (saved.playerName) {
+        gameSession.playerName = saved.playerName;
+      }
+      if (saved.lobbyState) {
+        gameSession.lobbyState = saved.lobbyState;
+        if (saved.lobbyState.themeId && typeof applyThemeToRegistry === 'function') {
+          applyThemeToRegistry(saved.lobbyState.themeId);
+        }
+      }
+      if (saved.lobbyState && saved.lobbyState.matchStarted && saved.clientGameState) {
+        window.hasStartedActiveMatch = true;
+        gameState = saved.clientGameState;
+      }
+    }
+
+    document.getElementById('homeScreenModal')?.classList.add('hidden');
+    if (typeof activeLobbyTab !== 'undefined') activeLobbyTab = 'CLIENT';
+    const joinInput = document.getElementById('inputJoinRoomCode');
+    if (joinInput) joinInput.value = targetClientRoom;
+
+    const wasInActiveGame = Boolean(saved && saved.mode === 'CLIENT' && saved.roomCode === targetClientRoom && saved.lobbyState && saved.lobbyState.matchStarted && saved.clientGameState);
+    joinOnlineRoomAsClient(targetClientRoom, gameSession.playerName);
+
+    if (wasInActiveGame) {
+      gameSession.lobbyState = saved.lobbyState;
+      gameState = saved.clientGameState;
+      document.getElementById('lobbyModal')?.classList.add('hidden');
+      if (typeof renderAll === 'function') renderAll();
+      setTimeout(() => showToast(`🔄 正在自動重連回房間【${targetClientRoom}】進行中對局...`), 200);
+    } else {
+      document.getElementById('lobbyModal')?.classList.remove('hidden');
+      if (typeof renderLobbyUI === 'function') renderLobbyUI();
+    }
+    return true;
+  }
+
+  return false;
+}

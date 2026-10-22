@@ -16,7 +16,7 @@ function isRunningStandalonePWA() {
 
 function registerPwaServiceWorker() {
   if ("serviceWorker" in navigator && (location.protocol === "https:" || location.hostname === "localhost" || location.hostname === "127.0.0.1")) {
-    navigator.serviceWorker.register("./sw.js?v=14.3").then(reg => { try { reg.update(); } catch(e){} }).catch(() => {});
+    navigator.serviceWorker.register("./sw.js?v=14.4").then(reg => { try { reg.update(); } catch(e){} }).catch(() => {});
   }
   window.addEventListener("beforeinstallprompt", (e) => {
     e.preventDefault();
@@ -1619,6 +1619,57 @@ function updateSettingsMenuUI() {
     if (ruleText) {
       ruleText.textContent = gameState.config.playDiscardMode === 'STRICT_EITHER' ? '標準二選一' : '共用4額度';
     }
+    const onlineBox = document.getElementById('settingsOnlineActionsBox');
+    const codeLbl = document.getElementById('settingsRoomCodeLabel');
+    const roleLbl = document.getElementById('settingsSeatRoleLabel');
+    const gridEl = document.getElementById('settingsOnlineButtonsGrid');
+    if (onlineBox && gridEl) {
+      if ((gameSession.mode === 'HOST' || gameSession.mode === 'CLIENT') && gameSession.roomCode) {
+        onlineBox.classList.remove('hidden');
+        if (codeLbl) codeLbl.textContent = gameSession.roomCode;
+        if (roleLbl) {
+          roleLbl.textContent = gameSession.mode === 'HOST'
+            ? '👑 你是房主 (P1)'
+            : `🙋‍♂️ 你的座位：${(gameSession.localSeatId || 'p2').toUpperCase()}`;
+        }
+        if (gameSession.mode === 'HOST') {
+          gridEl.innerHTML = `
+            ${gameSession.lobbyState.matchStarted ? `
+              <button id="btnMenuHostReturnLobby" class="w-full py-2 px-3 rounded-xl bg-amber-600 text-slate-950 font-black text-xs shadow">
+                ⏪ 全員返回房間候戰室（中止本局）
+              </button>
+            ` : ''}
+            <button id="btnMenuHostDisbandRoom" class="w-full py-2 px-3 rounded-xl bg-rose-950 border border-rose-500 text-rose-200 font-black text-xs shadow">
+              🚪 解散並關閉房間【${gameSession.roomCode}】
+            </button>
+          `;
+          document.getElementById('btnMenuHostReturnLobby')?.addEventListener('click', () => {
+            if (typeof abortMatchAndReturnAllToLobby === 'function') {
+              abortMatchAndReturnAllToLobby(`⏪ 房主已中止本局，全員返回房間【${gameSession.roomCode}】候戰室等候！`);
+            }
+          });
+          document.getElementById('btnMenuHostDisbandRoom')?.addEventListener('click', () => {
+            if (typeof disbandOnlineRoomByHost === 'function') {
+              disbandOnlineRoomByHost();
+            }
+          });
+        } else {
+          gridEl.innerHTML = `
+            <button id="btnMenuClientLeaveRoom" class="w-full py-2 px-3 rounded-xl bg-rose-700 border border-rose-400 text-white font-black text-xs shadow">
+              🚪 退出本局並離開房間【${gameSession.roomCode}】
+            </button>
+          `;
+          document.getElementById('btnMenuClientLeaveRoom')?.addEventListener('click', () => {
+            if (typeof leaveOnlineRoom === 'function') {
+              leaveOnlineRoom('主動退出遊戲');
+            }
+          });
+        }
+      } else {
+        onlineBox.classList.add('hidden');
+      }
+    }
+
     const takeoverBox = document.getElementById('settingsHostTakeoverBox');
     if (takeoverBox) {
       const turnActor = gameState.phase === 'INITIAL_DRAFT'
@@ -4165,23 +4216,40 @@ function renderLobbyUI() {
             </div>
           `;
         }
-        const isHumanJoined = s.role === 'HUMAN' && s.connected;
+        const isHumanSeat = s.role === 'HUMAN';
+        const isHumanJoined = isHumanSeat && s.connected;
+        const isHumanOffline = isHumanSeat && !s.connected;
         const isAI = s.role === 'AI';
         const cardCls = isHumanJoined ? 'seat-card-human' : isAI ? 'seat-card-ai' : 'seat-card-waiting';
-        const badgeText = isHumanJoined ? '👤 真人已連線' : isAI ? '🤖 智慧 AI 補位' : '⏳ 等待真人加入';
+        const badgeText = isHumanJoined ? '👤 真人已連線' : isHumanOffline ? '🔴 玩家暫離重連中' : isAI ? '🤖 智慧 AI 補位' : '⏳ 等待真人加入';
 
         return `
           <div class="rounded-xl p-2 ${cardCls} flex items-center justify-between gap-2">
             <div class="min-w-0 flex-1">
-              <div class="text-[10px] font-black ${isHumanJoined ? 'text-emerald-300' : isAI ? 'text-indigo-300' : 'text-amber-300'}">座位 ${s.id.toUpperCase()} · ${badgeText}</div>
+              <div class="text-[10px] font-black ${isHumanJoined ? 'text-emerald-300' : isHumanOffline ? 'text-rose-300' : isAI ? 'text-indigo-300' : 'text-amber-300'}">座位 ${s.id.toUpperCase()} · ${badgeText}</div>
               <div class="text-xs font-bold text-white truncate">${s.name}</div>
             </div>
-            <button data-toggle-seat-role="${s.id}" class="px-2 py-1 rounded-lg bg-slate-950 border border-slate-600 text-[10px] font-black text-amber-300 shrink-0">
-              ${isAI ? '改為等待真人' : '改由 AI 補位'}
-            </button>
+            <div class="flex items-center gap-1 shrink-0">
+              ${isHumanSeat ? `
+                <button data-kick-seat="${s.id}" class="px-2 py-1 rounded-lg bg-rose-950 border border-rose-500/70 text-[10px] font-black text-rose-200">
+                  ✕ 釋放
+                </button>
+              ` : ''}
+              <button data-toggle-seat-role="${s.id}" class="px-2 py-1 rounded-lg bg-slate-950 border border-slate-600 text-[10px] font-black text-amber-300">
+                ${isAI ? '改為等待真人' : '改由 AI 補位'}
+              </button>
+            </div>
           </div>
         `;
       }).join('');
+
+      rosterEl.querySelectorAll('[data-kick-seat]').forEach(btn => {
+        btn.addEventListener('click', () => {
+          if (typeof kickPlayerFromHostLobby === 'function') {
+            kickPlayerFromHostLobby(btn.getAttribute('data-kick-seat'));
+          }
+        });
+      });
 
       rosterEl.querySelectorAll('[data-toggle-seat-role]').forEach(btn => {
         btn.addEventListener('click', () => {
@@ -4231,20 +4299,36 @@ function renderLobbyUI() {
                   <div class="text-xs font-black text-emerald-300"><span class="online-dot-pulse mr-1"></span>已進入房間【${gameSession.roomCode}】候戰室</div>
                   <div class="text-[10px] text-slate-200 mt-0.5">${pCount} 人局 ｜ ${ruleLabel} ｜ ${fogLabel}</div>
                 </div>
-                <span class="px-2 py-1 rounded-lg bg-amber-400 text-slate-950 text-xs font-black shrink-0">座位 ${gameSession.localSeatId.toUpperCase()}</span>
+                <div class="flex items-center gap-1.5 shrink-0">
+                  <span class="px-2 py-1 rounded-lg bg-amber-400 text-slate-950 text-xs font-black">座位 ${gameSession.localSeatId.toUpperCase()}</span>
+                  <button id="btnClientLeaveRoomSeated" class="px-2 py-1 rounded-lg bg-rose-700 border border-rose-400 text-white text-[11px] font-black shadow">
+                    🚪 退出房間
+                  </button>
+                </div>
               </div>
               <div class="text-[11px] font-bold text-amber-300">🪑 房間即時席位列表（等待房主點擊啟動對局...）：</div>
               <div class="space-y-1.5">${seatsHTML}</div>
             </div>
           `;
+          document.getElementById('btnClientLeaveRoomSeated')?.addEventListener('click', () => {
+            if (typeof leaveOnlineRoom === 'function') leaveOnlineRoom('主動退出房間');
+          });
         } else {
           const detailMsg = gameSession.peerDetailMsg || `正在連線至房間【${gameSession.roomCode}】並同步候戰室席位...`;
           statusBox.innerHTML = `
-            <div class="rounded-xl p-2.5 seat-card-waiting text-xs text-amber-200 font-bold space-y-1.5">
-              <div>🔄 ${detailMsg}</div>
-              <div class="text-[10px] text-slate-300 font-normal">💡 手機連線小提示：若房主剛切去 LINE 傳送邀請連結，請等房主切回遊戲畫面，系統會每 2 秒自動重連（亦可直接點擊上方「連線入房」立即重試）。</div>
+            <div class="rounded-xl p-2.5 seat-card-waiting text-xs text-amber-200 font-bold space-y-2">
+              <div class="flex items-center justify-between gap-2">
+                <span>🔄 ${detailMsg}</span>
+                <button id="btnClientCancelJoinRoom" class="px-2 py-1 rounded-lg bg-rose-900 border border-rose-500 text-rose-100 text-[10px] font-black shrink-0">
+                  🚪 取消/退出
+                </button>
+              </div>
+              <div class="text-[10px] text-slate-300 font-normal">💡 若頁面剛重新整理或房主剛切回畫面，系統每 2 秒會自動同步席位。</div>
             </div>
           `;
+          document.getElementById('btnClientCancelJoinRoom')?.addEventListener('click', () => {
+            if (typeof leaveOnlineRoom === 'function') leaveOnlineRoom('取消加入房間');
+          });
         }
       } else {
         statusBox.innerHTML = `<div class="text-[11px] text-slate-400">輸入房主提供的 4 碼房間通行碼，即可進入房間候戰室並即時查看席位狀態。</div>`;
@@ -4396,16 +4480,21 @@ function initAppOnLoad() {
 
   renderHomeScreenUI();
 
-  if (urlRoom) {
-    document.getElementById('homeScreenModal')?.classList.add('hidden');
-    activeLobbyTab = 'CLIENT';
-    const joinInput = document.getElementById('inputJoinRoomCode');
-    if (joinInput) joinInput.value = urlRoom.toUpperCase();
-    document.getElementById('lobbyModal')?.classList.remove('hidden');
-    renderLobbyUI();
-    joinOnlineRoomAsClient(urlRoom, gameSession.playerName);
-  } else {
-    document.getElementById('homeScreenModal')?.classList.remove('hidden');
+  const restoredOnline = (typeof tryRestoreSavedSessionOnBoot === 'function')
+    ? tryRestoreSavedSessionOnBoot(urlRoom)
+    : false;
+  if (!restoredOnline) {
+    if (urlRoom) {
+      document.getElementById('homeScreenModal')?.classList.add('hidden');
+      activeLobbyTab = 'CLIENT';
+      const joinInput = document.getElementById('inputJoinRoomCode');
+      if (joinInput) joinInput.value = urlRoom.toUpperCase();
+      document.getElementById('lobbyModal')?.classList.remove('hidden');
+      renderLobbyUI();
+      joinOnlineRoomAsClient(urlRoom, gameSession.playerName);
+    } else {
+      document.getElementById('homeScreenModal')?.classList.remove('hidden');
+    }
   }
 
   // Landscape Tabletop Mode Controls
@@ -4471,6 +4560,8 @@ function initAppOnLoad() {
   });
   document.getElementById('btnHomeQuickStart')?.addEventListener('click', () => {
     syncHomeSetupToLobbyControls();
+    if (typeof clearActiveSessionSnapshot === 'function') clearActiveSessionSnapshot();
+    cleanupNetworkChannels();
     gameSession.mode = 'SOLO';
     window.hasStartedActiveMatch = true;
     document.getElementById('homeScreenModal')?.classList.add('hidden');
@@ -4478,6 +4569,8 @@ function initAppOnLoad() {
   });
   document.getElementById('btnHomeDraftStart')?.addEventListener('click', () => {
     syncHomeSetupToLobbyControls();
+    if (typeof clearActiveSessionSnapshot === 'function') clearActiveSessionSnapshot();
+    cleanupNetworkChannels();
     gameSession.mode = 'SOLO';
     window.hasStartedActiveMatch = true;
     document.getElementById('homeScreenModal')?.classList.add('hidden');
@@ -4699,6 +4792,17 @@ function initAppOnLoad() {
     copyTextSafe(inviteUrl, `🔗 已複製邀請連結！傳給朋友打開即可自動入房。`);
   });
 
+  document.getElementById('btnHostDisbandRoom')?.addEventListener('click', () => {
+    if (typeof disbandOnlineRoomByHost === 'function') disbandOnlineRoomByHost();
+  });
+  document.getElementById('btnBannerReturnLobbyNow')?.addEventListener('click', () => {
+    if (typeof abortMatchAndReturnAllToLobby === 'function') {
+      abortMatchAndReturnAllToLobby(`⏪ 房主因玩家斷線中止本局，全員返回房間【${gameSession.roomCode}】候戰室等候！`);
+    }
+  });
+  document.getElementById('btnDismissLobbyNotice')?.addEventListener('click', () => {
+    document.getElementById('lobbyNoticeBanner')?.classList.add('hidden');
+  });
   document.getElementById('btnAddSimulatedHuman')?.addEventListener('click', () => {
     addSimulatedHumanSeatInRoom();
   });

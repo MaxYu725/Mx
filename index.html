@@ -8,16 +8,26 @@
   <meta name="apple-mobile-web-app-capable" content="yes" />
   <meta name="apple-mobile-web-app-status-bar-style" content="black-translucent" />
   <meta name="apple-mobile-web-app-title" content="深淵魔王城" />
-  <title>深淵魔王城：燒魔率爭霸戰 V14.3 (雲端跨網直連版)</title>
+  <title>深淵魔王城：燒魔率爭霸戰 V14.4 (斷線重連＆房間管理版)</title>
   <link rel="manifest" href="manifest.json" />
   <link rel="icon" type="image/png" sizes="192x192" href="icons/icon-192.png" />
   <link rel="apple-touch-icon" href="icons/icon-192.png" />
-  <link rel="stylesheet" href="css/style.css?v=14.3" />
+  <link rel="stylesheet" href="css/style.css?v=14.4" />
   <!-- Cloud WSS (MQTT.js) + PeerJS WebRTC Multi-Engine Multiplayer -->
   <script src="https://unpkg.com/mqtt@5.10.3/dist/mqtt.min.js" onerror="this.onerror=null;this.src='https://cdn.jsdelivr.net/npm/mqtt@5.10.3/dist/mqtt.min.js'"></script>
   <script src="https://unpkg.com/peerjs@1.5.4/dist/peerjs.min.js" onerror="this.onerror=null;this.src='https://cdn.jsdelivr.net/npm/peerjs@1.5.4/dist/peerjs.min.js'"></script>
 </head>
 <body class="flex flex-col h-full w-full overflow-hidden safe-area-body">
+  <!-- FLOATING ONLINE DISCONNECT / RECONNECT COUNTDOWN BANNER (V14.4) -->
+  <div id="onlineDisconnectBanner" class="hidden fixed top-10 left-1/2 -translate-x-1/2 z-50 w-[94vw] max-w-md rounded-xl bg-amber-950/95 border-2 border-amber-400 px-3 py-2 shadow-2xl text-xs text-amber-100">
+    <div class="flex items-center justify-between gap-2">
+      <div id="onlineDisconnectBannerText" class="font-bold leading-snug flex-1">📡 偵測到玩家連線中斷，等待自動重連中...</div>
+      <button id="btnBannerReturnLobbyNow" class="hidden px-2.5 py-1 rounded-lg bg-rose-600 text-white font-black text-[11px] shrink-0 shadow">
+        ⏪ 立即返回房間
+      </button>
+    </div>
+  </div>
+
 
   <!-- ===================================================================
        1. COMPACT SINGLE-LINE HEADER BAR (Fullscreen / PWA + Unified Settings)
@@ -450,6 +460,15 @@
         </button>
       </div>
 
+      <!-- Online Room / Match Leave & Return Controls (V14.4) -->
+      <div id="settingsOnlineActionsBox" class="hidden pt-2 border-t border-slate-800 space-y-1.5">
+        <div class="text-[11px] font-bold text-amber-300 flex items-center justify-between">
+          <span>🌐 連線房間操作 (<span id="settingsRoomCodeLabel">----</span>)</span>
+          <span id="settingsSeatRoleLabel" class="text-[10px] text-emerald-300 font-black"></span>
+        </div>
+        <div id="settingsOnlineButtonsGrid" class="grid grid-cols-1 gap-1.5"></div>
+      </div>
+
       <!-- Optional Host AI Takeover Container -->
       <div id="settingsHostTakeoverBox" class="hidden pt-1 border-t border-slate-800"></div>
     </div>
@@ -527,11 +546,16 @@
   <div id="lobbyModal" class="hidden fixed inset-0 bg-black/85 backdrop-blur-sm flex items-center justify-center z-50 p-3">
     <div class="bg-slate-900 border-2 border-amber-400 rounded-2xl max-w-lg w-full p-3.5 shadow-2xl max-h-[90vh] overflow-y-auto">
       <div class="flex items-center justify-between border-b border-slate-700 pb-2 mb-2.5">
-        <h3 class="text-sm sm:text-base font-black text-amber-400">🌐 連線對戰大廳 ＆ 開房設定 (V13.6)</h3>
+        <h3 class="text-sm sm:text-base font-black text-amber-400">🌐 連線對戰大廳 ＆ 開房設定 (V14.4 雲端重連版)</h3>
         <button id="btnCloseLobby" class="px-2.5 py-1 rounded-lg bg-slate-800 text-xs font-bold text-slate-300">✕ 關閉</button>
       </div>
 
       <div class="space-y-2.5 text-xs">
+        <!-- Return-to-Lobby / Disconnect Alert Banner (V14.4) -->
+        <div id="lobbyNoticeBanner" class="hidden rounded-xl bg-amber-950/90 border-2 border-amber-400 p-2.5 text-xs text-amber-200 font-bold flex items-start justify-between gap-2">
+          <span id="lobbyNoticeBannerText" class="leading-snug"></span>
+          <button id="btnDismissLobbyNotice" class="px-1.5 py-0.5 rounded bg-slate-900 text-slate-300 text-[10px] shrink-0">✕</button>
+        </div>
         <!-- Nickname Input -->
         <div class="flex items-center gap-2 bg-slate-950/90 border border-slate-700 rounded-xl px-2.5 py-1.5">
           <span class="text-slate-300 font-bold whitespace-nowrap">👑 你的魔王尊號：</span>
@@ -555,7 +579,7 @@
         <div id="lobbyHostPanel" class="hidden space-y-2 rounded-xl bg-slate-950/80 border border-amber-500/40 p-2.5">
           <div class="flex items-center justify-between gap-2">
             <div>
-              <div class="text-[11px] font-bold text-amber-300">房間專屬通行碼 (跨網 PeerJS ＋ 同機跨分頁)</div>
+              <div class="text-[11px] font-bold text-amber-300">房間專屬通行碼 (雲端跨網直連 ＋ 斷線自動重連)</div>
               <div id="hostNetStatusBadge" class="text-[10px] text-emerald-300 font-semibold mt-0.5">
                 <span class="online-dot-pulse mr-1"></span>雙軌通道就緒
               </div>
@@ -574,6 +598,12 @@
             </button>
             <button id="btnAddSimulatedHuman" class="py-1.5 px-2 rounded-lg bg-emerald-900/90 border border-emerald-400 text-[11px] font-bold text-emerald-200" title="在當前視窗新增真人席位，開局後可切換視角測試">
               ➕ 同機模擬真人
+            </button>
+          </div>
+          <div class="flex items-center justify-between gap-2 pt-0.5">
+            <span class="text-[10px] text-slate-400">💡 刷新頁面或短暫切背景可自動重連回原房間與對局</span>
+            <button id="btnHostDisbandRoom" class="py-1 px-2.5 rounded-lg bg-rose-950/90 border border-rose-500/70 text-[11px] font-black text-rose-200 shrink-0">
+              🚪 解散房間
             </button>
           </div>
 
@@ -747,10 +777,10 @@
   <div id="vfxOverlayRoot" style="pointer-events: none !important;" class="fixed inset-0 pointer-events-none z-50 overflow-hidden"></div>
 
   <!-- MODULAR 4-LAYER ARCHITECTURE SCRIPTS -->
-  <script src="js/art.js?v=14.3"></script>
-  <script src="js/cards.js?v=14.3"></script>
-  <script src="js/engine.js?v=14.3"></script>
-  <script src="js/session.js?v=14.3"></script>
-  <script src="js/ui.js?v=14.3"></script>
+  <script src="js/art.js?v=14.4"></script>
+  <script src="js/cards.js?v=14.4"></script>
+  <script src="js/engine.js?v=14.4"></script>
+  <script src="js/session.js?v=14.4"></script>
+  <script src="js/ui.js?v=14.4"></script>
 </body>
 </html>
