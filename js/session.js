@@ -62,7 +62,8 @@ const gameSession = {
   clientToken: initialClientToken,
   hasSimulatedHotSeat: false, // Only true when Host explicitly clicks "+ 同機模擬真人"
   peer: null,
-  peerStatus: 'OFFLINE', // 'OFFLINE' | 'CONNECTING' | 'ONLINE' | 'BC_READY'
+  peerStatus: 'OFFLINE', // 'OFFLINE' | 'CONNECTING' | 'ONLINE' | 'BC_READY' | 'FAILED'
+  connectionError: '',
   peerConns: {}, // seatId -> PeerJS DataConnection
   clientHostConn: null, // Client's PeerJS connection to Host
   bc: null, // BroadcastChannel for zero-latency multi-tab play
@@ -117,6 +118,7 @@ function cleanupNetworkChannels() {
     gameSession.peer = null;
   }
   gameSession.peerStatus = 'OFFLINE';
+  gameSession.connectionError = '';
 }
 
 function getPeerIdForRoom(roomCode) {
@@ -135,10 +137,56 @@ function openBroadcastChannelForRoom(roomCode) {
         handleIncomingNetworkPacket(ev.data, 'BC', null);
       }
     };
-    if (gameSession.peerStatus === 'OFFLINE') {
-      gameSession.peerStatus = 'BC_READY';
-    }
   }
+}
+
+// Load the signaling library on demand; CDN failure must not silently disable
+// the only confidential transport for fog-of-war games.
+let peerJsLoadPromise = null;
+function ensurePeerJsReady() {
+  if (typeof window.Peer === 'function') return Promise.resolve(window.Peer);
+  if (peerJsLoadPromise) return peerJsLoadPromise;
+
+  const urls = [
+    'https://cdn.jsdelivr.net/npm/peerjs@1.5.4/dist/peerjs.min.js',
+    'https://unpkg.com/peerjs@1.5.4/dist/peerjs.min.js'
+  ];
+  peerJsLoadPromise = new Promise((resolve, reject) => {
+    const load = (index) => {
+      if (typeof window.Peer === 'function') return resolve(window.Peer);
+      if (index >= urls.length) return reject(new Error('PeerJS 程式庫無法載入；請檢查網絡、廣告阻擋或 CDN 存取。'));
+      const script = document.createElement('script');
+      script.src = urls[index];
+      script.async = true;
+      let completed = false;
+      const timer = setTimeout(() => finish(false), 9000);
+      function finish(success) {
+        if (completed) return;
+        completed = true;
+        clearTimeout(timer);
+        if (success && typeof window.Peer === 'function') resolve(window.Peer);
+        else {
+          script.remove();
+          load(index + 1);
+        }
+      }
+      script.onload = () => finish(true);
+      script.onerror = () => finish(false);
+      document.head.appendChild(script);
+    };
+    load(0);
+  }).catch(err => {
+    peerJsLoadPromise = null; // Allow retry without reloading the page.
+    throw err;
+  });
+  return peerJsLoadPromise;
+}
+
+function setPeerConnectionStatus(status, message = '') {
+  gameSession.peerStatus = status;
+  gameSession.connectionError = message;
+  if (typeof renderLobbyUI === 'function') renderLobbyUI();
+  if (status === 'FAILED') showToast('❌ ' + message, 4800);
 }
 
 // Syncs Host nickname & lobby controls into lobbyState and broadcasts to waiting clients
@@ -211,35 +259,55 @@ function createOnlineHostRoom(customCode = null) {
 
   openBroadcastChannelForRoom(code);
 
-  if (typeof window.Peer !== 'undefined') {
+  setPeerConnectionStatus('CONNECTING');
+  ensurePeerJsReady().then(PeerCtor => {
+    if (gameSession.mode !== 'HOST' || gameSession.roomCode !== code) return;
     try {
-      gameSession.peerStatus = 'CONNECTING';
-      const peer = new window.Peer(getPeerIdForRoom(code));
+      const peer = new PeerCtor(getPeerIdForRoom(code));
       gameSession.peer = peer;
-
+      const registrationTimeout = setTimeout(() => {
+        if (gameSession.peer === peer && gameSession.peerStatus === 'CONNECTING') {
+          setPeerConnectionStatus('FAILED', '房主未能連接 PeerJS 訊號伺服器。請檢查網絡後重新開房。');
+          try { peer.destroy(); } catch (e) {}
+        }
+      }, 15000);
       peer.on('open', () => {
-        gameSession.peerStatus = 'ONLINE';
-        if (typeof renderLobbyUI === 'function') renderLobbyUI();
+        clearTimeout(registrationTimeout);
+        if (gameSession.peer !== peer) return;
+        setPeerConnectionStatus('ONLINE');
         if (typeof renderAll === 'function') renderAll();
       });
-
-      peer.on('connection', (conn) => {
-        conn.on('data', (data) => {
-          handleIncomingNetworkPacket(data, 'PEER', conn);
-        });
-        conn.on('close', () => {
+      peer.on('connection', conn => {
+        if (gameSession.peer !== peer) { conn.close(); return; }
+        conn.on('data', data => handleIncomingNetworkPacket(data, 'PEER', conn));
+        conn.on('close', () => handlePeerDisconnect(conn));
+        conn.on('error', e => {
+          console.warn('[Mx multiplayer] Incoming PeerJS connection error:', e);
           handlePeerDisconnect(conn);
         });
       });
-
-      peer.on('error', () => {
-        gameSession.peerStatus = gameSession.lobbyState.fogOfWar ? 'OFFLINE' : 'BC_READY';
-        if (typeof renderLobbyUI === 'function') renderLobbyUI();
+      peer.on('error', err => {
+        clearTimeout(registrationTimeout);
+        if (gameSession.peer !== peer) return;
+        const kind = err && err.type ? err.type : 'unknown';
+        const detail = kind === 'unavailable-id'
+          ? '房間號碼已被使用，請重新建立房間。'
+          : 'PeerJS 連線失敗（' + kind + '），請檢查網絡後重新開房。';
+        setPeerConnectionStatus('FAILED', detail);
+      });
+      peer.on('disconnected', () => {
+        if (gameSession.peer === peer) {
+          setPeerConnectionStatus('FAILED', '與 PeerJS 訊號伺服器中斷連線；請嘗試重新開房。');
+        }
       });
     } catch (e) {
-      gameSession.peerStatus = 'BC_READY';
+      setPeerConnectionStatus('FAILED', '無法啟動 PeerJS：' + (e.message || String(e)));
     }
-  }
+  }).catch(err => {
+    if (gameSession.mode === 'HOST' && gameSession.roomCode === code) {
+      setPeerConnectionStatus('FAILED', err.message || String(err));
+    }
+  });
 
   if (typeof renderLobbyUI === 'function') renderLobbyUI();
   showToast(`🌐 已建立連線房間【${code}】！等待玩家加入後點擊下方開局。`);
@@ -273,42 +341,67 @@ function joinOnlineRoomAsClient(rawCode, playerName) {
     playerName: gameSession.playerName
   };
 
-  // 1. BroadcastChannel for instant same-browser multi-tab sync
+  // Private rooms always require an authenticated PeerJS connection.
+  // BroadcastChannel is used only for explicitly public fog-disabled rooms.
   openBroadcastChannelForRoom(code);
-  if (gameSession.bc && typeof window.Peer === 'undefined') {
-    gameSession.bc.postMessage(helloPacket);
-  }
-
-  // 2. PeerJS WebRTC for cross-device / internet play
-  if (typeof window.Peer !== 'undefined') {
+  ensurePeerJsReady().then(PeerCtor => {
+    if (gameSession.mode !== 'CLIENT' || gameSession.roomCode !== code) return;
     try {
-      const peer = new window.Peer();
+      const peer = new PeerCtor();
       gameSession.peer = peer;
+      const registrationTimeout = setTimeout(() => {
+        if (gameSession.peer === peer && gameSession.peerStatus === 'CONNECTING') {
+          setPeerConnectionStatus('FAILED', '未能連接 PeerJS 訊號伺服器，請檢查網絡後重試。');
+          try { peer.destroy(); } catch (e) {}
+        }
+      }, 15000);
       peer.on('open', () => {
+        clearTimeout(registrationTimeout);
+        if (gameSession.peer !== peer) return;
         const conn = peer.connect(getPeerIdForRoom(code), { reliable: true });
         gameSession.clientHostConn = conn;
+        const joinTimeout = setTimeout(() => {
+          if (gameSession.clientHostConn === conn && gameSession.peerStatus === 'CONNECTING') {
+            setPeerConnectionStatus('FAILED', '未能連接房主，請確認房主顯示「PeerJS 跨網連線就緒」，並確認雙方使用相同網站及房號。');
+          }
+        }, 15000);
         conn.on('open', () => {
-          gameSession.peerStatus = 'ONLINE';
+          if (gameSession.clientHostConn !== conn) return;
           conn.send(helloPacket);
+          // Wait until JOIN_ACCEPTED before claiming that joining succeeded.
           if (typeof renderLobbyUI === 'function') renderLobbyUI();
         });
-        conn.on('data', (data) => {
+        conn.on('data', data => {
+          if (gameSession.clientHostConn !== conn) return;
           handleIncomingNetworkPacket(data, 'PEER', conn);
+          if (gameSession.peerStatus === 'ONLINE' || gameSession.peerStatus === 'FAILED') clearTimeout(joinTimeout);
+        });
+        conn.on('error', err => {
+          clearTimeout(joinTimeout);
+          if (gameSession.clientHostConn === conn) {
+            setPeerConnectionStatus('FAILED', '與房主連線失敗（' + ((err && err.type) || '連線錯誤') + '），請確認房號及房主連線狀態。');
+          }
         });
         conn.on('close', () => {
-          showToast('⚠️ 與房主的連線已中斷，可重新點擊連線入房。');
+          clearTimeout(joinTimeout);
+          if (gameSession.clientHostConn !== conn) return;
+          setPeerConnectionStatus('FAILED', '與房主的連線已中斷，請按「連線入房」重新連接。');
         });
       });
-      peer.on('error', () => {
-        if (gameSession.peerStatus === 'CONNECTING') {
-          gameSession.peerStatus = gameSession.lobbyState.fogOfWar ? 'OFFLINE' : 'BC_READY';
-          // The host rejects this fallback when fog-of-war is enabled.
-          if (gameSession.bc) gameSession.bc.postMessage(helloPacket);
-          if (typeof renderLobbyUI === 'function') renderLobbyUI();
-        }
+      peer.on('error', err => {
+        clearTimeout(registrationTimeout);
+        if (gameSession.peer !== peer) return;
+        const kind = (err && err.type) || 'unknown';
+        setPeerConnectionStatus('FAILED', 'PeerJS 連線失敗（' + kind + '）。請檢查房號、網絡或訊號伺服器。');
       });
-    } catch (e) {}
-  }
+    } catch (e) {
+      setPeerConnectionStatus('FAILED', '無法啟動 PeerJS：' + (e.message || String(e)));
+    }
+  }).catch(err => {
+    if (gameSession.mode === 'CLIENT' && gameSession.roomCode === code) {
+      setPeerConnectionStatus('FAILED', err.message || String(err));
+    }
+  });
 }
 
 function handlePeerDisconnect(conn) {
