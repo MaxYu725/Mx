@@ -4398,6 +4398,16 @@ function initAppOnLoad() {
   if (window.__dbrV13Initialized) return;
   window.__dbrV13Initialized = true;
 
+  // Leaving the host tab terminates the authoritative PeerJS room. Browser
+  // confirmation helps prevent pasting the invite URL over the host itself.
+  window.addEventListener('beforeunload', (event) => {
+    if (gameSession.mode === 'HOST' && gameSession.roomCode &&
+        gameSession.peerStatus !== 'OFFLINE') {
+      event.preventDefault();
+      event.returnValue = '';
+    }
+  });
+
   const params = new URLSearchParams(window.location.search);
   const urlRoom = params.get('room');
   const nicknameInput = document.getElementById('inputPlayerNickname');
