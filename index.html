@@ -8,12 +8,13 @@
   <meta name="apple-mobile-web-app-capable" content="yes" />
   <meta name="apple-mobile-web-app-status-bar-style" content="black-translucent" />
   <meta name="apple-mobile-web-app-title" content="深淵魔王城" />
-  <title>深淵魔王城：燒魔率爭霸戰 V13.6 (PWA 全螢幕連線對戰版)</title>
+  <title>深淵魔王城：燒魔率爭霸戰 V14.3 (雲端跨網直連版)</title>
   <link rel="manifest" href="manifest.json" />
   <link rel="icon" type="image/png" sizes="192x192" href="icons/icon-192.png" />
   <link rel="apple-touch-icon" href="icons/icon-192.png" />
-  <link rel="stylesheet" href="css/style.css" />
-  <!-- PeerJS WebRTC DataChannel CDN for Cross-Device Room Code Multiplayer -->
+  <link rel="stylesheet" href="css/style.css?v=14.3" />
+  <!-- Cloud WSS (MQTT.js) + PeerJS WebRTC Multi-Engine Multiplayer -->
+  <script src="https://unpkg.com/mqtt@5.10.3/dist/mqtt.min.js" onerror="this.onerror=null;this.src='https://cdn.jsdelivr.net/npm/mqtt@5.10.3/dist/mqtt.min.js'"></script>
   <script src="https://unpkg.com/peerjs@1.5.4/dist/peerjs.min.js" onerror="this.onerror=null;this.src='https://cdn.jsdelivr.net/npm/peerjs@1.5.4/dist/peerjs.min.js'"></script>
 </head>
 <body class="flex flex-col h-full w-full overflow-hidden safe-area-body">
@@ -746,10 +747,10 @@
   <div id="vfxOverlayRoot" style="pointer-events: none !important;" class="fixed inset-0 pointer-events-none z-50 overflow-hidden"></div>
 
   <!-- MODULAR 4-LAYER ARCHITECTURE SCRIPTS -->
-  <script src="js/art.js"></script>
-  <script src="js/cards.js"></script>
-  <script src="js/engine.js"></script>
-  <script src="js/session.js"></script>
-  <script src="js/ui.js"></script>
+  <script src="js/art.js?v=14.3"></script>
+  <script src="js/cards.js?v=14.3"></script>
+  <script src="js/engine.js?v=14.3"></script>
+  <script src="js/session.js?v=14.3"></script>
+  <script src="js/ui.js?v=14.3"></script>
 </body>
 </html>

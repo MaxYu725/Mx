@@ -92,6 +92,185 @@ let clientConnectRetryTimer = null;
 let clientHelloRetryTimer = null;
 let clientRetryCount = 0;
 
+// Packet Deduplication Set so running 4 parallel channels (MQTT WSS + HTTPS SSE + PeerJS + BC) never double-executes
+const seenPacketIds = new Set();
+function stampPacket(pkt) {
+  if (!pkt._pktId) {
+    pkt._pktId = 'pkt_' + Date.now().toString(36) + '_' + Math.random().toString(36).slice(2, 8);
+  }
+  pkt._ts = Date.now();
+  return pkt;
+}
+
+// Cloud Engine 1: Public MQTT-over-WSS Brokers (Port 8084 / 8884 TLS, supports Retained Room State!)
+const CLOUD_MQTT_BROKERS = [
+  'wss://broker.emqx.io:8084/mqtt',
+  'wss://broker.hivemq.com:8884/mqtt'
+];
+let activeMqttClients = [];
+
+// Cloud Engine 2: Pure HTTPS Port-443 EventSource + POST Relay (100% firewall proof)
+let activeSseSource = null;
+
+function getCloudTopics(roomCode) {
+  const code = String(roomCode || '').trim().toUpperCase();
+  return {
+    toHost: `dbr_v14_room/${code}/to_host`,
+    toHostJoinPrefix: `dbr_v14_room/${code}/join/`,
+    toHostJoinWildcard: `dbr_v14_room/${code}/join/+`,
+    toClientState: `dbr_v14_room/${code}/to_client_state`,
+    toClientEvent: `dbr_v14_room/${code}/to_client_event`,
+    sseChannel: `dbr_v14_net_${code}`
+  };
+}
+
+function closeCloudRelayChannels() {
+  activeMqttClients.forEach(c => {
+    try { c.end(true); } catch (e) {}
+  });
+  activeMqttClients = [];
+  if (activeSseSource) {
+    try { activeSseSource.close(); } catch (e) {}
+    activeSseSource = null;
+  }
+}
+
+// Connects to Cloud MQTT-over-WSS + HTTPS 443 SSE for the given roomCode
+function openCloudRelayForRoom(roomCode) {
+  closeCloudRelayChannels();
+  const code = String(roomCode || '').trim().toUpperCase();
+  if (!code) return;
+  const topics = getCloudTopics(code);
+
+  // --- 1. HTTPS Port-443 SSE Relay (ntfy.sh) ---
+  if (typeof window.EventSource !== 'undefined') {
+    try {
+      const sseUrl = `https://ntfy.sh/${topics.sseChannel}/sse?since=10m`;
+      const es = new window.EventSource(sseUrl);
+      activeSseSource = es;
+      es.onopen = () => {
+        gameSession.peerStatus = 'ONLINE';
+        gameSession.peerDetailMsg = '雲端 HTTPS/WSS 跨網直連通道已就緒（支援所有手機 4G/5G）';
+        if (typeof renderLobbyUI === 'function') renderLobbyUI();
+      };
+      es.onmessage = (ev) => {
+        if (!ev || !ev.data) return;
+        try {
+          const outer = JSON.parse(ev.data);
+          if (outer && outer.event === 'message' && outer.message) {
+            const pkt = JSON.parse(outer.message);
+            handleIncomingNetworkPacket(pkt, 'CLOUD_SSE', null);
+          }
+        } catch (e) {}
+      };
+    } catch (e) {}
+  }
+
+  // --- 2. Cloud MQTT-over-WSS Multi-Broker Relay (with Retained Room State) ---
+  const initMqttBrokers = () => {
+    if (typeof window.mqtt === 'undefined' || !window.mqtt.connect) return;
+    CLOUD_MQTT_BROKERS.forEach((brokerUrl) => {
+      try {
+        const client = window.mqtt.connect(brokerUrl, {
+          keepalive: 25,
+          reconnectPeriod: 2000,
+          connectTimeout: 8000,
+          clean: true,
+          clientId: 'dbr_' + gameSession.clientToken + '_' + Math.random().toString(36).slice(2, 6)
+        });
+        activeMqttClients.push(client);
+
+        client.on('connect', () => {
+          gameSession.peerStatus = 'ONLINE';
+          gameSession.peerDetailMsg = '雲端 WSS 高速房間伺服器已連線（支援手機 4G/5G 跨網秒連）';
+          if (gameSession.mode === 'HOST') {
+            client.subscribe([topics.toHost, topics.toHostJoinWildcard], { qos: 1 });
+            // Publish current lobby/game state as retained message so joining phones see it immediately
+            broadcastLobbyState();
+            if (gameSession.lobbyState.matchStarted) broadcastHostState();
+          } else if (gameSession.mode === 'CLIENT') {
+            client.subscribe([topics.toClientState, topics.toClientEvent], { qos: 1 });
+            // Publish retained HELLO_JOIN on our clientToken subtopic so Host receives it even after returning from LINE
+            const helloPkt = stampPacket({
+              msgType: 'HELLO_JOIN',
+              roomCode: code,
+              clientToken: gameSession.clientToken,
+              playerName: gameSession.playerName
+            });
+            try {
+              client.publish(topics.toHostJoinPrefix + gameSession.clientToken, JSON.stringify(helloPkt), { qos: 1, retain: true });
+              client.publish(topics.toHost, JSON.stringify(helloPkt), { qos: 1, retain: false });
+            } catch (e) {}
+          }
+          if (typeof renderLobbyUI === 'function') renderLobbyUI();
+        });
+
+        client.on('message', (_topic, payload) => {
+          if (!payload) return;
+          try {
+            const text = typeof payload === 'string' ? payload : new TextDecoder().decode(payload);
+            if (!text) return;
+            const pkt = JSON.parse(text);
+            handleIncomingNetworkPacket(pkt, 'CLOUD_MQTT', null);
+          } catch (e) {}
+        });
+      } catch (e) {}
+    });
+  };
+
+  if (typeof window.mqtt !== 'undefined') {
+    initMqttBrokers();
+  } else {
+    let tries = 0;
+    const waitMqtt = setInterval(() => {
+      tries += 1;
+      if (typeof window.mqtt !== 'undefined') {
+        clearInterval(waitMqtt);
+        if (gameSession.roomCode === code) initMqttBrokers();
+      } else if (tries >= 20) {
+        clearInterval(waitMqtt);
+      }
+    }, 250);
+  }
+}
+
+// Publishes a packet over both Cloud MQTT-WSS and Cloud HTTPS-443 SSE
+function publishCloudPacket(pkt, isRetainedState = false) {
+  if (!pkt || !gameSession.roomCode) return;
+  stampPacket(pkt);
+  const code = gameSession.roomCode;
+  const topics = getCloudTopics(code);
+  const jsonStr = JSON.stringify(pkt);
+
+  // 1. Send via all connected MQTT WSS brokers
+  activeMqttClients.forEach(client => {
+    if (client && client.connected) {
+      try {
+        if (gameSession.mode === 'HOST') {
+          const targetTopic = isRetainedState ? topics.toClientState : topics.toClientEvent;
+          client.publish(targetTopic, jsonStr, { qos: 1, retain: Boolean(isRetainedState) });
+        } else if (gameSession.mode === 'CLIENT') {
+          if (pkt.msgType === 'HELLO_JOIN') {
+            client.publish(topics.toHostJoinPrefix + gameSession.clientToken, jsonStr, { qos: 1, retain: true });
+          }
+          client.publish(topics.toHost, jsonStr, { qos: 1, retain: false });
+        }
+      } catch (e) {}
+    }
+  });
+
+  // 2. Send via HTTPS Port-443 Relay (ntfy.sh)
+  if (typeof window.fetch === 'function') {
+    try {
+      window.fetch(`https://ntfy.sh/${topics.sseChannel}`, {
+        method: 'POST',
+        body: jsonStr
+      }).catch(() => {});
+    } catch (e) {}
+  }
+}
+
+
 // Multi-STUN + Multi-Protocol TURN Relay Configuration for Mobile 4G/5G (Symmetric NAT / CGNAT) Traversal
 function getPeerJsConfig() {
   return {
@@ -166,6 +345,7 @@ function clearNetworkTimers() {
 function cleanupNetworkChannels() {
   clearTimeout(aiTimer);
   clearNetworkTimers();
+  closeCloudRelayChannels();
   if (gameSession.bc) {
     try { gameSession.bc.close(); } catch (e) {}
     gameSession.bc = null;
@@ -388,7 +568,9 @@ function createOnlineHostRoom(customCode = null) {
   };
 
   openBroadcastChannelForRoom(code);
+  openCloudRelayForRoom(code);
   mountHostPeerServer(code);
+  setTimeout(() => broadcastLobbyState(), 250);
 
   // Periodic keep-alive check so if Host phone wakes up from LINE/WhatsApp, it immediately reconnects
   clearInterval(hostKeepAliveTimer);
@@ -443,11 +625,25 @@ function joinOnlineRoomAsClient(rawCode, playerName) {
     playerName: gameSession.playerName
   });
 
-  // 1. BroadcastChannel for instant same-browser multi-tab sync
+  // 1. BroadcastChannel + Cloud WSS/HTTPS Relay (Instant mobile 4G/5G connection)
   openBroadcastChannelForRoom(code);
+  openCloudRelayForRoom(code);
+  const initialHello = stampPacket(buildHelloPacket());
   if (gameSession.bc) {
-    gameSession.bc.postMessage(buildHelloPacket());
+    gameSession.bc.postMessage(initialHello);
   }
+  publishCloudPacket(initialHello, false);
+
+  // Retry HELLO_JOIN over Cloud Relay every 2.2s until seated (handles Host returning from LINE/background)
+  clearInterval(clientHelloRetryTimer);
+  clientHelloRetryTimer = setInterval(() => {
+    if (gameSession.mode !== 'CLIENT' || gameSession.roomCode !== code || isClientSeatedInLobby() || gameSession.lobbyState.matchStarted) {
+      clearInterval(clientHelloRetryTimer);
+      clientHelloRetryTimer = null;
+      return;
+    }
+    publishCloudPacket(stampPacket(buildHelloPacket()), false);
+  }, 2200);
 
   // 2. PeerJS WebRTC with TURN Relay & Automatic Retry Loop
   ensurePeerJsLoaded((loaded) => {
@@ -693,6 +889,8 @@ function toggleMidGameAITakeover(seatId) {
 }
 
 function sendPacketToHost(packet) {
+  stampPacket(packet);
+  publishCloudPacket(packet, false);
   if (gameSession.clientHostConn && gameSession.clientHostConn.open) {
     try { gameSession.clientHostConn.send(packet); } catch (e) {}
   }
@@ -703,11 +901,12 @@ function sendPacketToHost(packet) {
 
 function broadcastLobbyState() {
   if (gameSession.mode !== 'HOST') return;
-  const packet = {
+  const packet = stampPacket({
     msgType: 'LOBBY_SYNC',
     roomCode: gameSession.roomCode,
     lobbyState: gameSession.lobbyState
-  };
+  });
+  publishCloudPacket(packet, true);
   Object.values(gameSession.peerConns).forEach(conn => {
     if (conn && conn.open) {
       try { conn.send(packet); } catch (e) {}
@@ -745,7 +944,7 @@ function broadcastHostState() {
     }
   });
 
-  if (gameSession.bc) {
+  {
     const viewsBySeat = {};
     const mySeatId = getLocalPlayerId();
     viewsBySeat[mySeatId] = gameState;
@@ -754,13 +953,15 @@ function broadcastHostState() {
         viewsBySeat[p.id] = sanitizeStateForSeat(master, p.id);
       }
     });
-    try {
-      gameSession.bc.postMessage({
-        msgType: 'STATE_SYNC_ALL_SEATS',
-        roomCode: gameSession.roomCode,
-        viewsBySeat
-      });
-    } catch (e) {}
+    const allSeatsPkt = stampPacket({
+      msgType: 'STATE_SYNC_ALL_SEATS',
+      roomCode: gameSession.roomCode,
+      viewsBySeat
+    });
+    publishCloudPacket(allSeatsPkt, true);
+    if (gameSession.bc) {
+      try { gameSession.bc.postMessage(allSeatsPkt); } catch (e) {}
+    }
   }
 
   if (typeof renderAll === 'function') renderAll();
@@ -774,6 +975,14 @@ function broadcastHostState() {
 // === Network Packet Router ===
 function handleIncomingNetworkPacket(packet, transport, peerConn) {
   if (!packet || packet.roomCode !== gameSession.roomCode) return;
+  if (packet._pktId && packet.msgType !== 'HELLO_JOIN') {
+    if (seenPacketIds.has(packet._pktId)) return;
+    seenPacketIds.add(packet._pktId);
+    if (seenPacketIds.size > 600) {
+      const firstId = seenPacketIds.values().next().value;
+      seenPacketIds.delete(firstId);
+    }
+  }
 
   // --- HOST HANDLERS ---
   if (gameSession.mode === 'HOST') {
@@ -853,6 +1062,7 @@ function handleIncomingNetworkPacket(packet, transport, peerConn) {
           peerConn.on('open', trySendAccept);
         }
       }
+      publishCloudPacket(acceptPacket, false);
       if (gameSession.bc) gameSession.bc.postMessage(acceptPacket);
 
       broadcastLobbyState();
@@ -903,7 +1113,18 @@ function handleIncomingNetworkPacket(packet, transport, peerConn) {
     }
 
     if (packet.msgType === 'LOBBY_SYNC') {
+      const wasSeated = isClientSeatedInLobby();
       gameSession.lobbyState = packet.lobbyState;
+      const mySeatInSync = (packet.lobbyState && packet.lobbyState.seats || []).find(s => s.clientToken === gameSession.clientToken);
+      if (mySeatInSync) {
+        clearNetworkTimers();
+        gameSession.localSeatId = mySeatInSync.id;
+        viewedPlayerId = mySeatInSync.id;
+        gameSession.peerStatus = 'ONLINE';
+        if (!wasSeated) {
+          showToast(`✅ 成功入座房間【${gameSession.roomCode}】座位 ${mySeatInSync.id.toUpperCase()}！`);
+        }
+      }
       if (packet.lobbyState && packet.lobbyState.themeId && typeof applyThemeToRegistry === 'function') {
         applyThemeToRegistry(packet.lobbyState.themeId);
         if (typeof renderAll === 'function') renderAll();

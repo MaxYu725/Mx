@@ -3,7 +3,7 @@
  * Strategy: Network-First with Cache Fallback so GitHub Pages updates
  * take effect immediately when online while supporting offline play.
  ********************************************************************/
-const CACHE_NAME = 'dungeon-burn-rate-pwa-v14-2';
+const CACHE_NAME = 'dungeon-burn-rate-pwa-v14-3';
 const CORE_ASSETS = [
   './',
   './index.html',
