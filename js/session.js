@@ -23,7 +23,7 @@ function saveStoredString(storageKind, key, val) {
   } catch (e) {}
 }
 
-function generateRandomCode(len = 4) {
+function generateRandomCode(len = 8) {
   const chars = 'ABCDEFGHJKLMNPQRSTUVWXYZ23456789';
   const random = new Uint32Array(len);
   window.crypto.getRandomValues(random);
@@ -182,7 +182,7 @@ function createOnlineHostRoom(customCode = null) {
     saveStoredString('local', 'dbr_v13_player_name', gameSession.playerName);
   }
 
-  const code = (customCode ? String(customCode).trim().toUpperCase() : generateRandomCode(4));
+  const code = (customCode ? String(customCode).trim().toUpperCase() : generateRandomCode(8));
   gameSession.mode = 'HOST';
   gameSession.roomCode = code;
   gameSession.localSeatId = 'p1';
@@ -233,7 +233,7 @@ function createOnlineHostRoom(customCode = null) {
       });
 
       peer.on('error', () => {
-        gameSession.peerStatus = 'BC_READY';
+        gameSession.peerStatus = gameSession.lobbyState.fogOfWar ? 'OFFLINE' : 'BC_READY';
         if (typeof renderLobbyUI === 'function') renderLobbyUI();
       });
     } catch (e) {
@@ -248,8 +248,8 @@ function createOnlineHostRoom(customCode = null) {
 // === Client: Join Online Room ===
 function joinOnlineRoomAsClient(rawCode, playerName) {
   const code = String(rawCode || '').trim().toUpperCase();
-  if (!code) {
-    showToast('⚠️ 請輸入有效的房間碼！');
+  if (!/^[A-HJ-NP-Z2-9]{8}$/.test(code)) {
+    showToast('⚠️ 請輸入有效的 8 碼房間碼！');
     return;
   }
   if (playerName && playerName.trim()) {
@@ -301,7 +301,7 @@ function joinOnlineRoomAsClient(rawCode, playerName) {
       });
       peer.on('error', () => {
         if (gameSession.peerStatus === 'CONNECTING') {
-          gameSession.peerStatus = 'BC_READY';
+          gameSession.peerStatus = gameSession.lobbyState.fogOfWar ? 'OFFLINE' : 'BC_READY';
           // The host rejects this fallback when fog-of-war is enabled.
           if (gameSession.bc) gameSession.bc.postMessage(helloPacket);
           if (typeof renderLobbyUI === 'function') renderLobbyUI();
