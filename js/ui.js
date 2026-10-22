@@ -280,8 +280,8 @@ function showVsDuelBanner(attackerName, cardIcon, cardTitle, defenderName, effec
   const isAtkMe = (actorId && actorId === myId) || (!actorId && attackerName && attackerName.includes('你'));
   const isDefMe = (defenderId && defenderId === myId) || (!defenderId && defenderName && defenderName.includes('你'));
 
-  const shortAtk = isAtkMe ? '👑我方' : ('😈' + getShortPlayerName(attackerName));
-  const shortDef = defenderName ? (isDefMe ? '👑我方' : ('😈' + getShortPlayerName(defenderName))) : '';
+  const shortAtk = isAtkMe ? '👑我方' : ('😈' + escapeHtml(getShortPlayerName(attackerName)));
+  const shortDef = defenderName ? (isDefMe ? '👑我方' : ('😈' + escapeHtml(getShortPlayerName(defenderName))) : '';
 
   if (isSelfBuff) {
     banner.style.background = 'linear-gradient(135deg, rgba(6, 78, 59, 0.96) 0%, rgba(15, 23, 42, 0.98) 100%)';
@@ -292,10 +292,10 @@ function showVsDuelBanner(attackerName, cardIcon, cardTitle, defenderName, effec
         <span class="text-amber-400 font-black text-xs shrink-0">▸</span>
         <div class="flex-1 flex items-center justify-between gap-1.5 bg-slate-950/90 rounded-lg px-2 py-1 border border-emerald-500/40 min-w-0">
           <div class="flex items-center gap-1 min-w-0">
-            <span class="text-base leading-none shrink-0">${cardIcon}</span>
-            <span class="text-xs font-black text-white truncate">${cardTitle}</span>
+            <span class="text-base leading-none shrink-0">${escapeHtml(cardIcon)}</span>
+            <span class="text-xs font-black text-white truncate">${escapeHtml(cardTitle)}</span>
           </div>
-          <span class="text-[11px] font-extrabold text-emerald-300 truncate shrink-0">${effectDesc}</span>
+          <span class="text-[11px] font-extrabold text-emerald-300 truncate shrink-0">${escapeHtml(effectDesc)}</span>
         </div>
       </div>
     `;
@@ -304,18 +304,18 @@ function showVsDuelBanner(attackerName, cardIcon, cardTitle, defenderName, effec
       <div class="flex items-center justify-between gap-1.5 min-w-0">
         <div class="px-2 py-1 rounded-lg bg-slate-950 border border-amber-400 text-center shrink-0">
           <div class="text-[9px] text-amber-300 font-bold leading-none">⚔️攻方</div>
-          <div class="text-xs font-black text-white mt-0.5 whitespace-nowrap">${shortAtk}</div>
+          <div class="text-xs font-black text-white mt-0.5 whitespace-nowrap">${escapeHtml(shortAtk)}</div>
         </div>
         <div class="flex-1 rounded-lg bg-rose-950/95 border border-rose-400 px-2 py-1 flex items-center justify-between gap-1.5 min-w-0">
           <div class="flex items-center gap-1 min-w-0">
-            <span class="text-base leading-none shrink-0">${cardIcon}</span>
-            <span class="text-xs font-black text-amber-300 truncate">${cardTitle}</span>
+            <span class="text-base leading-none shrink-0">${escapeHtml(cardIcon)}</span>
+            <span class="text-xs font-black text-amber-300 truncate">${escapeHtml(cardTitle)}</span>
           </div>
-          <span class="px-1.5 py-0.5 rounded bg-rose-600 text-[10px] font-black text-white whitespace-nowrap shrink-0">${effectDesc}</span>
+          <span class="px-1.5 py-0.5 rounded bg-rose-600 text-[10px] font-black text-white whitespace-nowrap shrink-0">${escapeHtml(effectDesc)}</span>
         </div>
         <div class="px-2 py-1 rounded-lg bg-slate-950 border border-rose-400 text-center shrink-0">
           <div class="text-[9px] text-rose-300 font-bold leading-none">🎯目標</div>
-          <div class="text-xs font-black text-white mt-0.5 whitespace-nowrap">${shortDef}</div>
+          <div class="text-xs font-black text-white mt-0.5 whitespace-nowrap">${escapeHtml(shortDef)}</div>
         </div>
       </div>
     `;
@@ -361,7 +361,7 @@ function showTurnHandoverBanner(player, roundNumber) {
       </div>
       ${avatarHTML}
       <div class="text-lg sm:text-xl font-black text-white mt-1.5 leading-tight">
-        ${isMe ? `👑 輪到【${player.name}】行動！` : `😈 輪到【${player.name}】行動！`}
+        ${isMe ? `👑 輪到【${escapeHtml(player.name)}】行動！` : `😈 輪到【${escapeHtml(player.name)}】行動！`}
       </div>
       <div class="grid grid-cols-3 gap-1.5 mt-2.5 bg-slate-950/90 p-2 rounded-xl border border-slate-700">
         <div class="flex flex-col items-center">
@@ -479,7 +479,7 @@ function spawnFlyingCardVFX(fromSelector, toSelector, labelText, iconEmoji, bord
   flyer.style.justifyContent = 'center';
   flyer.style.padding = '3px';
   flyer.style.transition = 'transform 0.44s cubic-bezier(0.22, 1, 0.36, 1), opacity 0.44s ease';
-  flyer.innerHTML = `<div class="text-xl">${iconEmoji}</div><div class="text-[9px] font-black text-white text-center mt-0.5 leading-tight truncate w-full">${labelText}</div>`;
+  flyer.innerHTML = `<div class="text-xl">${escapeHtml(iconEmoji)}</div><div class="text-[9px] font-black text-white text-center mt-0.5 leading-tight truncate w-full">${escapeHtml(labelText)}</div>`;
   root.appendChild(flyer);
 
   requestAnimationFrame(() => {
@@ -882,7 +882,7 @@ function startLsOpeningCeremony(state, quickStart = false, onComplete = null) {
     scheduleCeremonyTimer(() => {
       if (typeof playSfx === 'function') playSfx('card');
       window.lsCeremony.visibleSeats.add(p.id);
-      window.lsCeremony.bannerText = `🪑 玩家入座 (${idx + 1}/${state.players.length})：【${getShortPlayerName(p.name)}】就位！`;
+      window.lsCeremony.bannerText = `🪑 玩家入座 (${idx + 1}/${state.players.length})：【${escapeHtml(getShortPlayerName(p.name))}】就位！`;
       renderLandscapeArena();
     }, tCursor);
     tCursor += seatStepMs;
@@ -1628,7 +1628,7 @@ function updateSettingsMenuUI() {
         takeoverBox.classList.remove('hidden');
         takeoverBox.innerHTML = `
           <button id="btnMenuHostTakeover" data-takeover-seat="${turnActor.id}" class="w-full py-2 px-3 rounded-xl bg-purple-900 border border-purple-400 text-xs font-black text-purple-100">
-            🤖 切換【${getShortPlayerName(turnActor.name)}】為 ${turnActor.isAI ? '真人手動控制' : 'AI 自動代打'}
+            🤖 切換【${escapeHtml(getShortPlayerName(turnActor.name))}】為 ${turnActor.isAI ? '真人手動控制' : 'AI 自動代打'}
           </button>
         `;
         document.getElementById('btnMenuHostTakeover')?.addEventListener('click', () => {
@@ -1717,7 +1717,7 @@ function renderAll() {
             <div class="flex items-center gap-1 shrink-0">
               ${state.players.map(p => `
                 <button data-switch-seat="${p.id}" class="px-1.5 py-0.5 rounded text-[9px] font-black border ${p.id === myId ? 'bg-emerald-500 text-slate-950 border-white shadow' : 'bg-slate-900 text-slate-300 border-slate-700'}">
-                  ${p.id.toUpperCase()} ${getShortPlayerName(p.name)}
+                  ${p.id.toUpperCase()} ${escapeHtml(getShortPlayerName(p.name))}
                 </button>
               `).join('')}
             </div>
@@ -1802,7 +1802,7 @@ function renderAll() {
       return `
         <button data-seat-tab="${pl.id}" data-mode-d-seat="${modeDSeatState || ''}" class="rounded-xl p-2 text-left transition flex flex-col justify-between gap-1 border ${pl.isEliminated ? 'bg-slate-950/80 border-slate-800 opacity-40' : modeDSeatState === 'VALID_TARGET' ? 'bg-rose-950/90 border-2 border-rose-400 targetable-seat-glow' : modeDSeatState === 'IMMUNE_TARGET' ? 'bg-slate-950/80 border-slate-700 opacity-60' : isTurn ? 'bg-indigo-950/90 border-2 border-amber-400 active-turn-seat' : 'bg-slate-900/95 border-slate-700'} ${activeTurnNotMe ? 'opacity-80' : ''} ${isNearBankrupt ? 'danger-pulse' : ''} min-w-0 shadow-lg">
           <div class="flex items-center justify-between w-full gap-1 min-w-0">
-            <span class="text-xs sm:text-sm font-black ${isTurn ? 'text-amber-300' : 'text-white'} truncate">${roleIcon} ${cleanShortName}</span>
+            <span class="text-xs sm:text-sm font-black ${isTurn ? 'text-amber-300' : 'text-white'} truncate">${roleIcon} ${escapeHtml(cleanShortName)}</span>
             ${turnBadge}
           </div>
           <div class="grid grid-cols-3 gap-1 w-full min-w-0">
@@ -1988,7 +1988,7 @@ function renderAll() {
         <div class="flex items-center justify-between gap-1.5 min-w-0">
           <div class="flex items-center gap-1.5 min-w-0 flex-1">
             <span class="px-1.5 py-0.5 rounded text-[10px] font-black whitespace-nowrap shrink-0 ${isMyTurnNow ? 'bg-amber-400 text-slate-950' : 'bg-slate-800 text-amber-300'}">👑 我方 (${myId.toUpperCase()})</span>
-            <span class="text-xs font-black text-white truncate">${getShortPlayerName(localPlayer.name)}</span>
+            <span class="text-xs font-black text-white truncate">${escapeHtml(getShortPlayerName(localPlayer.name))}</span>
             <span class="px-1.5 py-0.5 rounded bg-purple-950 border border-purple-400 text-[9px] font-black text-purple-200 whitespace-nowrap shrink-0">${terms.vpIcon || '👑'}${terms.vpName || '皇室'}:${getTotalVPCount(localPlayer)}</span>
           </div>
           <div class="flex items-center gap-1.5 shrink-0">
@@ -2227,7 +2227,7 @@ function renderLsOpponentSeatHTML(opp) {
   const visibleCrises = (opp.crises || []).filter(uid => !pendingCrises.has(uid));
   const crisisReq = visibleCrises.reduce((sum, uid) => sum + ((CARDS_BY_ID[uid] && CARDS_BY_ID[uid].val) || 0), 0);
   const burn = getPlayerBurnRate(opp);
-  const shortName = getShortPlayerName(opp.name);
+  const shortName = escapeHtml(getShortPlayerName(opp.name));
   const roleTag = opp.isAI ? '電腦' : '真人';
   const terms = typeof getThemeTerms === 'function' ? getThemeTerms() : {};
 
@@ -2387,9 +2387,9 @@ function renderLandscapeArena() {
     lsLogLinesEl.innerHTML = top3.map((line, idx) => {
       const cleanLine = line.replace(/^\[R\d+\]\s*/, '');
       if (idx === 0) {
-        return `<div class="text-[11px] sm:text-xs font-black text-amber-300 truncate leading-tight">${cleanLine}</div>`;
+        return `<div class="text-[11px] sm:text-xs font-black text-amber-300 truncate leading-tight">${escapeHtml(cleanLine)}</div>`;
       }
-      return `<div class="text-[9.5px] sm:text-[10px] font-semibold text-stone-400 truncate leading-tight">${cleanLine}</div>`;
+      return `<div class="text-[9.5px] sm:text-[10px] font-semibold text-stone-400 truncate leading-tight">${escapeHtml(cleanLine)}</div>`;
     }).join('');
   }
 
@@ -2550,7 +2550,7 @@ function renderLandscapeArena() {
         <div class="ls-seat-panel ls-my-seat-panel ${mySeatHiddenCls} ${isMyTurnNow ? 'ls-seat-active' : ''} h-full flex flex-col justify-between gap-1 overflow-hidden">
           <div class="flex items-center justify-between gap-1 px-0.5 shrink-0">
             <div class="flex items-center gap-1 min-w-0">
-              <span class="text-[11px] font-black text-stone-100 truncate">你·${getShortPlayerName(localPlayer.name)}</span>
+              <span class="text-[11px] font-black text-stone-100 truncate">你·${escapeHtml(getShortPlayerName(localPlayer.name))}</span>
               <span class="text-xs sm:text-sm font-black text-amber-300 leading-none whitespace-nowrap">${localPlayer.crystals}</span>
               <span class="text-[9px] font-bold text-stone-400 whitespace-nowrap">手${myVisibleHandCnt}</span>
             </div>
@@ -2657,7 +2657,7 @@ function renderLsModeDLeftCardColumnHTML(card) {
 }
 
 function renderLsOpponentComparisonCardHTML(opp, checkDept, isValid, actionAttr, subFooterText, btnLabel) {
-  const shortOpp = getShortPlayerName(opp.name);
+  const shortOpp = escapeHtml(getShortPlayerName(opp.name));
   const terms = typeof getThemeTerms === 'function' ? getThemeTerms() : {};
   const deptStrip = LS_DEPT_ORDER.map(d => renderLsDeptSlotHTML(opp, d, { highlightDept: checkDept, noInspect: true, isComp: true })).join('');
 
@@ -2880,7 +2880,7 @@ function renderModeDDrawer() {
       const newOutsourced = Math.max(0, newReq - opp.engineers.length);
       const addedOutsourced = newOutsourced - opp.outsourcedCount;
       const projBurn = curBurn + addedOutsourced * (opp.doubleBurnFlag ? 6 : 3);
-      const shortOpp = getShortPlayerName(opp.name);
+      const shortOpp = escapeHtml(getShortPlayerName(opp.name));
 
       if (!isValid) {
         return `
@@ -2933,7 +2933,7 @@ function renderModeDDrawer() {
         const bHeadUid = opp.departments.BLUE[0];
         const bHeadCard = bHeadUid ? CARDS_BY_ID[bHeadUid] : null;
         const isValid = status.validOpponents.includes(opp.id);
-        const shortOpp = getShortPlayerName(opp.name);
+        const shortOpp = escapeHtml(getShortPlayerName(opp.name));
         if (!isValid) {
           return `
             <div class="rounded-xl bg-slate-900/75 border border-slate-700 p-1.5 opacity-60 flex items-center gap-1.5 min-w-0">
@@ -2962,7 +2962,7 @@ function renderModeDDrawer() {
     } else {
       const opp = state.players.find(p => p.id === uiSelection.step2OpponentId);
       const allowedDepts = status.validBankByOpponent[opp.id] || [];
-      titleEl.textContent = `步驟2/2：點選要強塞給【${getShortPlayerName(opp.name)}】的魔物：`;
+      titleEl.textContent = `步驟2/2：點選要強塞給【${escapeHtml(getShortPlayerName(opp.name))}】的魔物：`;
       container.className = 'grid grid-cols-2 gap-1.5 w-full min-w-0';
       container.innerHTML = allowedDepts.map(d => {
         const emp = CARDS_BY_ID[state.jobBank[d][0]];
@@ -2997,7 +2997,7 @@ function renderModeDDrawer() {
     const buttons = [];
     aliveOpponents.forEach(opp => {
       const emps = status.targetableByOpponent[opp.id];
-      const shortOpp = getShortPlayerName(opp.name);
+      const shortOpp = escapeHtml(getShortPlayerName(opp.name));
       if (!emps || emps.length === 0) return;
       emps.forEach(eUid => {
         const emp = CARDS_BY_ID[eUid];
@@ -3029,7 +3029,7 @@ function renderModeDDrawer() {
       const opp = state.players.find(p => p.id === t.opponentId);
       const emp = CARDS_BY_ID[t.empUid];
       const meta = DEPT_META[emp.dept];
-      const shortOpp = getShortPlayerName(opp.name);
+      const shortOpp = escapeHtml(getShortPlayerName(opp.name));
       return `
         <button data-d-action="CONFIRM_VP_KICK" data-opp-id="${opp.id}" data-emp-uid="${emp.uid}" class="rounded-xl bg-purple-950/90 border-2 border-purple-400 p-1.5 text-left shadow-lg flex items-center gap-1.5 min-w-0">
           ${getPortraitHTML(emp)}
@@ -3053,7 +3053,7 @@ function renderModeDDrawer() {
     container.className = `grid ${aliveOpponents.length > 1 ? 'grid-cols-2' : 'grid-cols-1'} gap-1.5 w-full min-w-0`;
     container.innerHTML = aliveOpponents.map(opp => {
       const burn = getPlayerBurnRate(opp);
-      const shortOpp = getShortPlayerName(opp.name);
+      const shortOpp = escapeHtml(getShortPlayerName(opp.name));
       return `
         <button data-d-action="CONFIRM_DOUBLE_PAY" data-opp-id="${opp.id}" class="rounded-xl bg-rose-950/90 border-2 border-rose-400 p-2 text-left shadow-lg flex flex-col justify-between gap-1 min-w-0">
           <div class="flex items-center justify-between">
@@ -3153,7 +3153,7 @@ function renderModeDDrawer() {
         const addedOutsourced = newOutsourced - opp.outsourcedCount;
         const projBurn = curBurn + addedOutsourced * (opp.doubleBurnFlag ? 6 : 3);
         const subText = `${terms.engIcon || '⚒'}${opp.engineers.length} · 🔥-${curBurn}➔-${projBurn}/回`;
-        const btnLabel = isValid ? `⚔️ 攻擊 ${getShortPlayerName(opp.name)} (×${card.val})` : `🛡️ ${DEPT_META.YELLOW.short}${oppSkill}級免疫`;
+        const btnLabel = isValid ? `⚔️ 攻擊 ${escapeHtml(getShortPlayerName(opp.name))} (×${card.val})` : `🛡️ ${DEPT_META.YELLOW.short}${oppSkill}級免疫`;
         return renderLsOpponentComparisonCardHTML(opp, 'YELLOW', isValid, `data-d-action="CONFIRM_BAD_IDEA" data-opp-id="${opp.id}"`, subText, btnLabel);
       }).join('');
       const oppGridCls = aliveOpponents.length >= 3 ? 'ls-moded-opp-grid-3' : aliveOpponents.length === 2 ? 'ls-moded-opp-grid-2' : 'ls-moded-opp-grid-1';
@@ -3211,7 +3211,7 @@ function renderModeDDrawer() {
       }).join('');
       rightPanelHTML = `
         <div class="flex items-center justify-between gap-2">
-          <span class="text-[10.5px] font-bold text-amber-200 truncate">步驟 2/2：點選人才池頂牌強塞給【${getShortPlayerName(opp.name)}】：</span>
+          <span class="text-[10.5px] font-bold text-amber-200 truncate">步驟 2/2：點選人才池頂牌強塞給【${escapeHtml(getShortPlayerName(opp.name))}】：</span>
           <button data-d-action="BACK_FORCE_STEP1" class="px-2 py-0.5 rounded bg-stone-800 border border-stone-600 text-[10px] font-bold text-sky-300 shrink-0">⬅ 重選對手</button>
         </div>
         <div class="ls-moded-scroll-row my-auto">
@@ -3291,10 +3291,10 @@ function renderModeDDrawer() {
         `<button data-d-action="FILTER_POACH_OPP" data-opp-id="ALL" class="ls-poach-filter-pill ${activeFilter === 'ALL' ? 'ls-poach-tab-all-active' : ''}">📋 全部對手 (${totalPoachCount})</button>`,
         ...poachableOpps.map(({ opp, list, theme }) => {
           const isAct = activeFilter === opp.id;
-          return `<button data-d-action="FILTER_POACH_OPP" data-opp-id="${opp.id}" class="ls-poach-filter-pill ${isAct ? theme.tabActiveCls : ''}">${theme.dot} ${getShortPlayerName(opp.name)} (${list.length}人 · ${terms.currencyIcon || '💎'}${opp.crystals})</button>`;
+          return `<button data-d-action="FILTER_POACH_OPP" data-opp-id="${opp.id}" class="ls-poach-filter-pill ${isAct ? theme.tabActiveCls : ''}">${theme.dot} ${escapeHtml(getShortPlayerName(opp.name))} (${list.length}人 · ${terms.currencyIcon || '💎'}${opp.crystals})</button>`;
         }),
         ...immuneOpps.map(({ opp, blueSkill }) => {
-          return `<span class="ls-poach-filter-pill opacity-45 pointer-events-none">🛡️ ${getShortPlayerName(opp.name)} (${DEPT_META.BLUE.short}${blueSkill}級免疫)</span>`;
+          return `<span class="ls-poach-filter-pill opacity-45 pointer-events-none">🛡️ ${escapeHtml(getShortPlayerName(opp.name))} (${DEPT_META.BLUE.short}${blueSkill}級免疫)</span>`;
         })
       ].join('');
 
@@ -3304,7 +3304,7 @@ function renderModeDDrawer() {
         : poachableOpps.filter(o => o.opp.id === activeFilter);
 
       const groupsHTML = visibleGroups.map(({ opp, list, theme }) => {
-        const shortOpp = getShortPlayerName(opp.name);
+        const shortOpp = escapeHtml(getShortPlayerName(opp.name));
         const oppBurn = getPlayerBurnRate(opp);
         const cardsHTML = list.map(eUid => {
           const emp = CARDS_BY_ID[eUid];
@@ -3378,7 +3378,7 @@ function renderModeDDrawer() {
         const oppVPs = status.targetVPs.filter(t => t.opponentId === opp.id);
         if (oppVPs.length === 0) return;
         const theme = oppThemes[idx % oppThemes.length];
-        const shortOpp = getShortPlayerName(opp.name);
+        const shortOpp = escapeHtml(getShortPlayerName(opp.name));
         const cardsHTML = oppVPs.map(item => {
           const vpCard = CARDS_BY_ID[item.empUid];
           return `
@@ -3434,7 +3434,7 @@ function renderModeDDrawer() {
       const oppGridHTML = aliveOpponents.map(opp => {
         const burn = getPlayerBurnRate(opp);
         const subText = `${terms.engIcon || '⚒'}${opp.engineers.length} · 🔥-${burn} ➔ 🔥-${burn * 2}/回`;
-        const btnLabel = `🔥 翻倍 ${getShortPlayerName(opp.name)} (-${burn * 2})`;
+        const btnLabel = `🔥 翻倍 ${escapeHtml(getShortPlayerName(opp.name))} (-${burn * 2})`;
         return renderLsOpponentComparisonCardHTML(opp, null, true, `data-d-action="CONFIRM_DOUBLE_PAY" data-opp-id="${opp.id}"`, subText, btnLabel);
       }).join('');
       const oppGridCls = aliveOpponents.length >= 3 ? 'ls-moded-opp-grid-3' : aliveOpponents.length === 2 ? 'ls-moded-opp-grid-2' : 'ls-moded-opp-grid-1';
@@ -4158,7 +4158,7 @@ function renderLobbyUI() {
             <div class="rounded-xl p-2 seat-card-human flex items-center justify-between gap-2">
               <div class="min-w-0">
                 <div class="text-[10px] font-black text-emerald-300">👑 座位 P1 (房主本人)</div>
-                <div class="text-xs font-black text-white truncate">${gameSession.playerName}</div>
+                <div class="text-xs font-black text-white truncate">${escapeHtml(gameSession.playerName)}</div>
               </div>
               <span class="px-2 py-0.5 rounded bg-emerald-500 text-slate-950 text-[10px] font-black shrink-0">✔ 已就緒</span>
             </div>
@@ -4173,7 +4173,7 @@ function renderLobbyUI() {
           <div class="rounded-xl p-2 ${cardCls} flex items-center justify-between gap-2">
             <div class="min-w-0 flex-1">
               <div class="text-[10px] font-black ${isHumanJoined ? 'text-emerald-300' : isAI ? 'text-indigo-300' : 'text-amber-300'}">座位 ${s.id.toUpperCase()} · ${badgeText}</div>
-              <div class="text-xs font-bold text-white truncate">${s.name}</div>
+              <div class="text-xs font-bold text-white truncate">${escapeHtml(s.name)}</div>
             </div>
             <button data-toggle-seat-role="${s.id}" class="px-2 py-1 rounded-lg bg-slate-950 border border-slate-600 text-[10px] font-black text-amber-300 shrink-0">
               ${isAI ? '改為等待真人' : '改由 AI 補位'}
@@ -4198,7 +4198,7 @@ function renderLobbyUI() {
       if (gameSession.mode === 'CLIENT' && gameSession.roomCode) {
         const pCount = gameSession.lobbyState.playerCount || 3;
         const visibleSeats = (gameSession.lobbyState.seats || []).slice(0, pCount);
-        const mySeat = visibleSeats.find(s => s.id === gameSession.localSeatId && s.clientToken === gameSession.clientToken);
+        const mySeat = visibleSeats.find(s => s.id === gameSession.localSeatId && s.role === 'HUMAN');
 
         if (mySeat) {
           const ruleLabel = gameSession.lobbyState.playDiscardMode === 'STRICT_EITHER' ? '標準二選一' : '流暢共用4額度';
@@ -4214,7 +4214,7 @@ function renderLobbyUI() {
               <div class="rounded-xl p-2 ${cardCls} flex items-center justify-between gap-2">
                 <div class="min-w-0">
                   <div class="text-[10px] font-black ${isMe ? 'text-amber-300' : isHuman ? 'text-emerald-300' : isAI ? 'text-indigo-300' : 'text-slate-400'}">座位 ${s.id.toUpperCase()} · ${roleBadge}</div>
-                  <div class="text-xs font-black text-white truncate">${s.name}</div>
+                  <div class="text-xs font-black text-white truncate">${escapeHtml(s.name)}</div>
                 </div>
                 <span class="px-2 py-0.5 rounded ${isHuman || isAI ? 'bg-emerald-950 border border-emerald-400 text-emerald-300' : 'bg-slate-900 text-amber-300'} text-[10px] font-black shrink-0">
                   ${isHuman || isAI ? '✔ 就緒' : '等待中'}
@@ -4569,7 +4569,7 @@ function initAppOnLoad() {
   const openLogFn = () => {
     document.getElementById('settingsMenuModal')?.classList.add('hidden');
     document.getElementById('battleLogModalList').innerHTML = gameState.logs
-      .map((l, i) => `<div class="${i === 0 ? 'text-amber-300 font-bold' : 'text-slate-300'} border-b border-slate-800 pb-1">${l}</div>`)
+      .map((l, i) => `<div class="${i === 0 ? 'text-amber-300 font-bold' : 'text-slate-300'} border-b border-slate-800 pb-1">${escapeHtml(l)}</div>`)
       .join('');
     document.getElementById('logModal').classList.remove('hidden');
   };
