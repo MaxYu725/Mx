@@ -689,7 +689,7 @@ function handleIncomingNetworkPacket(packet, transport, peerConn) {
     }
 
     if (packet.msgType === 'JOIN_REJECTED' && packet.targetToken === gameSession.clientToken) {
-      showToast(`❌ 加入失敗：${packet.reason}`);
+      setPeerConnectionStatus('FAILED', '加入失敗：' + (packet.reason || '房主拒絕連線'));
       return;
     }
 
