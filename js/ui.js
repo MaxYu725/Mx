@@ -4240,6 +4240,11 @@ function renderLobbyUI() {
                 <div>
                   <div class="text-xs font-black text-emerald-300"><span class="online-dot-pulse mr-1"></span>已進入房間【${gameSession.roomCode}】候戰室</div>
                   <div class="text-[10px] text-slate-200 mt-0.5">${pCount} 人局 ｜ ${ruleLabel} ｜ ${fogLabel}</div>
+                  ${gameSession.peerStatus !== 'ONLINE'
+                    ? '<div class="text-[10px] text-amber-200 mt-1">⚠️ ' +
+                      escapeHtml(gameSession.connectionError || '訊號連線恢復中；如果仍可操作，原有 WebRTC 對局可以繼續。') +
+                      '</div>'
+                    : ''}
                 </div>
                 <span class="px-2 py-1 rounded-lg bg-amber-400 text-slate-950 text-xs font-black shrink-0">座位 ${gameSession.localSeatId.toUpperCase()}</span>
               </div>
@@ -4674,6 +4679,14 @@ function initAppOnLoad() {
   document.querySelectorAll('[data-lobby-tab]').forEach(btn => {
     btn.addEventListener('click', () => {
       const tab = btn.getAttribute('data-lobby-tab');
+      // A live host is the authority for every joined client. Switching this
+      // same tab to SOLO/CLIENT would silently abandon the room.
+      if (gameSession.mode === 'HOST' && gameSession.roomCode && tab !== 'HOST') {
+        activeLobbyTab = 'HOST';
+        showToast('⚠️ 此頁正在主持連線房間。請保留房主視窗，在另一個無痕視窗或裝置加入。', 5200);
+        renderLobbyUI();
+        return;
+      }
       activeLobbyTab = tab;
       if (tab === 'HOST' && (gameSession.mode !== 'HOST' || !gameSession.roomCode)) {
         createOnlineHostRoom();
