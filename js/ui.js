@@ -4134,13 +4134,24 @@ function renderLobbyUI() {
 
     const codeDisplay = document.getElementById('hostRoomCodeText');
     if (codeDisplay) codeDisplay.textContent = gameSession.roomCode || '--------';
+    const fogCheckbox = document.getElementById('chkFogOfWar');
+    if (fogCheckbox) {
+      const statusText = fogCheckbox.nextElementSibling?.querySelector('strong');
+      if (statusText) statusText.textContent = fogCheckbox.checked
+        ? '🔒 戰爭迷霧：已開啟（建議）'
+        : '🔓 戰爭迷霧：已關閉（手牌可能公開）';
+    }
 
     const statusBadge = document.getElementById('hostNetStatusBadge');
     if (statusBadge) {
       const st = gameSession.peerStatus;
       statusBadge.innerHTML = st === 'ONLINE'
-        ? `<span class="online-dot-pulse mr-1"></span>PeerJS 跨網 ＋ 跨分頁雙軌就緒`
-        : `<span class="online-dot-pulse mr-1"></span>跨分頁即時通道就緒 (PeerJS ${st === 'CONNECTING' ? '連線中' : '待機'})`;
+        ? '<span class="online-dot-pulse mr-1"></span>✅ PeerJS 跨網連線就緒，可分享房號'
+        : st === 'CONNECTING'
+          ? '⏳ 正在連接 PeerJS 訊號伺服器，暫時不可入房'
+          : st === 'FAILED'
+            ? '<span class="text-rose-300">❌ ' + escapeHtml(gameSession.connectionError || '跨網連線失敗，請重新開房') + '</span>'
+            : '⚠️ 跨網連線尚未建立，請重新開房';
     }
 
     const pCount = parseInt(document.getElementById('selectPlayerCount')?.value, 10) || gameSession.lobbyState.playerCount || 3;
@@ -4237,9 +4248,13 @@ function renderLobbyUI() {
             </div>
           `;
         } else {
+          const failure = gameSession.peerStatus === 'FAILED';
           statusBox.innerHTML = `
-            <div class="rounded-xl p-2.5 seat-card-waiting text-xs text-amber-200 font-bold">
-              🔄 正在連線至房間【${gameSession.roomCode}】並同步候戰室席位...
+            <div class="rounded-xl p-2.5 ${failure ? 'border border-rose-500 bg-rose-950/50 text-rose-200' : 'seat-card-waiting text-amber-200'} text-xs font-bold">
+              ${failure
+                ? '❌ ' + escapeHtml(gameSession.connectionError || '跨網連線失敗，請重新入房。')
+                : '⏳ 正在使用 PeerJS 連接房間【' + escapeHtml(gameSession.roomCode) + '】並驗證玩家身份...'}
+              ${failure ? '<div class="text-[10px] mt-1 text-rose-100">請確認房主已開房並顯示 PeerJS 連線就緒；按上方「連線入房」重試。</div>' : ''}
             </div>
           `;
         }
