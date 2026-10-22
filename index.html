@@ -13,8 +13,7 @@
   <link rel="icon" type="image/png" sizes="192x192" href="icons/icon-192.png" />
   <link rel="apple-touch-icon" href="icons/icon-192.png" />
   <link rel="stylesheet" href="css/style.css" />
-  <!-- PeerJS WebRTC DataChannel CDN for Cross-Device Room Code Multiplayer -->
-  <script src="https://unpkg.com/peerjs@1.5.4/dist/peerjs.min.js" async></script>
+  <!-- PeerJS is loaded on demand by js/session.js, with CDN fallback and errors. -->
 </head>
 <body class="flex flex-col h-full w-full overflow-hidden safe-area-body">
 
@@ -564,6 +563,11 @@
             </div>
           </div>
 
+          <label class="flex items-start gap-2 rounded-xl bg-indigo-950/60 border border-indigo-400/70 px-2.5 py-2 text-[11px] text-indigo-100 cursor-pointer">
+            <input id="chkFogOfWar" type="checkbox" checked class="mt-0.5 shrink-0 accent-indigo-400" />
+            <span><strong>🔒 戰爭迷霧：已預設開啟</strong><span class="block text-[10px] text-indigo-200/80 mt-0.5">多人對戰安全模式，只讓每位玩家看見自己的手牌。此模式必須使用 PeerJS 跨網連線。</span></span>
+          </label>
+
           <div class="grid grid-cols-3 gap-1.5">
             <button id="btnCopyRoomCode" class="py-1.5 px-2 rounded-lg bg-slate-800 border border-slate-600 text-[11px] font-bold text-white">
               📋 複製房號
@@ -583,10 +587,7 @@
             <div id="hostSeatsRosterGrid" class="space-y-1.5"></div>
           </div>
 
-          <label class="flex items-center gap-2 pt-1 text-[11px] text-slate-300 cursor-pointer">
-            <input id="chkFogOfWar" type="checkbox" checked />
-            <span>🔒 啟用戰爭迷霧（遮罩其他玩家未公開手牌與未翻開牌庫序列）</span>
-          </label>
+
         </div>
 
         <!-- PANEL C: CLIENT JOIN ROOM & WAITING ROOM ROSTER -->
