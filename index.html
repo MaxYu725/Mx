@@ -213,7 +213,7 @@
 
       <!-- Bottom-Right: My 6 Hand Cards + Right-Side Quota/Discard/End Controls -->
       <div id="lsMyHandDock" class="w-[61%] min-w-0 h-full rounded-2xl bg-stone-950/90 border border-amber-500/35 px-2.5 py-1.5 flex items-stretch justify-between gap-2 shadow-2xl">
-        <div id="lsHandContainer" class="flex-1 min-w-0 h-full flex items-center gap-1.5 overflow-x-auto no-scrollbar py-0.5">
+        <div id="lsHandContainer" class="ls-hand-strip py-0.5">
         </div>
         <div id="lsActionControlsCol" class="w-[84px] sm:w-[96px] shrink-0 h-full flex flex-col justify-between items-center border-l border-amber-500/20 pl-2 py-0.5">
         </div>
@@ -306,13 +306,21 @@
               <span class="text-[10px] text-slate-400">設定將自動記憶</span>
             </div>
 
-            <!-- Theme Switcher -->
-            <div class="flex items-center gap-2">
-              <label for="homeSelectTheme" class="text-amber-300 font-black whitespace-nowrap shrink-0">🎨 遊戲主題：</label>
-              <select id="homeSelectTheme" class="flex-1 bg-slate-900 border-2 border-amber-400 rounded-lg px-2 py-1 text-amber-300 font-black text-xs min-w-0">
-                <option value="CLASSIC_BURN_RATE" selected>💼 原版 Burn Rate (新創商戰·全卡插畫)</option>
-                <option value="DEMON_CASTLE">🏰 深淵魔王城 (魔界奇幻·全卡插畫)</option>
+            <!-- Theme Switcher (In-DOM Segmented Buttons so rotated landscape never opens unrotated OS picker) -->
+            <div class="space-y-1">
+              <label class="block text-[10px] font-black text-amber-300">🎨 遊戲主題（點擊即切）：</label>
+              <select id="homeSelectTheme" class="hidden">
+                <option value="CLASSIC_BURN_RATE" selected>💼 原版 Burn Rate</option>
+                <option value="DEMON_CASTLE">🏰 深淵魔王城</option>
               </select>
+              <div class="grid grid-cols-2 gap-1.5">
+                <button type="button" data-seg-select="homeSelectTheme" data-seg-val="CLASSIC_BURN_RATE" class="seg-pill-btn seg-pill-active py-1.5 px-2 rounded-lg text-[11px] font-black truncate">
+                  💼 原版 Burn Rate
+                </button>
+                <button type="button" data-seg-select="homeSelectTheme" data-seg-val="DEMON_CASTLE" class="seg-pill-btn py-1.5 px-2 rounded-lg text-[11px] font-black truncate">
+                  🏰 深淵魔王城
+                </button>
+              </div>
             </div>
 
             <!-- Player Nickname -->
@@ -321,22 +329,31 @@
               <input id="homeInputNickname" type="text" maxlength="16" value="新創執行長" class="flex-1 bg-slate-900 border border-amber-500/50 rounded-lg px-2.5 py-1 text-white font-black text-xs min-w-0" />
             </div>
 
-            <!-- Player Count & Play/Discard Rule -->
+            <!-- Player Count & Play/Discard Rule (In-DOM Segmented Buttons) -->
             <div class="grid grid-cols-2 gap-2">
               <div>
-                <label for="homeSelectPlayerCount" class="block text-[10px] font-bold text-slate-400 mb-0.5">👥 單機對戰人數：</label>
-                <select id="homeSelectPlayerCount" class="w-full bg-slate-900 border border-slate-700 rounded-lg px-2 py-1 text-white font-bold text-xs">
-                  <option value="2">2 人對決 (1v1)</option>
-                  <option value="3" selected>3 人混戰 (推薦)</option>
+                <label class="block text-[10px] font-bold text-slate-400 mb-1">👥 單機對戰人數：</label>
+                <select id="homeSelectPlayerCount" class="hidden">
+                  <option value="2">2 人對決</option>
+                  <option value="3" selected>3 人混戰</option>
                   <option value="4">4 人標準局</option>
                 </select>
+                <div class="grid grid-cols-3 gap-1">
+                  <button type="button" data-seg-select="homeSelectPlayerCount" data-seg-val="2" class="seg-pill-btn py-1 px-1 rounded-lg text-[11px] font-black">2人</button>
+                  <button type="button" data-seg-select="homeSelectPlayerCount" data-seg-val="3" class="seg-pill-btn seg-pill-active py-1 px-1 rounded-lg text-[11px] font-black">3人</button>
+                  <button type="button" data-seg-select="homeSelectPlayerCount" data-seg-val="4" class="seg-pill-btn py-1 px-1 rounded-lg text-[11px] font-black">4人</button>
+                </div>
               </div>
               <div>
-                <label for="homeSelectRule" class="block text-[10px] font-bold text-slate-400 mb-0.5">⚖️ 出牌/棄牌規則：</label>
-                <select id="homeSelectRule" class="w-full bg-slate-900 border border-slate-700 rounded-lg px-2 py-1 text-amber-300 font-bold text-xs">
+                <label class="block text-[10px] font-bold text-slate-400 mb-1">⚖️ 出牌/棄牌規則：</label>
+                <select id="homeSelectRule" class="hidden">
                   <option value="STRICT_EITHER" selected>標準二選一</option>
                   <option value="SHARED_QUOTA_4">流暢共用4額度</option>
                 </select>
+                <div class="grid grid-cols-2 gap-1">
+                  <button type="button" data-seg-select="homeSelectRule" data-seg-val="STRICT_EITHER" class="seg-pill-btn seg-pill-active py-1 px-1 rounded-lg text-[10px] font-black truncate">二選一</button>
+                  <button type="button" data-seg-select="homeSelectRule" data-seg-val="SHARED_QUOTA_4" class="seg-pill-btn py-1 px-1 rounded-lg text-[10px] font-black truncate">4額度</button>
+                </div>
               </div>
             </div>
 

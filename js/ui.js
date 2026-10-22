@@ -1262,7 +1262,7 @@ function renderAll() {
 
 
 // ============================================================================
-// V13.9 LANDSCAPE TABLETOP MODE RENDERER (橫屏圓桌模式 — 四家圍桌 + 橢圓中央牌桌)
+// V13.9.2 LANDSCAPE TABLETOP MODE RENDERER (橫屏圓桌模式 — 純淨卡面 + 零溢出雙欄指揮窗)
 // ============================================================================
 const LS_DEPT_ORDER = ['BLUE', 'RED', 'YELLOW', 'GREEN'];
 
@@ -1276,39 +1276,35 @@ const LS_EMPTY_DEPT_STYLE = {
 function renderLsDeptSlotHTML(player, d, opts = {}) {
   const meta = DEPT_META[d];
   const st = LS_EMPTY_DEPT_STYLE[d] || LS_EMPTY_DEPT_STYLE.RED;
-  const terms = typeof getThemeTerms === 'function' ? getThemeTerms() : {};
   const list = player.departments[d] || [];
   const headUid = list[0];
   const subCount = Math.max(0, list.length - 1);
   const effSkill = getEffectiveSkill(player, d);
-  const deptSalary = list.reduce((acc, u) => acc + (CARDS_BY_ID[u] ? CARDS_BY_ID[u].salary : 0), 0);
   const isHighlighted = opts.highlightDept === d;
+  const isComp = Boolean(opts.isComp);
+  const baseCardCls = isComp ? 'ls-comp-dept-card' : 'ls-dept-card';
   const glowCls = isHighlighted ? 'ls-dept-target-glow' : `border ${st.border}`;
   const clickAttrs = opts.noInspect ? '' : (headUid ? `data-inspect-dept="${d}" data-inspect-player="${player.id}"` : `data-empty-dept="${d}"`);
 
   if (!headUid) {
     return `
-      <div ${clickAttrs} class="ls-dept-card ${st.bg} ${glowCls} flex flex-col justify-between items-center p-1 select-none">
-        <div class="w-full text-center text-[8px] font-black ${st.text} opacity-80 truncate">${meta.short}</div>
-        <div class="text-[11px] font-black ${st.text} opacity-75 my-auto">缺</div>
-        <div class="w-full text-center text-[8px] font-bold text-slate-400/80">0級</div>
+      <div ${clickAttrs} class="${baseCardCls} ${st.bg} ${glowCls} flex flex-col justify-between items-center p-0.5 select-none">
+        <div class="w-full text-center text-[7px] font-black ${st.text} opacity-85 truncate">${meta.short}</div>
+        <div class="text-[10px] font-black ${st.text} opacity-80 my-auto">缺</div>
+        <div class="w-full text-center text-[7px] font-bold ${isHighlighted ? 'text-amber-300 font-black' : 'text-slate-400/80'}">0級</div>
       </div>
     `;
   }
 
   const hCard = CARDS_BY_ID[headUid];
-  const roleLabel = hCard.isVP ? (terms.vpName || '副總') : (terms.mgrName || '經理');
   const artKey = hCard.artKey || hCard.tplId;
 
+  // Pure 2:3 Card Art (No redundant top bar or bottom orbs covering the card art!)
   return `
-    <div ${clickAttrs} class="ls-dept-card ${glowCls} bg-slate-950 select-none">
+    <div ${clickAttrs} class="${baseCardCls} ${glowCls} bg-slate-950 select-none">
       ${getCardImgTag(artKey, hCard.title, 'w-full h-full object-cover block')}
-      <div class="absolute top-0 inset-x-0 ${st.headerBg} py-0.5 px-1 flex items-center justify-center z-10 shadow">
-        <span class="text-[8px] font-black text-white leading-none truncate">${roleLabel}</span>
-      </div>
+      ${isHighlighted ? `<span class="absolute top-0.5 left-0.5 px-1 py-0.2 rounded bg-amber-400 text-slate-950 text-[8px] font-black leading-none z-20 shadow">${effSkill}級</span>` : ''}
       ${subCount > 0 ? `<span class="absolute bottom-0.5 left-1/2 -translate-x-1/2 px-1 py-0.2 rounded bg-slate-950/90 border border-amber-400/80 text-[8px] font-black text-amber-300 leading-none z-20 whitespace-nowrap">+${subCount}</span>` : ''}
-      <span class="ls-orb-skill" title="部門有效技能 ${effSkill} 級">${effSkill}</span>
-      <span class="ls-orb-salary" title="部門總薪資負擔 -${deptSalary}/回">${deptSalary}</span>
     </div>
   `;
 }
@@ -1316,7 +1312,6 @@ function renderLsDeptSlotHTML(player, d, opts = {}) {
 function renderLsBankCardHTML(d, topUid, deckLen) {
   const meta = DEPT_META[d];
   const st = LS_EMPTY_DEPT_STYLE[d] || LS_EMPTY_DEPT_STYLE.RED;
-  const terms = typeof getThemeTerms === 'function' ? getThemeTerms() : {};
   if (!topUid) {
     return `
       <div class="ls-dept-card ${st.bg} border border-dashed ${st.border} flex flex-col items-center justify-center p-1 opacity-60">
@@ -1326,17 +1321,10 @@ function renderLsBankCardHTML(d, topUid, deckLen) {
     `;
   }
   const c = CARDS_BY_ID[topUid];
-  const roleLabel = c.role === 'ENGINEER' ? (terms.engName || '工程師') : c.isVP ? (terms.vpName || '副總') : (terms.mgrName || '經理');
-  const skillVal = c.role === 'ENGINEER' ? '工' : c.skill;
   return `
     <button data-open-bank-dept="${d}" class="ls-dept-card border ${st.border} bg-slate-950">
       ${getCardImgTag(c.artKey || c.tplId, c.title, 'w-full h-full object-cover block')}
-      <div class="absolute top-0 inset-x-0 ${st.headerBg} py-0.5 px-1 flex items-center justify-between z-10">
-        <span class="text-[8px] font-black text-white leading-none truncate">${roleLabel}</span>
-        <span class="text-[7px] font-bold text-amber-200 leading-none">${deckLen}</span>
-      </div>
-      <span class="ls-orb-skill">${skillVal}</span>
-      <span class="ls-orb-salary">${c.salary}</span>
+      <span class="absolute top-0.5 right-0.5 px-1 py-0.2 rounded bg-slate-950/90 border border-amber-400/70 text-[8px] font-black text-amber-300 leading-none z-20 shadow">剩${deckLen}</span>
     </button>
   `;
 }
@@ -1368,10 +1356,10 @@ function renderLsOpponentSeatHTML(opp) {
   }
 
   return `
-    <div data-ls-seat="${opp.id}" data-seat-tab="${opp.id}" ${modeDSeatAttr} class="ls-seat-panel ${isTurn ? 'ls-seat-active' : ''} ${targetRingCls} ${opp.isEliminated ? 'opacity-45 grayscale' : ''} w-full h-full flex flex-col justify-between gap-1 cursor-pointer min-w-0 overflow-hidden">
+    <div data-ls-seat="${opp.id}" data-seat-tab="${opp.id}" ${modeDSeatAttr} class="ls-seat-panel ${isTurn ? 'ls-seat-active' : ''} ${targetRingCls} ${opp.isEliminated ? 'opacity-45 grayscale' : ''} w-full h-full flex flex-col justify-between gap-0.5 cursor-pointer min-w-0 overflow-hidden">
       <div class="flex items-center justify-between gap-1 min-w-0 shrink-0 px-0.5">
         <div class="flex items-center gap-1 min-w-0">
-          <span class="text-[11px] font-black text-stone-200 truncate">${shortName} · ${roleTag}</span>
+          <span class="text-[11px] font-black text-stone-200 truncate">${shortName}·${roleTag}</span>
           <span class="text-sm sm:text-base font-black text-amber-300 leading-none whitespace-nowrap">${opp.crystals}</span>
           <span class="text-[10px] font-bold text-stone-400 whitespace-nowrap">手${opp.hand.length}</span>
         </div>
@@ -1425,7 +1413,7 @@ function renderLsTableMiniActionCardHTML(card, countBadge = null, topSubLabel = 
         <span>${vis.tag}</span>
         ${topSubLabel ? `<span class="truncate max-w-[38px] text-amber-200">${topSubLabel}</span>` : `<span>${vis.badge}</span>`}
       </div>
-      <div class="flex-1 bg-gradient-to-b ${vis.artBg} flex flex-col items-center justify-center p-0.5 text-center relative">
+      <div class="flex-1 ${vis.artBg} flex flex-col items-center justify-center p-0.5 text-center relative">
         <span class="text-base sm:text-lg leading-none drop-shadow">${card.svg}</span>
         <span class="text-[8px] font-black text-white mt-0.5 drop-shadow">${vis.badge}</span>
       </div>
@@ -1440,27 +1428,27 @@ function renderLsTableMiniActionCardHTML(card, countBadge = null, topSubLabel = 
 function renderLsHandCardHTML(card, status, isSelected, isDiscardSel, isHumanStep1) {
   const vis = getActionCategoryVisuals(card);
   const reqOrbs = (card.reqSkills && card.reqSkills.length > 0)
-    ? `<div class="flex items-center justify-end gap-0.5">${card.reqSkills.map(s => `<span class="w-3.5 h-3.5 rounded-full bg-amber-600 text-white text-[8px] font-black flex items-center justify-center leading-none">${s}</span>`).join('')}</div>`
-    : `<span class="text-[7px] font-bold text-slate-500">${card.dept === 'PURPLE' ? '2副總' : '免檢定'}</span>`;
+    ? `<div class="flex items-center justify-center gap-0.5">${card.reqSkills.map(s => `<span class="w-3.5 h-3.5 rounded-full bg-amber-600 text-white text-[8px] font-black flex items-center justify-center leading-none">${s}</span>`).join('')}</div>`
+    : `<span class="text-[7px] font-extrabold text-slate-600">${card.dept === 'PURPLE' ? '2副總' : '免檢定'}</span>`;
 
   const dimCls = (isHumanStep1 && uiSelection.mode !== 'DISCARD_SELECT' && !status.playable) ? 'opacity-45 grayscale-[35%]' : '';
   const selCls = isSelected ? 'ls-hand-selected' : isDiscardSel ? 'ls-hand-discard-sel' : '';
 
   return `
     <div data-act-uid="${card.uid}" class="ls-hand-card ${selCls} ${dimCls} select-none">
-      <div class="${vis.headerBg} px-1.5 py-0.5 text-[8px] font-black text-white flex items-center justify-between leading-none shrink-0">
-        <span>${vis.tag}</span>
-        <span>${vis.badge}</span>
+      <div class="${vis.headerBg} px-1 py-0.5 text-[8px] font-black text-white flex items-center justify-between leading-none shrink-0">
+        <span class="truncate">${vis.tag}</span>
+        <span class="shrink-0">${vis.badge}</span>
       </div>
-      <div class="flex-1 min-h-0 bg-gradient-to-b ${vis.artBg} flex flex-col items-center justify-center p-1 relative overflow-hidden">
-        <div class="text-xl sm:text-2xl leading-none drop-shadow-md">${card.svg}</div>
-        <div class="mt-1 px-1.5 py-0.2 rounded bg-black/45 text-[9px] font-black text-amber-200 whitespace-nowrap">${vis.badge}</div>
-        ${isDiscardSel ? `<div class="absolute inset-0 bg-orange-600/80 flex items-center justify-center text-xs font-black text-white">🗑️待棄置</div>` : ''}
+      <div class="flex-1 min-h-0 ${vis.artBg} flex flex-col items-center justify-center p-0.5 relative overflow-hidden">
+        <div class="text-lg sm:text-xl leading-none drop-shadow-md">${card.svg}</div>
+        <div class="mt-0.5 px-1 py-0.2 rounded bg-black/50 text-[8px] font-black text-amber-200 whitespace-nowrap">${vis.badge}</div>
+        ${isDiscardSel ? `<div class="absolute inset-0 bg-orange-600/85 flex items-center justify-center text-[10px] font-black text-white">🗑️待棄</div>` : ''}
       </div>
-      <div class="bg-ivory-card px-1.5 py-1 flex flex-col gap-0.5 shrink-0 border-t border-stone-300">
-        <div class="text-[9px] sm:text-[10px] font-black text-slate-900 truncate leading-tight">${card.title}</div>
-        <div class="flex items-center justify-between min-h-[14px]">
-          <span class="text-[7px] font-extrabold ${status.playable ? 'text-emerald-700' : 'text-rose-700'} truncate">${status.playable ? '●可出' : status.shortReason}</span>
+      <div class="bg-ivory-card px-1 py-0.5 flex flex-col gap-0.5 shrink-0 border-t border-stone-300 text-center">
+        <div class="text-[8px] sm:text-[9px] font-black text-slate-900 truncate leading-tight">${card.title}</div>
+        <div class="flex items-center justify-between min-h-[13px]">
+          <span class="text-[7px] font-black ${status.playable ? 'text-emerald-700' : 'text-rose-700'} truncate">${status.playable ? '●可出' : status.shortReason}</span>
           ${reqOrbs}
         </div>
       </div>
@@ -1549,7 +1537,7 @@ function renderLandscapeArena() {
           <div class="text-[10px] sm:text-xs font-black text-amber-300 truncate">
             🎲 首輪選秀（${state.draft.pickIndex + 1}/${state.draft.totalPicks}）：${isMyTurnNow ? '請點選下方部門頂牌招募' : `等待 ${getShortPlayerName(draftHero.name)} 挑選...`}
           </div>
-          <div class="flex-1 min-h-0 flex items-center justify-center gap-2 h-full py-0.5">
+          <div class="ls-dept-row py-0.5">
             ${LS_DEPT_ORDER.map(d => {
               const topUid = state.jobBank[d][0];
               if (!topUid) return '';
@@ -1558,8 +1546,6 @@ function renderLandscapeArena() {
               return `
                 <button data-draft-dept="${d}" class="ls-dept-card border-2 ${st.border} bg-slate-950 ${isMyTurnNow ? 'ring-1 ring-amber-400' : 'opacity-70'}">
                   ${getCardImgTag(c.artKey || c.tplId, c.title, 'w-full h-full object-cover block')}
-                  <span class="ls-orb-skill">${c.role === 'ENGINEER' ? '工' : c.skill}</span>
-                  <span class="ls-orb-salary">${c.salary}</span>
                 </button>
               `;
             }).join('')}
@@ -1575,7 +1561,6 @@ function renderLandscapeArena() {
 
       centerEl.innerHTML = `
         <div class="ls-oval-felt flex items-center justify-center gap-5 sm:gap-7 px-6 py-1.5">
-          <!-- Discard Pile -->
           <div class="h-full flex flex-col items-center justify-center gap-0.5">
             <span class="text-[10px] font-bold text-stone-400 leading-none">棄牌</span>
             ${topDiscardCard
@@ -1584,7 +1569,6 @@ function renderLandscapeArena() {
             }
           </div>
 
-          <!-- Just Played Slot -->
           <div class="h-full flex flex-col items-center justify-center gap-0.5">
             <span class="text-[10px] font-bold text-amber-300/90 leading-none">剛出</span>
             ${lastPlayedCard
@@ -1593,10 +1577,9 @@ function renderLandscapeArena() {
             }
           </div>
 
-          <!-- Draw Deck -->
           <div class="h-full flex flex-col items-center justify-center gap-0.5">
             <span class="text-[10px] font-bold text-stone-400 leading-none">抽牌</span>
-            <div class="ls-table-pile-card bg-gradient-to-br from-stone-800 via-stone-900 to-stone-950 border-2 border-stone-600/80 flex flex-col items-center justify-center relative shadow-xl">
+            <div class="ls-table-pile-card bg-gradient-to-br border-2 border-stone-600/80 flex flex-col items-center justify-center relative shadow-xl">
               <span class="text-base opacity-45">${terms.appIcon || '💼'}</span>
               <span class="absolute -bottom-1 -right-1 px-1.5 py-0.2 rounded-full bg-stone-950 border border-amber-400/80 text-[9px] font-black text-amber-300 z-20 shadow">${state.actionDeck.length}</span>
             </div>
@@ -1616,16 +1599,16 @@ function renderLandscapeArena() {
     if (myPanelEl.getAttribute('data-render-sig') !== mySig) {
       myPanelEl.setAttribute('data-render-sig', mySig);
       myPanelEl.innerHTML = `
-        <div class="ls-seat-panel ${isMyTurnNow ? 'ls-seat-active' : ''} w-full h-full flex flex-col justify-between gap-1 overflow-hidden">
+        <div class="ls-seat-panel ${isMyTurnNow ? 'ls-seat-active' : ''} w-full h-full flex flex-col justify-between gap-0.5 overflow-hidden">
           <div class="flex items-center justify-between gap-1 px-0.5 shrink-0">
-            <div class="flex items-center gap-1.5 min-w-0">
-              <span class="text-xs sm:text-sm font-black text-stone-100 truncate">你 · ${getShortPlayerName(localPlayer.name)}</span>
-              <span class="text-base sm:text-lg font-black text-amber-300 leading-none whitespace-nowrap">${localPlayer.crystals}</span>
+            <div class="flex items-center gap-1 min-w-0">
+              <span class="text-xs font-black text-stone-100 truncate">你·${getShortPlayerName(localPlayer.name)}</span>
+              <span class="text-sm sm:text-base font-black text-amber-300 leading-none whitespace-nowrap">${localPlayer.crystals}</span>
               <span class="text-[10px] font-bold text-stone-400 whitespace-nowrap">手${localPlayer.hand.length}</span>
             </div>
             <div class="flex items-center gap-1 shrink-0">
-              <span class="px-1.5 py-0.5 rounded bg-purple-950/90 border border-purple-400/60 text-[9px] font-black text-purple-200 whitespace-nowrap">${terms.vpIcon || '👑'}${terms.vpName || '副總'}:${getTotalVPCount(localPlayer)}</span>
-              <span class="px-1.5 py-0.5 rounded bg-rose-950/90 border border-rose-500/60 text-[10px] font-black text-rose-300 whitespace-nowrap">🔥-${myBurn}/回</span>
+              <span class="px-1 py-0.2 rounded bg-purple-950/90 border border-purple-400/60 text-[9px] font-black text-purple-200 whitespace-nowrap">${terms.vpIcon || '👑'}${terms.vpName || '副總'}:${getTotalVPCount(localPlayer)}</span>
+              <span class="px-1 py-0.2 rounded bg-rose-950/90 border border-rose-500/60 text-[9px] font-black text-rose-300 whitespace-nowrap">🔥-${myBurn}/回</span>
             </div>
           </div>
 
@@ -1634,15 +1617,15 @@ function renderLandscapeArena() {
           </div>
 
           <div class="grid grid-cols-3 gap-1 w-full shrink-0">
-            <div class="rounded bg-red-950/70 border border-red-500/40 px-1.5 py-0.5 flex items-center justify-between text-[9px] font-bold text-red-200">
+            <div class="rounded bg-red-950/70 border border-red-500/40 px-1.5 py-0.2 flex items-center justify-between text-[9px] font-bold text-red-200">
               <span class="truncate">${terms.engIcon || '⚒'}${terms.engName || '工程師'}:${localPlayer.engineers.length}</span>
               <span class="text-rose-300 font-black">-${localPlayer.engineers.length}</span>
             </div>
-            <button data-inspect-crises="${myId}" class="rounded ${myCrisisCnt > 0 ? 'bg-amber-950/90 border border-amber-400 text-amber-200' : 'bg-stone-900 border border-stone-700 text-stone-400'} px-1.5 py-0.5 flex items-center justify-between text-[9px] font-bold">
+            <button data-inspect-crises="${myId}" class="rounded ${myCrisisCnt > 0 ? 'bg-amber-950/90 border border-amber-400 text-amber-200' : 'bg-stone-900 border border-stone-700 text-stone-400'} px-1.5 py-0.2 flex items-center justify-between text-[9px] font-bold">
               <span class="truncate">${terms.crisisIcon || '💥'}${terms.crisisName || '爛點子'}:${myCrisisCnt}</span>
-              <span class="font-black">需${myCrisisReq} 🔍</span>
+              <span class="font-black">需${myCrisisReq}🔍</span>
             </button>
-            <div class="rounded ${localPlayer.outsourcedCount > 0 ? 'bg-rose-900/90 border border-rose-400 text-white' : 'bg-stone-900 border border-stone-700 text-stone-400'} px-1.5 py-0.5 flex items-center justify-between text-[9px] font-bold">
+            <div class="rounded ${localPlayer.outsourcedCount > 0 ? 'bg-rose-900/90 border border-rose-400 text-white' : 'bg-stone-900 border border-stone-700 text-stone-400'} px-1.5 py-0.2 flex items-center justify-between text-[9px] font-bold">
               <span class="truncate">${terms.outIcon || '💸'}${terms.outName || '外包'}:${localPlayer.outsourcedCount}</span>
               <span class="font-black">-${localPlayer.outsourcedCount * 3}</span>
             </div>
@@ -1652,7 +1635,7 @@ function renderLandscapeArena() {
     }
   }
 
-  // 6. Bottom-Right: 6 Vertical Hand Cards + Right-Side Action Controls
+  // 6. Bottom-Right: 6 Vertical Hand Cards (100% visible side-by-side) + Right-Side Action Controls
   const lsHandEl = document.getElementById('lsHandContainer');
   const lsCtrlCol = document.getElementById('lsActionControlsCol');
   const isHumanStep1 = state.phase === 'STEP1_PLAY_OR_DISCARD' && isMyTurnNow;
@@ -1691,16 +1674,16 @@ function renderLandscapeArena() {
       </div>
 
       ${isDiscardMode && discardCnt > 0 ? `
-        <button data-ls-ctrl="CONFIRM_DISCARD" class="w-full py-2 px-1.5 rounded-full bg-orange-600 border border-orange-300 text-[11px] font-black text-white shadow-lg">
+        <button data-ls-ctrl="CONFIRM_DISCARD" class="w-full py-1.5 px-1.5 rounded-full bg-orange-600 border border-orange-300 text-[11px] font-black text-white shadow-lg">
           確認棄(${discardCnt})
         </button>
       ` : `
-        <button data-ls-ctrl="TOGGLE_DISCARD" ${!canDiscard ? 'disabled' : ''} class="w-full py-2 px-1.5 rounded-full ${isDiscardMode ? 'bg-orange-900 border-2 border-orange-400 text-orange-200' : 'bg-stone-900 border border-stone-600 text-stone-200'} text-xs font-black ${!canDiscard ? 'opacity-40 cursor-not-allowed' : 'hover:border-amber-400'}">
+        <button data-ls-ctrl="TOGGLE_DISCARD" ${!canDiscard ? 'disabled' : ''} class="w-full py-1.5 px-1.5 rounded-full ${isDiscardMode ? 'bg-orange-900 border-2 border-orange-400 text-orange-200' : 'bg-stone-900 border border-stone-600 text-stone-200'} text-xs font-black ${!canDiscard ? 'opacity-40 cursor-not-allowed' : 'hover:border-amber-400'}">
           ${isDiscardMode ? '取消棄牌' : '棄牌'}
         </button>
       `}
 
-      <button data-ls-ctrl="END_TURN" ${!isHumanStep1 ? 'disabled' : ''} class="w-full py-2 px-1.5 rounded-full bg-gradient-to-b from-amber-400 to-amber-600 border border-amber-200 text-slate-950 text-xs font-black shadow-lg ${!isHumanStep1 ? 'opacity-40 cursor-not-allowed' : 'hover:brightness-110'}">
+      <button data-ls-ctrl="END_TURN" ${!isHumanStep1 ? 'disabled' : ''} class="w-full py-1.5 px-1.5 rounded-full bg-gradient-to-b border border-amber-200 text-slate-950 text-xs font-black shadow-lg ${!isHumanStep1 ? 'opacity-40 cursor-not-allowed' : 'hover:brightness-110'}">
         ${state.turn.hasPlayedCard || state.turn.hasDiscardedCard ? `發薪 ${myBurn}` : '結束'}
       </button>
     `;
@@ -1710,26 +1693,26 @@ function renderLandscapeArena() {
 function renderLsModeDLeftCardColumnHTML(card) {
   const vis = getActionCategoryVisuals(card);
   const reqOrbs = (card.reqSkills && card.reqSkills.length > 0)
-    ? `<div class="flex items-center justify-end gap-1">${card.reqSkills.map(s => `<span class="w-4 h-4 rounded-full bg-amber-600 text-white text-[10px] font-black flex items-center justify-center leading-none">${s}</span>`).join('')}</div>`
-    : `<span class="text-[9px] font-bold text-slate-600">${card.dept === 'PURPLE' ? '需在職 2 副總' : '無等級限制'}</span>`;
+    ? `<div class="flex items-center justify-center gap-0.5">${card.reqSkills.map(s => `<span class="w-3.5 h-3.5 rounded-full bg-amber-600 text-white text-[9px] font-black flex items-center justify-center leading-none">${s}</span>`).join('')}</div>`
+    : `<span class="text-[8px] font-bold text-slate-600">${card.dept === 'PURPLE' ? '需 2 副總' : '免檢定'}</span>`;
 
   return `
-    <div class="w-[155px] sm:w-[175px] shrink-0 flex flex-col gap-2">
+    <div class="ls-moded-left-col shrink-0 flex flex-col gap-1.5">
       <div class="w-full aspect-[2/3] rounded-xl overflow-hidden bg-ivory-card border-2 ${vis.border} flex flex-col justify-between shadow-xl">
-        <div class="${vis.headerBg} px-2 py-1 text-[10px] font-black text-white flex items-center justify-between">
+        <div class="${vis.headerBg} px-1.5 py-0.5 text-[9px] font-black text-white flex items-center justify-between">
           <span>${vis.tag}</span>
           <span>${vis.badge}</span>
         </div>
-        <div class="flex-1 bg-gradient-to-b ${vis.artBg} flex flex-col items-center justify-center p-2 relative">
-          <div class="text-4xl leading-none drop-shadow-lg">${card.svg}</div>
-          <div class="mt-2 px-2 py-0.5 rounded bg-black/50 text-xs font-black text-amber-200">${vis.badge}</div>
+        <div class="flex-1 ${vis.artBg} flex flex-col items-center justify-center p-1.5 relative">
+          <div class="text-2xl sm:text-3xl leading-none drop-shadow-lg">${card.svg}</div>
+          <div class="mt-1 px-1.5 py-0.2 rounded bg-black/50 text-[10px] font-black text-amber-200">${vis.badge}</div>
         </div>
-        <div class="bg-ivory-card px-2.5 py-1.5 flex flex-col gap-1 border-t border-stone-300">
-          <div class="text-xs font-black text-slate-900 truncate">${card.title}</div>
-          <div class="flex items-center justify-between">${reqOrbs}</div>
+        <div class="bg-ivory-card px-1.5 py-1 flex flex-col gap-0.5 border-t border-stone-300 text-center">
+          <div class="text-[10px] font-black text-slate-900 truncate">${card.title}</div>
+          <div class="flex items-center justify-center">${reqOrbs}</div>
         </div>
       </div>
-      <div class="text-[11px] font-semibold text-stone-300 leading-snug line-clamp-3">
+      <div class="text-[10px] font-semibold text-stone-300 leading-tight line-clamp-3">
         ${card.desc || ''}
       </div>
     </div>
@@ -1737,39 +1720,36 @@ function renderLsModeDLeftCardColumnHTML(card) {
 }
 
 function renderLsOpponentComparisonCardHTML(opp, checkDept, isValid, actionAttr, subFooterText, btnLabel) {
-  const terms = typeof getThemeTerms === 'function' ? getThemeTerms() : {};
   const shortOpp = getShortPlayerName(opp.name);
-  const vpCnt = getTotalVPCount(opp);
-  const crisisReq = getCrisisTotalEngineerReq(opp);
-  const deptStrip = LS_DEPT_ORDER.map(d => renderLsDeptSlotHTML(opp, d, { highlightDept: checkDept, noInspect: true })).join('');
+  const deptStrip = LS_DEPT_ORDER.map(d => renderLsDeptSlotHTML(opp, d, { highlightDept: checkDept, noInspect: true, isComp: true })).join('');
 
   if (!isValid) {
     return `
-      <div class="rounded-xl bg-stone-900/75 border border-stone-700 p-2 opacity-60 flex flex-col justify-between gap-1.5 min-w-0">
-        <div class="flex items-center justify-between gap-1">
-          <span class="text-sm font-black text-stone-200 truncate">${shortOpp}</span>
-          <span class="text-sm font-black text-amber-300">${opp.crystals}</span>
+      <div class="rounded-xl bg-stone-900/75 border border-stone-700 p-1.5 opacity-60 flex flex-col justify-between gap-1 min-w-0 overflow-hidden">
+        <div class="flex items-center justify-between gap-1 px-0.5">
+          <span class="text-xs font-black text-stone-200 truncate">${shortOpp}</span>
+          <span class="text-xs font-black text-amber-300 whitespace-nowrap">💵${opp.crystals}</span>
         </div>
-        <div class="h-[86px] sm:h-[96px] w-full flex items-center justify-center gap-1">
+        <div class="ls-comp-dept-grid">
           ${deptStrip}
         </div>
-        <div class="text-[10px] font-bold text-stone-400 truncate">${terms.engName || '工程師'} ${opp.engineers.length} · ${terms.vpName || '副總'} ${vpCnt} · ${terms.crisisName || '爛點子'} ×${crisisReq}</div>
-        <div class="w-full py-1 rounded-lg bg-stone-800 text-center text-[10px] font-bold text-sky-300 truncate">${btnLabel}</div>
+        <div class="text-[9px] font-bold text-stone-400 truncate px-0.5">${subFooterText}</div>
+        <div class="w-full py-1 rounded-lg bg-stone-800 text-center text-[10px] font-bold text-sky-300 truncate px-1">${btnLabel}</div>
       </div>
     `;
   }
 
   return `
-    <button ${actionAttr} class="rounded-xl bg-stone-950/95 border-2 border-amber-400/80 hover:border-amber-300 p-2 text-left shadow-xl flex flex-col justify-between gap-1.5 min-w-0 transition hover:-translate-y-0.5">
-      <div class="flex items-center justify-between gap-1 w-full">
-        <span class="text-sm font-black text-white truncate">🎯 ${shortOpp}</span>
-        <span class="text-sm font-black text-amber-300">${opp.crystals}</span>
+    <button ${actionAttr} class="rounded-xl bg-stone-950/95 border-2 border-amber-400/85 hover:border-amber-300 p-1.5 text-left shadow-xl flex flex-col justify-between gap-1 min-w-0 overflow-hidden transition hover:-translate-y-0.5">
+      <div class="flex items-center justify-between gap-1 w-full px-0.5">
+        <span class="text-xs font-black text-white truncate">🎯 ${shortOpp}</span>
+        <span class="text-xs font-black text-amber-300 whitespace-nowrap">💵${opp.crystals}</span>
       </div>
-      <div class="h-[86px] sm:h-[96px] w-full flex items-center justify-center gap-1 pointer-events-none">
+      <div class="ls-comp-dept-grid pointer-events-none">
         ${deptStrip}
       </div>
-      <div class="text-[10px] font-bold text-stone-300 truncate w-full">${subFooterText}</div>
-      <div class="w-full py-1 rounded-lg bg-gradient-to-r from-amber-500 to-amber-600 text-center text-[11px] font-black text-slate-950 shadow">
+      <div class="text-[9px] font-bold text-stone-200 truncate w-full px-0.5">${subFooterText}</div>
+      <div class="w-full py-1 rounded-lg bg-gradient-to-r text-center text-[10px] font-black text-slate-950 shadow truncate px-1">
         ${btnLabel}
       </div>
     </button>
@@ -2149,9 +2129,11 @@ function renderModeDDrawer() {
     }).join('');
   }
 
-  // In Landscape Tabletop Mode, enhance opponent-targeting cards with the 4-department highlighted comparison cards & wrap in 2-column layout
+  // In Landscape Tabletop Mode, render custom 2-column non-overlapping target pickers for ALL 9 card effect types
   if (isLandscapeModeActive()) {
     const terms = typeof getThemeTerms === 'function' ? getThemeTerms() : {};
+    let rightPanelHTML = '';
+
     if (card.effect === 'BAD_IDEA') {
       const oppGridHTML = aliveOpponents.map(opp => {
         const oppSkill = getEffectiveSkill(opp, 'YELLOW');
@@ -2162,20 +2144,14 @@ function renderModeDDrawer() {
         const newOutsourced = Math.max(0, newReq - opp.engineers.length);
         const addedOutsourced = newOutsourced - opp.outsourcedCount;
         const projBurn = curBurn + addedOutsourced * (opp.doubleBurnFlag ? 6 : 3);
-        const subText = `${terms.engName || '工程師'} ${opp.engineers.length} · ${terms.vpName || '副總'} ${getTotalVPCount(opp)} · 🔥-${curBurn}➔-${projBurn}/回`;
+        const subText = `${terms.engIcon || '⚒'}${opp.engineers.length} · 🔥-${curBurn}➔-${projBurn}/回`;
         const btnLabel = isValid ? `⚔️ 攻擊 ${getShortPlayerName(opp.name)} (×${card.val})` : `🛡️ ${DEPT_META.YELLOW.short}${oppSkill}級免疫`;
         return renderLsOpponentComparisonCardHTML(opp, 'YELLOW', isValid, `data-d-action="CONFIRM_BAD_IDEA" data-opp-id="${opp.id}"`, subText, btnLabel);
       }).join('');
-      container.className = 'w-full min-w-0';
-      container.innerHTML = `
-        <div class="flex items-stretch gap-3 w-full min-w-0">
-          ${renderLsModeDLeftCardColumnHTML(card)}
-          <div class="flex-1 min-w-0 flex flex-col justify-between gap-2">
-            <div class="text-xs font-bold text-amber-200">看對方的【${DEPT_META.YELLOW.name}】。亮黃框是要對上的部門，點選目標立即施放：</div>
-            <div class="grid ${aliveOpponents.length >= 3 ? 'grid-cols-3' : aliveOpponents.length === 2 ? 'grid-cols-2' : 'grid-cols-1'} gap-2 w-full min-w-0 my-auto">
-              ${oppGridHTML}
-            </div>
-          </div>
+      rightPanelHTML = `
+        <div class="text-[11px] font-bold text-amber-200 truncate">看對方的【${DEPT_META.YELLOW.name}】（亮黃框部門），點選目標立即施放：</div>
+        <div class="grid ${aliveOpponents.length >= 3 ? 'grid-cols-3' : aliveOpponents.length === 2 ? 'grid-cols-2' : 'grid-cols-1'} gap-2 w-full min-w-0 my-auto">
+          ${oppGridHTML}
         </div>
       `;
     } else if (card.effect === 'FORCE_HIRE' && !uiSelection.step2OpponentId) {
@@ -2183,37 +2159,130 @@ function renderModeDDrawer() {
         const oppSkill = getEffectiveSkill(opp, 'BLUE');
         const isValid = status.validOpponents.includes(opp.id);
         const curBurn = getPlayerBurnRate(opp);
-        const subText = `${terms.engName || '工程師'} ${opp.engineers.length} · ${terms.vpName || '副總'} ${getTotalVPCount(opp)} · 目前 🔥-${curBurn}/回`;
-        const btnLabel = isValid ? `🪤 選取 ${getShortPlayerName(opp.name)} ➔ 挑人` : `🛡️ ${DEPT_META.BLUE.short}${oppSkill}級免疫`;
+        const subText = `${terms.engIcon || '⚒'}${opp.engineers.length} · ${terms.vpIcon || '👑'}${getTotalVPCount(opp)} · 🔥-${curBurn}/回`;
+        const btnLabel = isValid ? `🪤 選 ${getShortPlayerName(opp.name)} ➔ 挑人` : `🛡️ ${DEPT_META.BLUE.short}${oppSkill}級免疫`;
         return renderLsOpponentComparisonCardHTML(opp, 'BLUE', isValid, `data-d-action="STEP2_FORCE_HIRE_OPP" data-opp-id="${opp.id}"`, subText, btnLabel);
       }).join('');
-      container.className = 'w-full min-w-0';
-      container.innerHTML = `
-        <div class="flex items-stretch gap-3 w-full min-w-0">
-          ${renderLsModeDLeftCardColumnHTML(card)}
-          <div class="flex-1 min-w-0 flex flex-col justify-between gap-2">
-            <div class="text-xs font-bold text-amber-200">步驟 1/2：看對方的【${DEPT_META.BLUE.name}】（亮框部門），點選要強塞冗員的對手：</div>
-            <div class="grid ${aliveOpponents.length >= 3 ? 'grid-cols-3' : aliveOpponents.length === 2 ? 'grid-cols-2' : 'grid-cols-1'} gap-2 w-full min-w-0 my-auto">
-              ${oppGridHTML}
+      rightPanelHTML = `
+        <div class="text-[11px] font-bold text-amber-200 truncate">步驟 1/2：看對方的【${DEPT_META.BLUE.name}】（亮黃框部門），點選要強塞人員的對手：</div>
+        <div class="grid ${aliveOpponents.length >= 3 ? 'grid-cols-3' : aliveOpponents.length === 2 ? 'grid-cols-2' : 'grid-cols-1'} gap-2 w-full min-w-0 my-auto">
+          ${oppGridHTML}
+        </div>
+      `;
+    } else if (card.effect === 'FORCE_HIRE' && uiSelection.step2OpponentId) {
+      const opp = state.players.find(p => p.id === uiSelection.step2OpponentId);
+      const allowedDepts = status.validBankByOpponent[opp.id] || [];
+      const bankCardsHTML = LS_DEPT_ORDER.map(d => {
+        const topUid = state.jobBank[d][0];
+        const meta = DEPT_META[d];
+        if (!topUid) return '';
+        const emp = CARDS_BY_ID[topUid];
+        const isAllowed = allowedDepts.includes(d);
+        const oppCurSkill = getEffectiveSkill(opp, d);
+        const isSabotageVP = emp.isVP && emp.skill < oppCurSkill;
+        if (!isAllowed) {
+          return `
+            <div class="rounded-xl bg-stone-900/70 border border-stone-700 p-1.5 opacity-45 flex flex-col items-center gap-1 min-w-0">
+              <div class="w-full aspect-[2/3] rounded-lg overflow-hidden bg-slate-950 relative">
+                ${getCardImgTag(emp.artKey || emp.tplId, emp.title, 'w-full h-full object-cover block')}
+              </div>
+              <div class="w-full py-0.5 rounded bg-stone-800 text-center text-[9px] font-bold text-rose-300 truncate">🔒 已有${terms.vpName || '副總'}</div>
             </div>
-          </div>
+          `;
+        }
+        return `
+          <button data-d-action="CONFIRM_FORCE_HIRE" data-opp-id="${opp.id}" data-dept="${d}" class="rounded-xl bg-stone-950 border-2 border-amber-400 p-1.5 text-left shadow-lg flex flex-col justify-between gap-1 min-w-0 transition hover:-translate-y-0.5">
+            <div class="w-full aspect-[2/3] rounded-lg overflow-hidden bg-slate-950 relative pointer-events-none">
+              ${getCardImgTag(emp.artKey || emp.tplId, emp.title, 'w-full h-full object-cover block')}
+            </div>
+            <div class="text-[9px] font-bold text-amber-200 truncate text-center w-full">${isSabotageVP ? `😈壓低至${emp.skill}級!` : `🔥害他-${emp.salary}/回`}</div>
+            <div class="w-full py-1 rounded-lg bg-rose-600 text-center text-[10px] font-black text-white shadow truncate">🪤 強塞 ${emp.title}</div>
+          </button>
+        `;
+      }).join('');
+      rightPanelHTML = `
+        <div class="flex items-center justify-between gap-2">
+          <span class="text-[11px] font-bold text-amber-200 truncate">步驟 2/2：點選人才池頂牌強塞給【${getShortPlayerName(opp.name)}】：</span>
+          <button data-d-action="BACK_FORCE_STEP1" class="px-2 py-0.5 rounded bg-stone-800 border border-stone-600 text-[10px] font-bold text-sky-300 shrink-0">⬅ 重選對手</button>
+        </div>
+        <div class="grid grid-cols-4 gap-2 w-full min-w-0 my-auto">
+          ${bankCardsHTML}
+        </div>
+      `;
+    } else if (card.effect === 'HIRE_BANK') {
+      const bankCardsHTML = LS_DEPT_ORDER.map(d => {
+        const topUid = state.jobBank[d][0];
+        const meta = DEPT_META[d];
+        if (!topUid) return '';
+        const emp = CARDS_BY_ID[topUid];
+        const isValid = status.validBankDepts.includes(d);
+        const curSkill = getEffectiveSkill(localPlayer, d);
+        let impactHint = emp.role === 'ENGINEER'
+          ? (localPlayer.outsourcedCount > 0 ? '🔥抵1外包(省3)!' : `⚒${terms.engName || '工程師'}+1`)
+          : emp.isVP ? `👑空降(${emp.skill}級)` : (!hasVPInDept(localPlayer, d) && emp.skill > curSkill ? `✨升${emp.skill}級!` : `➕納入下屬`);
+
+        if (!isValid) {
+          return `
+            <div class="rounded-xl bg-stone-900/70 border border-stone-700 p-1.5 opacity-45 flex flex-col items-center gap-1 min-w-0">
+              <div class="w-full aspect-[2/3] rounded-lg overflow-hidden bg-slate-950 relative">
+                ${getCardImgTag(emp.artKey || emp.tplId, emp.title, 'w-full h-full object-cover block')}
+              </div>
+              <div class="w-full py-0.5 rounded bg-stone-800 text-center text-[9px] font-bold text-rose-300 truncate">🔒 已有${terms.vpName || '副總'}</div>
+            </div>
+          `;
+        }
+        return `
+          <button data-d-action="CONFIRM_HIRE" data-dept="${d}" class="rounded-xl bg-stone-950 border-2 border-emerald-400 p-1.5 text-left shadow-lg flex flex-col justify-between gap-1 min-w-0 transition hover:-translate-y-0.5">
+            <div class="w-full aspect-[2/3] rounded-lg overflow-hidden bg-slate-950 relative pointer-events-none">
+              ${getCardImgTag(emp.artKey || emp.tplId, emp.title, 'w-full h-full object-cover block')}
+            </div>
+            <div class="text-[9px] font-bold text-emerald-300 truncate text-center w-full">${impactHint}</div>
+            <div class="w-full py-1 rounded-lg bg-emerald-600 text-center text-[10px] font-black text-white shadow truncate">⚡ 招募 ${emp.title}</div>
+          </button>
+        `;
+      }).join('');
+      rightPanelHTML = `
+        <div class="text-[11px] font-bold text-amber-200 truncate">點選中央人才池翻開的應徵者加入我方部門：</div>
+        <div class="grid grid-cols-4 gap-2 w-full min-w-0 my-auto">
+          ${bankCardsHTML}
+        </div>
+      `;
+    } else if (card.effect === 'VP_DOUBLE_PAY') {
+      const oppGridHTML = aliveOpponents.map(opp => {
+        const burn = getPlayerBurnRate(opp);
+        const subText = `${terms.engIcon || '⚒'}${opp.engineers.length} · 🔥-${burn} ➔ 🔥-${burn * 2}/回`;
+        const btnLabel = `🔥 翻倍 ${getShortPlayerName(opp.name)} (-${burn * 2})`;
+        return renderLsOpponentComparisonCardHTML(opp, null, true, `data-d-action="CONFIRM_DOUBLE_PAY" data-opp-id="${opp.id}"`, subText, btnLabel);
+      }).join('');
+      rightPanelHTML = `
+        <div class="text-[11px] font-bold text-amber-200 truncate">點選一名對手，使其下回合發薪支出強制翻倍（×2）：</div>
+        <div class="grid ${aliveOpponents.length >= 3 ? 'grid-cols-3' : aliveOpponents.length === 2 ? 'grid-cols-2' : 'grid-cols-1'} gap-2 w-full min-w-0 my-auto">
+          ${oppGridHTML}
         </div>
       `;
     } else {
+      // FIRE_OWN, POACH_ENEMY, VP_KICK_ENEMY, RELEASE_CRISIS, GAIN_FUNDS: use 3 columns for multi-item lists in Landscape Mode
       const rightContent = container.innerHTML;
-      const rightGridCls = container.className;
-      container.className = 'w-full min-w-0';
-      container.innerHTML = `
-        <div class="flex items-stretch gap-3 w-full min-w-0">
-          ${renderLsModeDLeftCardColumnHTML(card)}
-          <div class="flex-1 min-w-0 flex flex-col justify-center">
-            <div class="${rightGridCls} max-h-[68vh] overflow-y-auto pr-1">
-              ${rightContent}
-            </div>
-          </div>
+      const itemCount = (container.children && container.children.length) || 2;
+      const lsGridCls = card.effect === 'GAIN_FUNDS'
+        ? 'grid grid-cols-1 gap-2 w-full'
+        : `grid ${itemCount >= 3 ? 'grid-cols-3' : 'grid-cols-2'} gap-1.5 w-full`;
+      rightPanelHTML = `
+        <div class="${lsGridCls} max-h-[68vh] overflow-y-auto pr-1 my-auto">
+          ${rightContent}
         </div>
       `;
     }
+
+    container.className = 'w-full min-w-0';
+    container.innerHTML = `
+      <div class="flex items-stretch gap-2.5 w-full min-w-0">
+        ${renderLsModeDLeftCardColumnHTML(card)}
+        <div class="flex-1 min-w-0 flex flex-col justify-between gap-1.5">
+          ${rightPanelHTML}
+        </div>
+      </div>
+    `;
   }
 
   container.querySelectorAll('[data-d-action]').forEach(btn => {
@@ -2236,6 +2305,9 @@ function renderModeDDrawer() {
         });
       } else if (actType === 'CONFIRM_BAD_IDEA') {
         executePlayCard({ cardUid: card.uid, targetPlayerId: btn.getAttribute('data-opp-id') });
+      } else if (actType === 'BACK_FORCE_STEP1') {
+        uiSelection.step2OpponentId = null;
+        renderAll();
       } else if (actType === 'STEP2_FORCE_HIRE_OPP') {
         uiSelection.step2OpponentId = btn.getAttribute('data-opp-id');
         renderAll();
@@ -2292,6 +2364,19 @@ function attachDynamicBoardListeners() {
     if (!state) return;
     const localPlayer = getLocalPlayer(state);
     const isMyTurnNow = isLocalPlayerTurn(state);
+
+    const segBtn = e.target.closest('[data-seg-select]');
+    if (segBtn) {
+      const selId = segBtn.getAttribute('data-seg-select');
+      const val = segBtn.getAttribute('data-seg-val');
+      const selEl = document.getElementById(selId);
+      if (selEl) {
+        selEl.value = val;
+        syncSegmentedPillButtonsUI();
+        selEl.dispatchEvent(new Event('change', { bubbles: true }));
+      }
+      return;
+    }
 
     const switchBtn = e.target.closest('[data-switch-seat]');
     if (switchBtn) {
@@ -2827,6 +2912,7 @@ function renderLobbyUI() {
   const clientPanel = document.getElementById('lobbyClientPanel');
   const hostStartControls = document.getElementById('lobbyHostStartControls');
 
+  syncSegmentedPillButtonsUI();
   if (activeLobbyTab === 'SOLO') {
     hostPanel?.classList.add('hidden');
     clientPanel?.classList.add('hidden');
@@ -2999,6 +3085,18 @@ function switchGameTheme(newThemeId) {
   renderAll();
 }
 
+
+function syncSegmentedPillButtonsUI() {
+  document.querySelectorAll('[data-seg-select]').forEach(btn => {
+    const selId = btn.getAttribute('data-seg-select');
+    const val = btn.getAttribute('data-seg-val');
+    const selEl = document.getElementById(selId);
+    if (selEl) {
+      btn.classList.toggle('seg-pill-active', String(selEl.value) === String(val));
+    }
+  });
+}
+
 function renderHomeScreenUI() {
   const theme = typeof getActiveTheme === 'function' ? getActiveTheme() : { id: 'CLASSIC_BURN_RATE', useFullCardArt: false };
   const terms = typeof getThemeTerms === 'function' ? getThemeTerms() : {};
@@ -3033,6 +3131,7 @@ function renderHomeScreenUI() {
     resumeBtn.classList.toggle('hidden', !window.hasStartedActiveMatch);
   }
 
+  syncSegmentedPillButtonsUI();
   updateSettingsMenuUI();
 }
 
@@ -3174,7 +3273,8 @@ function initAppOnLoad() {
   document.getElementById('btnHomeOpenLobby')?.addEventListener('click', () => {
     syncHomeSetupToLobbyControls();
     document.getElementById('homeScreenModal')?.classList.add('hidden');
-    if (activeLobbyTab === 'SOLO') {
+    syncSegmentedPillButtonsUI();
+  if (activeLobbyTab === 'SOLO') {
       activeLobbyTab = 'HOST';
       if (gameSession.mode !== 'HOST' || !gameSession.roomCode) {
         createOnlineHostRoom();

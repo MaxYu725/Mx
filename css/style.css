@@ -1591,3 +1591,97 @@ body.is-landscape-active .home-hero-fan-card {
   width: 44px !important;
   height: 66px !important;
 }
+
+/* === V13.9.2 FIXES: SEGMENTED PILLS, 6-CARD HAND STRIP & NON-OVERLAPPING MODE D COMPARISON === */
+.seg-pill-btn {
+  background: rgba(15, 23, 42, 0.92);
+  border: 1.5px solid rgba(100, 116, 139, 0.55);
+  color: #cbd5e1;
+  text-align: center;
+  transition: all 0.14s ease;
+}
+.seg-pill-btn.seg-pill-active {
+  background: linear-gradient(135deg, rgba(245, 158, 11, 0.25), rgba(217, 119, 6, 0.35));
+  border-color: #fbbf24 !important;
+  color: #fde68a !important;
+  box-shadow: 0 0 10px rgba(245, 158, 11, 0.28);
+}
+
+/* 6-Card Hand Strip in Landscape Mode: fits all 6 cards side-by-side without clipping */
+.ls-hand-strip {
+  flex: 1 1 0% !important;
+  min-width: 0 !important;
+  height: 100% !important;
+  display: flex !important;
+  align-items: center !important;
+  justify-content: space-between !important;
+  gap: 0.3rem !important;
+  overflow-x: auto !important;
+  overflow-y: hidden !important;
+}
+
+.ls-hand-strip .ls-hand-card {
+  flex: 1 1 0% !important;
+  min-width: 0 !important;
+  max-width: calc((100% - 1.5rem) / 6) !important;
+  width: auto !important;
+  height: 96% !important;
+  max-height: 96% !important;
+  aspect-ratio: auto !important;
+}
+
+/* Mode D Left Card Column & Width-Constrained 4-Department Opponent Comparison Grid */
+.ls-moded-left-col {
+  width: 106px !important;
+}
+@media (min-width: 640px) {
+  .ls-moded-left-col {
+    width: 118px !important;
+  }
+}
+body.is-landscape-active .ls-moded-left-col {
+  width: 112px !important;
+}
+
+.ls-comp-dept-grid {
+  display: grid !important;
+  grid-template-columns: repeat(4, minmax(0, 1fr)) !important;
+  gap: 3px !important;
+  width: 100% !important;
+  min-width: 0 !important;
+  overflow: hidden !important;
+}
+
+.ls-comp-dept-card {
+  width: 100% !important;
+  height: auto !important;
+  aspect-ratio: 2 / 3 !important;
+  position: relative !important;
+  border-radius: 0.35rem !important;
+  overflow: hidden !important;
+  background: #0f172a;
+  box-shadow: 0 2px 5px rgba(0, 0, 0, 0.65);
+}
+
+.ls-comp-dept-card > img {
+  position: absolute !important;
+  top: 0 !important;
+  left: 0 !important;
+  width: 100% !important;
+  height: 100% !important;
+  object-fit: cover !important;
+  display: block !important;
+}
+
+.ls-comp-dept-card.ls-dept-target-glow {
+  border: 2px solid #fde047 !important;
+  box-shadow: 0 0 10px rgba(250, 204, 21, 0.9) !important;
+}
+
+/* Force 4-column modal grids when Landscape Mode is active (even on rotated portrait phone) */
+body.is-landscape-active .sm\:grid-cols-4 {
+  grid-template-columns: repeat(4, minmax(0, 1fr)) !important;
+}
+body.is-landscape-active .lg\:grid-cols-5 {
+  grid-template-columns: repeat(5, minmax(0, 1fr)) !important;
+}
