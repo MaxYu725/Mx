@@ -4712,6 +4712,19 @@ function initAppOnLoad() {
     syncHostLobbySettingsFromInputs();
   });
 
+  document.getElementById('btnLeaveHostRoom')?.addEventListener('click', () => {
+    if (gameSession.mode !== 'HOST' || !gameSession.roomCode) return;
+    if (!window.confirm('確定要關閉房間？全部玩家都會立即斷線，當前牌局無法恢復。')) return;
+    cleanupNetworkChannels();
+    gameSession.mode = 'SOLO';
+    gameSession.roomCode = '';
+    gameSession.hostMasterState = null;
+    gameSession.lobbyState.matchStarted = false;
+    activeLobbyTab = 'SOLO';
+    renderLobbyUI();
+    showToast('房間已關閉。');
+  });
+
   document.getElementById('btnRetryHostConnection')?.addEventListener('click', () => {
     createOnlineHostRoom();
     renderLobbyUI();
