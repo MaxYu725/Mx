@@ -2503,3 +2503,71 @@ body.is-landscape-active #jobBankModalGrid .modal-pure-card > div[data-emp-uid] 
   width: 100% !important;
   height: 100% !important;
 }
+
+
+/* === V14.5 FLOATING DISCONNECT BANNER & COMPACT PORTRAIT/LANDSCAPE LOBBY === */
+.online-disconnect-banner {
+  position: fixed !important;
+  top: 42px !important;
+  left: 50% !important;
+  transform: translateX(-50%) !important;
+  width: min(94vw, 480px) !important;
+  z-index: 95 !important;
+  background: linear-gradient(135deg, rgba(69, 26, 3, 0.97) 0%, rgba(30, 15, 5, 0.98) 100%) !important;
+  border: 2px solid #fbbf24 !important;
+  border-radius: 0.75rem !important;
+  padding: 0.4rem 0.65rem !important;
+  box-shadow: 0 12px 28px rgba(0, 0, 0, 0.9) !important;
+  color: #fef3c7 !important;
+  font-size: 11px !important;
+  line-height: 1.35 !important;
+}
+
+body.is-landscape-active .online-disconnect-banner {
+  top: 6px !important;
+  width: min(calc(var(--app-w, 100vw) * 0.78), 540px) !important;
+  padding: 0.3rem 0.6rem !important;
+}
+
+/* Fix touch scrolling inside force-landscape-rotate (90deg rotated DOM needs touch-action: auto) */
+body.force-landscape-rotate .overflow-y-auto,
+body.force-landscape-rotate .touch-pan-y,
+body.is-landscape-active #lobbyModal,
+body.is-landscape-active .lobby-modal-card,
+body.is-landscape-active #homeScreenModal,
+body.is-landscape-active .home-screen-card,
+body.is-landscape-active #rulesModal,
+body.is-landscape-active .rules-modal-card,
+body.is-landscape-active #settingsMenuModal > div {
+  touch-action: auto !important;
+  -webkit-overflow-scrolling: touch !important;
+  overscroll-behavior: contain !important;
+}
+
+/* Landscape Mode 2-Column Wide Layout for Lobby Modal (#lobbyModal) */
+body.is-landscape-active .lobby-modal-card {
+  max-width: min(calc(var(--app-w, 100vw) * 0.95), 820px) !important;
+  width: min(calc(var(--app-w, 100vw) * 0.95), 820px) !important;
+  max-height: calc(var(--app-h, 100vh) * 0.94) !important;
+  padding: 0.5rem 0.85rem !important;
+}
+
+body.is-landscape-active .ls-lobby-top-bar {
+  display: grid !important;
+  grid-template-columns: 0.85fr 1.15fr !important;
+  gap: 0.5rem !important;
+  align-items: center !important;
+}
+body.is-landscape-active .ls-lobby-top-bar > * + * {
+  margin-top: 0 !important;
+}
+
+body.is-landscape-active .ls-lobby-split.has-two-panes {
+  display: grid !important;
+  grid-template-columns: 1.12fr 0.88fr !important;
+  gap: 0.65rem !important;
+  align-items: start !important;
+}
+body.is-landscape-active .ls-lobby-split.has-two-panes > * + * {
+  margin-top: 0 !important;
+}

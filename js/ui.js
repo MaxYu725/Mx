@@ -16,7 +16,7 @@ function isRunningStandalonePWA() {
 
 function registerPwaServiceWorker() {
   if ("serviceWorker" in navigator && (location.protocol === "https:" || location.hostname === "localhost" || location.hostname === "127.0.0.1")) {
-    navigator.serviceWorker.register("./sw.js?v=14.4").then(reg => { try { reg.update(); } catch(e){} }).catch(() => {});
+    navigator.serviceWorker.register("./sw.js?v=14.5").then(reg => { try { reg.update(); } catch(e){} }).catch(() => {});
   }
   window.addEventListener("beforeinstallprompt", (e) => {
     e.preventDefault();
@@ -4163,25 +4163,31 @@ function renderLobbyUI() {
   document.querySelectorAll('[data-lobby-tab]').forEach(btn => {
     const tab = btn.getAttribute('data-lobby-tab');
     if (tab === activeLobbyTab) {
-      btn.className = 'flex-1 py-2 px-2 rounded-xl font-black text-xs border mp-mode-tab-active transition';
+      btn.className = 'flex-1 py-1.5 px-1.5 rounded-xl font-black text-[11px] border mp-mode-tab-active transition truncate';
     } else {
-      btn.className = 'flex-1 py-2 px-2 rounded-xl font-bold text-xs border border-slate-700 bg-slate-950 text-slate-300 transition';
+      btn.className = 'flex-1 py-1.5 px-1.5 rounded-xl font-bold text-[11px] border border-slate-700 bg-slate-950 text-slate-300 transition truncate';
     }
   });
 
   const hostPanel = document.getElementById('lobbyHostPanel');
   const clientPanel = document.getElementById('lobbyClientPanel');
+  const roomPane = document.getElementById('lobbyRoomPane');
   const hostStartControls = document.getElementById('lobbyHostStartControls');
+  const splitWrap = document.querySelector('.ls-lobby-split');
 
   syncSegmentedPillButtonsUI();
   if (activeLobbyTab === 'SOLO') {
+    roomPane?.classList.add('hidden');
     hostPanel?.classList.add('hidden');
     clientPanel?.classList.add('hidden');
     hostStartControls?.classList.remove('hidden');
+    splitWrap?.classList.remove('has-two-panes');
   } else if (activeLobbyTab === 'HOST') {
+    roomPane?.classList.remove('hidden');
     hostPanel?.classList.remove('hidden');
     clientPanel?.classList.add('hidden');
     hostStartControls?.classList.remove('hidden');
+    splitWrap?.classList.add('has-two-panes');
 
     const codeDisplay = document.getElementById('hostRoomCodeText');
     if (codeDisplay) codeDisplay.textContent = gameSession.roomCode || '----';
@@ -4207,12 +4213,12 @@ function renderLobbyUI() {
       rosterEl.innerHTML = visibleSeats.map(s => {
         if (s.id === 'p1') {
           return `
-            <div class="rounded-xl p-2 seat-card-human flex items-center justify-between gap-2">
-              <div class="min-w-0">
-                <div class="text-[10px] font-black text-emerald-300">👑 座位 P1 (房主本人)</div>
-                <div class="text-xs font-black text-white truncate">${gameSession.playerName}</div>
+            <div class="rounded-lg py-1 px-2 seat-card-human flex items-center justify-between gap-1.5">
+              <div class="min-w-0 flex items-center gap-1.5 flex-1">
+                <span class="text-[10px] font-black text-emerald-300 shrink-0">👑 P1 房主</span>
+                <span class="text-[11px] font-black text-white truncate">${gameSession.playerName}</span>
               </div>
-              <span class="px-2 py-0.5 rounded bg-emerald-500 text-slate-950 text-[10px] font-black shrink-0">✔ 已就緒</span>
+              <span class="px-1.5 py-0.5 rounded bg-emerald-500 text-slate-950 text-[9px] font-black shrink-0">✔ 就緒</span>
             </div>
           `;
         }
@@ -4221,22 +4227,22 @@ function renderLobbyUI() {
         const isHumanOffline = isHumanSeat && !s.connected;
         const isAI = s.role === 'AI';
         const cardCls = isHumanJoined ? 'seat-card-human' : isAI ? 'seat-card-ai' : 'seat-card-waiting';
-        const badgeText = isHumanJoined ? '👤 真人已連線' : isHumanOffline ? '🔴 玩家暫離重連中' : isAI ? '🤖 智慧 AI 補位' : '⏳ 等待真人加入';
+        const badgeText = isHumanJoined ? '👤 真人' : isHumanOffline ? '🔴 暫離' : isAI ? '🤖 AI' : '⏳ 待入';
 
         return `
-          <div class="rounded-xl p-2 ${cardCls} flex items-center justify-between gap-2">
-            <div class="min-w-0 flex-1">
-              <div class="text-[10px] font-black ${isHumanJoined ? 'text-emerald-300' : isHumanOffline ? 'text-rose-300' : isAI ? 'text-indigo-300' : 'text-amber-300'}">座位 ${s.id.toUpperCase()} · ${badgeText}</div>
-              <div class="text-xs font-bold text-white truncate">${s.name}</div>
+          <div class="rounded-lg py-1 px-2 ${cardCls} flex items-center justify-between gap-1.5">
+            <div class="min-w-0 flex items-center gap-1.5 flex-1">
+              <span class="text-[10px] font-black ${isHumanJoined ? 'text-emerald-300' : isHumanOffline ? 'text-rose-300' : isAI ? 'text-indigo-300' : 'text-amber-300'} shrink-0">${s.id.toUpperCase()} ${badgeText}</span>
+              <span class="text-[11px] font-bold text-white truncate">${s.name}</span>
             </div>
             <div class="flex items-center gap-1 shrink-0">
               ${isHumanSeat ? `
-                <button data-kick-seat="${s.id}" class="px-2 py-1 rounded-lg bg-rose-950 border border-rose-500/70 text-[10px] font-black text-rose-200">
+                <button data-kick-seat="${s.id}" class="px-1.5 py-0.5 rounded bg-rose-950 border border-rose-500/70 text-[9px] font-black text-rose-200">
                   ✕ 釋放
                 </button>
               ` : ''}
-              <button data-toggle-seat-role="${s.id}" class="px-2 py-1 rounded-lg bg-slate-950 border border-slate-600 text-[10px] font-black text-amber-300">
-                ${isAI ? '改為等待真人' : '改由 AI 補位'}
+              <button data-toggle-seat-role="${s.id}" class="px-1.5 py-0.5 rounded bg-slate-950 border border-slate-600 text-[9px] font-black text-amber-300">
+                ${isAI ? '改等待真人' : '改 AI 補位'}
               </button>
             </div>
           </div>
@@ -4258,9 +4264,11 @@ function renderLobbyUI() {
       });
     }
   } else if (activeLobbyTab === 'CLIENT') {
+    roomPane?.classList.remove('hidden');
     hostPanel?.classList.add('hidden');
     clientPanel?.classList.remove('hidden');
     hostStartControls?.classList.add('hidden');
+    splitWrap?.classList.remove('has-two-panes');
 
     const statusBox = document.getElementById('clientJoinStatusBox');
     if (statusBox) {
@@ -4280,12 +4288,12 @@ function renderLobbyUI() {
             const cardCls = isMe ? 'seat-card-human border-2 border-amber-400' : isHuman ? 'seat-card-human' : isAI ? 'seat-card-ai' : 'seat-card-waiting';
             const roleBadge = isHost ? '👑 房主' : isMe ? '🙋‍♂️ 你本人' : isHuman ? '👤 真人已連線' : isAI ? '🤖 智慧 AI' : '⏳ 等待加入';
             return `
-              <div class="rounded-xl p-2 ${cardCls} flex items-center justify-between gap-2">
-                <div class="min-w-0">
-                  <div class="text-[10px] font-black ${isMe ? 'text-amber-300' : isHuman ? 'text-emerald-300' : isAI ? 'text-indigo-300' : 'text-slate-400'}">座位 ${s.id.toUpperCase()} · ${roleBadge}</div>
-                  <div class="text-xs font-black text-white truncate">${s.name}</div>
+              <div class="rounded-lg py-1 px-2 ${cardCls} flex items-center justify-between gap-1.5">
+                <div class="min-w-0 flex items-center gap-1.5 flex-1">
+                  <span class="text-[10px] font-black ${isMe ? 'text-amber-300' : isHuman ? 'text-emerald-300' : isAI ? 'text-indigo-300' : 'text-slate-400'} shrink-0">${s.id.toUpperCase()} ${roleBadge}</span>
+                  <span class="text-[11px] font-black text-white truncate">${s.name}</span>
                 </div>
-                <span class="px-2 py-0.5 rounded ${isHuman || isAI ? 'bg-emerald-950 border border-emerald-400 text-emerald-300' : 'bg-slate-900 text-amber-300'} text-[10px] font-black shrink-0">
+                <span class="px-1.5 py-0.5 rounded ${isHuman || isAI ? 'bg-emerald-950 border border-emerald-400 text-emerald-300' : 'bg-slate-900 text-amber-300'} text-[9px] font-black shrink-0">
                   ${isHuman || isAI ? '✔ 就緒' : '等待中'}
                 </span>
               </div>
@@ -4392,6 +4400,11 @@ function syncSegmentedPillButtonsUI() {
       btn.classList.toggle('seg-pill-active', String(selEl.value) === String(val));
     }
   });
+  const checkedRule = document.querySelector('input[name="playDiscardRule"]:checked')?.value || 'STRICT_EITHER';
+  document.querySelectorAll('[data-lobby-rule-pill]').forEach(btn => {
+    const val = btn.getAttribute('data-lobby-rule-pill');
+    btn.classList.toggle('seg-pill-active', String(val) === String(checkedRule));
+  });
 }
 
 function renderHomeScreenUI() {
@@ -4484,7 +4497,8 @@ function initAppOnLoad() {
     ? tryRestoreSavedSessionOnBoot(urlRoom)
     : false;
   if (!restoredOnline) {
-    if (urlRoom) {
+    const validUrlRoom = (urlRoom && (typeof isRoomMarkedExited !== 'function' || !isRoomMarkedExited(urlRoom))) ? urlRoom : null;
+    if (validUrlRoom) {
       document.getElementById('homeScreenModal')?.classList.add('hidden');
       activeLobbyTab = 'CLIENT';
       const joinInput = document.getElementById('inputJoinRoomCode');
@@ -4759,6 +4773,11 @@ function initAppOnLoad() {
       if (tab === 'HOST' && (gameSession.mode !== 'HOST' || !gameSession.roomCode)) {
         createOnlineHostRoom();
       } else if (tab === 'SOLO') {
+        if (gameSession.mode === 'HOST' && gameSession.roomCode && typeof disbandOnlineRoomByHost === 'function') {
+          disbandOnlineRoomByHost({ silent: true });
+        } else if (gameSession.mode === 'CLIENT' && gameSession.roomCode && typeof leaveOnlineRoom === 'function') {
+          leaveOnlineRoom('切換至單機模式', { silent: true });
+        }
         gameSession.mode = 'SOLO';
       }
       renderLobbyUI();
@@ -4799,6 +4818,19 @@ function initAppOnLoad() {
     if (typeof abortMatchAndReturnAllToLobby === 'function') {
       abortMatchAndReturnAllToLobby(`⏪ 房主因玩家斷線中止本局，全員返回房間【${gameSession.roomCode}】候戰室等候！`);
     }
+  });
+  document.querySelectorAll('[data-lobby-rule-pill]').forEach(btn => {
+    btn.addEventListener('click', () => {
+      const val = btn.getAttribute('data-lobby-rule-pill');
+      document.querySelectorAll('input[name="playDiscardRule"]').forEach(r => {
+        r.checked = (r.value === val);
+      });
+      syncSegmentedPillButtonsUI();
+      syncHostLobbySettingsFromInputs();
+    });
+  });
+  document.getElementById('btnDismissDisconnectBanner')?.addEventListener('click', () => {
+    document.getElementById('onlineDisconnectBanner')?.classList.add('hidden');
   });
   document.getElementById('btnDismissLobbyNotice')?.addEventListener('click', () => {
     document.getElementById('lobbyNoticeBanner')?.classList.add('hidden');

@@ -94,42 +94,99 @@ let clientRetryCount = 0;
 
 
 // ============================================================================
-// V14.4: SESSION PERSISTENCE, HEARTBEAT MONITOR, AUTO-REJOIN & LEAVE/RETURN
+// V14.5: HARDENED SESSION LIFECYCLE, EXITED-ROOM BLACKLIST, HEARTBEAT & LEAVE
 // ============================================================================
 const SESSION_SNAPSHOT_KEY = 'dbr_v14_saved_session';
+const EXITED_ROOMS_KEY = 'dbr_v14_exited_rooms';
 const SESSION_SNAPSHOT_TTL_MS = 2 * 60 * 60 * 1000; // 2 hours
-const DISCONNECT_WARN_MS = 9000;   // Show reconnect countdown banner after 9s silence
-const DISCONNECT_ABORT_MS = 35000; // Auto-return everyone to lobby after 35s disconnect
+const DISCONNECT_WARN_MS = 25000;  // 25s of complete silence across all 4 channels (or ~5s after explicit tab close)
+const DISCONNECT_ABORT_MS = 60000; // 60s total before auto-aborting match and returning everyone to lobby
 
 let hostLifecycleTimer = null;
 let clientHeartbeatTimer = null;
 let clientActionRetryTimer = null;
 let pendingClientActionPkt = null;
 let lastHostPacketTs = Date.now();
+let lastFastSsePostTs = 0;
 
 // Tracks per-seat heartbeat on Host: { [seatId]: { lastSeen: ms, warned: bool, playerName: str } }
 const seatHeartbeatMap = {};
 // Prevents stale retained MQTT HELLO_JOIN packets from re-adding a player who explicitly left or was kicked
 const ignoredClientJoinTs = {};
 
-function touchSeatHeartbeat(seatId, playerName) {
+function loadExitedRoomsMap() {
+  if (typeof window === 'undefined') return {};
+  try {
+    const raw = window.sessionStorage.getItem(EXITED_ROOMS_KEY) || window.localStorage.getItem(EXITED_ROOMS_KEY);
+    return raw ? JSON.parse(raw) : {};
+  } catch (e) {
+    return {};
+  }
+}
+
+function markRoomAsExited(roomCode) {
+  if (typeof window === 'undefined' || !roomCode) return;
+  const code = String(roomCode).trim().toUpperCase();
+  if (!code) return;
+  try {
+    const map = loadExitedRoomsMap();
+    map[code] = Date.now();
+    const raw = JSON.stringify(map);
+    window.sessionStorage.setItem(EXITED_ROOMS_KEY, raw);
+    window.localStorage.setItem(EXITED_ROOMS_KEY, raw);
+  } catch (e) {}
+}
+
+function unmarkRoomAsExited(roomCode) {
+  if (typeof window === 'undefined' || !roomCode) return;
+  const code = String(roomCode).trim().toUpperCase();
+  if (!code) return;
+  try {
+    const map = loadExitedRoomsMap();
+    if (map[code]) {
+      delete map[code];
+      const raw = JSON.stringify(map);
+      window.sessionStorage.setItem(EXITED_ROOMS_KEY, raw);
+      window.localStorage.setItem(EXITED_ROOMS_KEY, raw);
+    }
+  } catch (e) {}
+}
+
+function isRoomMarkedExited(roomCode) {
+  if (!roomCode) return false;
+  const code = String(roomCode).trim().toUpperCase();
+  const map = loadExitedRoomsMap();
+  return Boolean(map && map[code]);
+}
+
+function rotateClientTokenOnExit() {
+  const newTk = 'tk_' + Math.random().toString(36).slice(2, 10) + '_' + Date.now().toString(36);
+  gameSession.clientToken = newTk;
+  saveStoredString('session', 'dbr_v13_client_token', newTk);
+  return newTk;
+}
+
+function touchSeatHeartbeat(seatIdOrToken, playerName) {
+  if (gameSession.mode !== 'HOST') return;
+  const seats = (gameSession.lobbyState && gameSession.lobbyState.seats) || [];
+  let seat = seats.find(s => s.id === seatIdOrToken || (seatIdOrToken && s.clientToken === seatIdOrToken));
+  const seatId = seat ? seat.id : seatIdOrToken;
   if (!seatId || seatId === 'p1') return;
+
   const prev = seatHeartbeatMap[seatId];
   const wasWarned = prev && prev.warned;
   seatHeartbeatMap[seatId] = {
     lastSeen: Date.now(),
     warned: false,
-    playerName: playerName || (prev && prev.playerName) || seatId.toUpperCase()
+    playerName: playerName || (seat && seat.name) || (prev && prev.playerName) || seatId.toUpperCase()
   };
-  if (gameSession.mode === 'HOST') {
-    const seat = (gameSession.lobbyState.seats || []).find(s => s.id === seatId);
-    if (seat && seat.role === 'HUMAN' && !seat.connected) {
-      seat.connected = true;
-      if (typeof renderLobbyUI === 'function') renderLobbyUI();
-    }
-    if (wasWarned) {
-      broadcastDisconnectStatusBanner();
-    }
+
+  if (seat && seat.role === 'HUMAN' && !seat.connected) {
+    seat.connected = true;
+    if (typeof renderLobbyUI === 'function') renderLobbyUI();
+  }
+  if (wasWarned) {
+    broadcastDisconnectStatusBanner();
   }
 }
 
@@ -138,12 +195,14 @@ function saveActiveSessionSnapshot() {
   if (gameSession.mode !== 'HOST' && gameSession.mode !== 'CLIENT') {
     return;
   }
-  if (!gameSession.roomCode) return;
+  const code = String(gameSession.roomCode || '').trim().toUpperCase();
+  if (!code || isRoomMarkedExited(code)) return;
+
   const snapshot = {
-    version: '14.4',
+    version: '14.5',
     savedAt: Date.now(),
     mode: gameSession.mode,
-    roomCode: gameSession.roomCode,
+    roomCode: code,
     localSeatId: gameSession.localSeatId,
     clientToken: gameSession.clientToken,
     playerName: gameSession.playerName,
@@ -174,7 +233,7 @@ function loadSavedSessionSnapshot() {
     if (!raw) return null;
     const snap = JSON.parse(raw);
     if (!snap || !snap.roomCode || !snap.savedAt) return null;
-    if (Date.now() - snap.savedAt > SESSION_SNAPSHOT_TTL_MS) {
+    if (isRoomMarkedExited(snap.roomCode) || (Date.now() - snap.savedAt > SESSION_SNAPSHOT_TTL_MS)) {
       clearActiveSessionSnapshot();
       return null;
     }
@@ -197,8 +256,8 @@ function clearClientRetainedJoinOnMqtt(roomCode, clientToken) {
   });
 }
 
-// Publish lightweight packet (MQTT WSS + PeerJS + BC, skipping ntfy.sh HTTP POST for frequent heartbeats)
-function publishFastPacket(pkt) {
+// Publish packet across all 4 channels (MQTT qos:1 + PeerJS + BC + throttled HTTPS 443 SSE)
+function publishFastPacket(pkt, forceHttpsPost = false) {
   if (!pkt || !gameSession.roomCode) return;
   stampPacket(pkt);
   const topics = getCloudTopics(gameSession.roomCode);
@@ -208,7 +267,7 @@ function publishFastPacket(pkt) {
     if (client && client.connected) {
       try {
         const targetTopic = gameSession.mode === 'HOST' ? topics.toClientEvent : topics.toHost;
-        client.publish(targetTopic, jsonStr, { qos: 0, retain: false });
+        client.publish(targetTopic, jsonStr, { qos: 1, retain: false });
       } catch (e) {}
     }
   });
@@ -228,6 +287,18 @@ function publishFastPacket(pkt) {
   if (gameSession.bc) {
     try { gameSession.bc.postMessage(pkt); } catch (e) {}
   }
+
+  // Also send over HTTPS 443 (ntfy.sh) when forced or every 7.5s so mobile networks relying on HTTPS 443 never miss heartbeats!
+  const now = Date.now();
+  if (typeof window.fetch === 'function' && (forceHttpsPost || (now - lastFastSsePostTs >= 7500))) {
+    lastFastSsePostTs = now;
+    try {
+      window.fetch(`https://ntfy.sh/${topics.sseChannel}`, {
+        method: 'POST',
+        body: jsonStr
+      }).catch(() => {});
+    } catch (e) {}
+  }
 }
 
 function updateFloatingDisconnectBannerUI(disconnectedNames, remainingSec, isHostView) {
@@ -241,7 +312,7 @@ function updateFloatingDisconnectBannerUI(disconnectedNames, remainingSec, isHos
     return;
   }
   const namesStr = disconnectedNames.join('、');
-  textEl.textContent = `📡 玩家【${namesStr}】連線中斷，等待重連中（剩餘 ${remainingSec} 秒，逾時將全員返回房間候戰室）...`;
+  textEl.textContent = `📡 玩家【${namesStr}】連線中斷，等待重連 (${remainingSec}秒後返回房間)...`;
   banner.classList.remove('hidden');
   if (btnEl) {
     btnEl.classList.toggle('hidden', !isHostView);
@@ -261,7 +332,7 @@ function broadcastDisconnectStatusBanner() {
       if (s.role === 'HUMAN' && !s.isAI && s.clientToken && !String(s.clientToken).startsWith('sim_tk_')) {
         const hb = seatHeartbeatMap[s.id];
         const elapsed = hb ? (now - hb.lastSeen) : 0;
-        if (elapsed >= DISCONNECT_WARN_MS || !s.connected) {
+        if (elapsed >= DISCONNECT_WARN_MS) {
           disconnectedNames.push(s.name || s.id.toUpperCase());
           const rem = Math.max(1, Math.ceil((DISCONNECT_ABORT_MS - elapsed) / 1000));
           if (rem < minRemainingSec) minRemainingSec = rem;
@@ -278,7 +349,7 @@ function broadcastDisconnectStatusBanner() {
     roomCode: gameSession.roomCode,
     disconnectedNames,
     remainingSec: minRemainingSec
-  });
+  }, disconnectedNames.length === 0);
 }
 
 function startHostLifecycleMonitor() {
@@ -293,8 +364,8 @@ function startHostLifecycleMonitor() {
     tickCount += 1;
     const now = Date.now();
 
-    // Every 4 seconds, send HOST_HEARTBEAT to all connected clients
-    if (tickCount % 4 === 0) {
+    // Every 5 seconds, send HOST_HEARTBEAT to all connected clients
+    if (tickCount % 5 === 0) {
       publishFastPacket({
         msgType: 'HOST_HEARTBEAT',
         roomCode: gameSession.roomCode,
@@ -339,8 +410,8 @@ function startHostLifecycleMonitor() {
           anyWarned = true;
         }
       } else {
-        // In waiting lobby: mark offline after 16s without heartbeat so Host knows status
-        if (elapsed >= 16000 && s.connected) {
+        // In waiting lobby: mark offline after 28s without heartbeat so Host knows status
+        if (elapsed >= 28000 && s.connected) {
           s.connected = false;
           if (typeof renderLobbyUI === 'function') renderLobbyUI();
         }
@@ -375,18 +446,17 @@ function startClientHeartbeatLoop() {
     // Check if Host has been unreachable for too long during an active match
     if (gameSession.lobbyState.matchStarted) {
       const hostSilenceMs = Date.now() - lastHostPacketTs;
-      if (hostSilenceMs >= 42000) {
-        // Return client to waiting room lobby if Host is unreachable for 42s
+      if (hostSilenceMs >= 65000) {
         gameSession.lobbyState.matchStarted = false;
         updateFloatingDisconnectBannerUI([], 0, false);
         showReturnToLobbyOnScreen(`⚠️ 房主連線中斷過久，已返回房間【${gameSession.roomCode}】候戰室等候房主重連（或可點擊退出房間）。`);
         lastHostPacketTs = Date.now();
-      } else if (hostSilenceMs >= 12000) {
-        const rem = Math.max(1, Math.ceil((42000 - hostSilenceMs) / 1000));
+      } else if (hostSilenceMs >= 25000) {
+        const rem = Math.max(1, Math.ceil((65000 - hostSilenceMs) / 1000));
         updateFloatingDisconnectBannerUI(['房主'], rem, false);
       }
     }
-  }, 3500);
+  }, 4500);
 }
 
 // Show the Lobby Modal with a prominent notice banner when a match is aborted/returned to lobby
@@ -400,6 +470,8 @@ function showReturnToLobbyOnScreen(reasonText) {
   if (noticeBanner && noticeText && reasonText) {
     noticeText.textContent = reasonText;
     noticeBanner.classList.remove('hidden');
+  } else if (noticeBanner) {
+    noticeBanner.classList.add('hidden');
   }
   document.getElementById('lobbyModal')?.classList.remove('hidden');
   if (typeof renderLobbyUI === 'function') renderLobbyUI();
@@ -478,25 +550,40 @@ function kickPlayerFromHostLobby(seatId) {
   showToast(`🪑 已釋放座位 ${seatId.toUpperCase()}（原玩家：${oldName}）。`);
 }
 
-// Host completely disbands and closes the online room
-function disbandOnlineRoomByHost() {
-  if (gameSession.mode !== 'HOST' || !gameSession.roomCode) return;
-  const oldCode = gameSession.roomCode;
+// Host completely disbands and closes the online room (SYNCHRONOUS 0ms STATE WIPE)
+function disbandOnlineRoomByHost(opts = {}) {
+  const oldCode = String(gameSession.roomCode || '').trim().toUpperCase();
+  if (!oldCode) {
+    clearActiveSessionSnapshot();
+    cleanupNetworkChannels();
+    return;
+  }
+
+  // 1. Mark oldCode as exited and wipe saved snapshot IMMEDIATELY (0ms) so beforeunload/packets cannot re-save it!
+  markRoomAsExited(oldCode);
+  clearActiveSessionSnapshot();
+
+  // 2. Send ROOM_CLOSED over currently open channels before detaching
   const closePkt = stampPacket({
     msgType: 'ROOM_CLOSED',
     roomCode: oldCode,
     reason: `房主已解散並關閉房間【${oldCode}】`
   });
-  publishCloudPacket(closePkt, false);
-  // Clear retained room state on MQTT broker
   const topics = getCloudTopics(oldCode);
+  const jsonStr = JSON.stringify(closePkt);
   activeMqttClients.forEach(client => {
     if (client && client.connected) {
       try {
+        client.publish(topics.toClientEvent, jsonStr, { qos: 1, retain: false });
         client.publish(topics.toClientState, '', { qos: 1, retain: true });
       } catch (e) {}
     }
   });
+  if (typeof window.fetch === 'function') {
+    try {
+      window.fetch(`https://ntfy.sh/${topics.sseChannel}`, { method: 'POST', body: jsonStr }).catch(() => {});
+    } catch (e) {}
+  }
   Object.values(gameSession.peerConns).forEach(conn => {
     if (conn && conn.open) {
       try { conn.send(closePkt); } catch (e) {}
@@ -506,82 +593,155 @@ function disbandOnlineRoomByHost() {
     try { gameSession.bc.postMessage(closePkt); } catch (e) {}
   }
 
-  clearActiveSessionSnapshot();
+  // 3. Synchronously reset gameSession state to SOLO
+  gameSession.mode = 'SOLO';
+  gameSession.roomCode = '';
+  gameSession.localSeatId = 'p1';
+  gameSession.hostMasterState = null;
+  gameSession.lobbyState.roomCode = '';
+  gameSession.lobbyState.matchStarted = false;
+  gameSession.lobbyState.lastReturnReason = null;
+  Object.keys(seatHeartbeatMap).forEach(k => delete seatHeartbeatMap[k]);
+
+  if (typeof window !== 'undefined' && window.history && window.history.replaceState) {
+    try { window.history.replaceState({}, '', window.location.pathname); } catch (e) {}
+  }
+
+  // 4. Detach all incoming listeners immediately, then close sockets after flush
+  const oldMqtt = activeMqttClients.slice();
+  activeMqttClients = [];
+  oldMqtt.forEach(c => {
+    try { c.removeAllListeners('message'); } catch (e) {}
+  });
   setTimeout(() => {
-    cleanupNetworkChannels();
-    gameSession.mode = 'SOLO';
-    gameSession.roomCode = null;
-    gameSession.localSeatId = 'p1';
-    gameSession.hostMasterState = null;
-    gameSession.lobbyState.matchStarted = false;
-    updateFloatingDisconnectBannerUI([], 0, false);
+    oldMqtt.forEach(c => {
+      try { c.end(true); } catch (e) {}
+    });
+  }, 150);
+
+  cleanupNetworkChannels();
+  updateFloatingDisconnectBannerUI([], 0, false);
+  document.getElementById('lobbyNoticeBanner')?.classList.add('hidden');
+  document.getElementById('settingsMenuModal')?.classList.add('hidden');
+
+  if (!opts.silent) {
     if (typeof activeLobbyTab !== 'undefined') activeLobbyTab = 'SOLO';
-    document.getElementById('settingsMenuModal')?.classList.add('hidden');
     document.getElementById('lobbyModal')?.classList.remove('hidden');
     if (typeof renderLobbyUI === 'function') renderLobbyUI();
     if (typeof updateSettingsMenuUI === 'function') updateSettingsMenuUI();
     showToast(`🚪 已解散並關閉房間【${oldCode}】。`);
-  }, 160);
+  }
 }
 
-// Client voluntarily leaves the current room or ongoing match
-function leaveOnlineRoom(reasonText = '主動退出房間') {
+// Client voluntarily leaves the current room or ongoing match (SYNCHRONOUS 0ms STATE WIPE)
+function leaveOnlineRoom(reasonText = '主動退出房間', opts = {}) {
   if (gameSession.mode === 'HOST') {
-    disbandOnlineRoomByHost();
+    disbandOnlineRoomByHost(opts);
     return;
   }
-  if (gameSession.mode !== 'CLIENT' || !gameSession.roomCode) return;
-  const oldCode = gameSession.roomCode;
-  const leavePkt = stampPacket({
-    msgType: 'PLAYER_LEAVE',
-    roomCode: oldCode,
-    seatId: gameSession.localSeatId,
-    clientToken: gameSession.clientToken,
-    playerName: gameSession.playerName,
-    reason: reasonText
-  });
-  sendPacketToHost(leavePkt);
-  clearClientRetainedJoinOnMqtt(oldCode, gameSession.clientToken);
-  clearActiveSessionSnapshot();
+  const oldCode = String(gameSession.roomCode || '').trim().toUpperCase();
+  const oldSeat = gameSession.localSeatId;
+  const oldToken = gameSession.clientToken;
 
-  // Remove ?room=XXXX from URL so refreshing won't auto-join the room we just left
-  if (typeof window !== 'undefined' && window.history && window.history.replaceState) {
-    try {
-      window.history.replaceState({}, '', window.location.pathname);
-    } catch (e) {}
+  // 1. Blacklist oldCode and wipe saved snapshot IMMEDIATELY (0ms) so refresh can NEVER restore oldCode!
+  if (oldCode) {
+    markRoomAsExited(oldCode);
+  }
+  clearActiveSessionSnapshot();
+  rotateClientTokenOnExit();
+
+  // 2. Send PLAYER_LEAVE using captured oldCode & oldToken
+  if (oldCode) {
+    const leavePkt = stampPacket({
+      msgType: 'PLAYER_LEAVE',
+      roomCode: oldCode,
+      seatId: oldSeat,
+      clientToken: oldToken,
+      playerName: gameSession.playerName,
+      reason: reasonText
+    });
+    const topics = getCloudTopics(oldCode);
+    const jsonStr = JSON.stringify(leavePkt);
+    activeMqttClients.forEach(client => {
+      if (client && client.connected) {
+        try {
+          client.publish(topics.toHostJoinPrefix + oldToken, '', { qos: 1, retain: true });
+          client.publish(topics.toHost, jsonStr, { qos: 1, retain: false });
+        } catch (e) {}
+      }
+    });
+    if (typeof window.fetch === 'function') {
+      try {
+        window.fetch(`https://ntfy.sh/${topics.sseChannel}`, { method: 'POST', body: jsonStr }).catch(() => {});
+      } catch (e) {}
+    }
+    if (gameSession.clientHostConn && gameSession.clientHostConn.open) {
+      try { gameSession.clientHostConn.send(leavePkt); } catch (e) {}
+    }
+    if (gameSession.bc) {
+      try { gameSession.bc.postMessage(leavePkt); } catch (e) {}
+    }
   }
 
+  // 3. Synchronously reset gameSession state to SOLO
+  gameSession.mode = 'SOLO';
+  gameSession.roomCode = '';
+  gameSession.localSeatId = 'p1';
+  gameSession.lobbyState.roomCode = '';
+  gameSession.lobbyState.matchStarted = false;
+  gameSession.lobbyState.lastReturnReason = null;
+  gameSession.lobbyState.seats = [];
+
+  if (typeof window !== 'undefined' && window.history && window.history.replaceState) {
+    try { window.history.replaceState({}, '', window.location.pathname); } catch (e) {}
+  }
+
+  // 4. Detach incoming listeners immediately, then close sockets after flush
+  const oldMqtt = activeMqttClients.slice();
+  activeMqttClients = [];
+  oldMqtt.forEach(c => {
+    try { c.removeAllListeners('message'); } catch (e) {}
+  });
   setTimeout(() => {
-    cleanupNetworkChannels();
-    gameSession.mode = 'SOLO';
-    gameSession.roomCode = null;
-    gameSession.localSeatId = 'p1';
-    gameSession.lobbyState.roomCode = null;
-    gameSession.lobbyState.matchStarted = false;
-    gameSession.lobbyState.seats = [];
-    updateFloatingDisconnectBannerUI([], 0, false);
-    document.getElementById('settingsMenuModal')?.classList.add('hidden');
-    const joinInput = document.getElementById('inputJoinRoomCode');
-    if (joinInput) joinInput.value = '';
+    oldMqtt.forEach(c => {
+      try { c.end(true); } catch (e) {}
+    });
+  }, 150);
+
+  cleanupNetworkChannels();
+  updateFloatingDisconnectBannerUI([], 0, false);
+  document.getElementById('lobbyNoticeBanner')?.classList.add('hidden');
+  document.getElementById('settingsMenuModal')?.classList.add('hidden');
+  const joinInput = document.getElementById('inputJoinRoomCode');
+  if (joinInput) joinInput.value = '';
+
+  if (!opts.silent) {
+    document.getElementById('lobbyModal')?.classList.remove('hidden');
     if (typeof renderLobbyUI === 'function') renderLobbyUI();
     if (typeof updateSettingsMenuUI === 'function') updateSettingsMenuUI();
-    showToast(`🚪 你已退出房間【${oldCode}】。`);
-  }, 180);
+    if (oldCode) {
+      showToast(`🚪 你已退出房間【${oldCode}】。`);
+    }
+  }
 }
 
 // Notify Host immediately when tab refreshes or closes so Host can handle reconnect or grace countdown
 if (typeof window !== 'undefined' && !window.__dbrUnloadBound) {
   window.__dbrUnloadBound = true;
   const handlePageUnload = () => {
-    saveActiveSessionSnapshot();
-    if (gameSession.mode === 'CLIENT' && gameSession.roomCode) {
-      publishFastPacket({
-        msgType: 'CLIENT_TEMP_AWAY',
-        roomCode: gameSession.roomCode,
-        seatId: gameSession.localSeatId,
-        clientToken: gameSession.clientToken,
-        playerName: gameSession.playerName
-      });
+    if ((gameSession.mode === 'HOST' || gameSession.mode === 'CLIENT') && gameSession.roomCode && !isRoomMarkedExited(gameSession.roomCode)) {
+      saveActiveSessionSnapshot();
+      if (gameSession.mode === 'CLIENT') {
+        publishFastPacket({
+          msgType: 'CLIENT_TEMP_AWAY',
+          roomCode: gameSession.roomCode,
+          seatId: gameSession.localSeatId,
+          clientToken: gameSession.clientToken,
+          playerName: gameSession.playerName
+        }, true);
+      }
+    } else {
+      clearActiveSessionSnapshot();
     }
   };
   window.addEventListener('pagehide', handlePageUnload);
@@ -641,7 +801,7 @@ function openCloudRelayForRoom(roomCode) {
   // --- 1. HTTPS Port-443 SSE Relay (ntfy.sh) ---
   if (typeof window.EventSource !== 'undefined') {
     try {
-      const sseUrl = `https://ntfy.sh/${topics.sseChannel}/sse?since=10m`;
+      const sseUrl = gameSession.mode === 'HOST' ? `https://ntfy.sh/${topics.sseChannel}/sse?since=20s` : `https://ntfy.sh/${topics.sseChannel}/sse`;
       const es = new window.EventSource(sseUrl);
       activeSseSource = es;
       es.onopen = () => {
@@ -1037,7 +1197,12 @@ function mountHostPeerServer(code) {
 
 // === Host: Create Online Room ===
 function createOnlineHostRoom(customCode = null) {
+  if (gameSession.roomCode && (!customCode || String(customCode).trim().toUpperCase() !== gameSession.roomCode)) {
+    markRoomAsExited(gameSession.roomCode);
+  }
   cleanupNetworkChannels();
+  updateFloatingDisconnectBannerUI([], 0, false);
+  document.getElementById('lobbyNoticeBanner')?.classList.add('hidden');
   const nickInput = document.getElementById('inputPlayerNickname');
   if (nickInput && nickInput.value.trim()) {
     gameSession.playerName = nickInput.value.trim();
@@ -1045,6 +1210,7 @@ function createOnlineHostRoom(customCode = null) {
   }
 
   const code = (customCode ? String(customCode).trim().toUpperCase() : generateRandomCode(4));
+  unmarkRoomAsExited(code);
   gameSession.mode = 'HOST';
   gameSession.roomCode = code;
   gameSession.localSeatId = 'p1';
@@ -1115,7 +1281,13 @@ function joinOnlineRoomAsClient(rawCode, playerName) {
     saveStoredString('local', 'dbr_v13_player_name', gameSession.playerName);
   }
 
+  if (gameSession.roomCode && gameSession.roomCode !== code) {
+    markRoomAsExited(gameSession.roomCode);
+  }
+  unmarkRoomAsExited(code);
   cleanupNetworkChannels();
+  updateFloatingDisconnectBannerUI([], 0, false);
+  document.getElementById('lobbyNoticeBanner')?.classList.add('hidden');
   gameSession.mode = 'CLIENT';
   gameSession.roomCode = code;
   gameSession.hasSimulatedHotSeat = false;
@@ -1486,8 +1658,8 @@ function broadcastHostState() {
 function handleIncomingNetworkPacket(packet, transport, peerConn) {
   if (!packet || packet.roomCode !== gameSession.roomCode) return;
 
-  if (gameSession.mode === 'HOST' && packet.seatId) {
-    touchSeatHeartbeat(packet.seatId, packet.playerName);
+  if (gameSession.mode === 'HOST' && (packet.seatId || packet.clientToken)) {
+    touchSeatHeartbeat(packet.seatId || packet.clientToken, packet.playerName);
   }
   if (gameSession.mode === 'CLIENT') {
     lastHostPacketTs = Date.now();
@@ -1514,14 +1686,16 @@ function handleIncomingNetworkPacket(packet, transport, peerConn) {
   // --- HOST HANDLERS ---
   if (gameSession.mode === 'HOST') {
     if (packet.msgType === 'CLIENT_HEARTBEAT') {
-      touchSeatHeartbeat(packet.seatId, packet.playerName);
+      touchSeatHeartbeat(packet.seatId || packet.clientToken, packet.playerName);
       return;
     }
 
     if (packet.msgType === 'CLIENT_TEMP_AWAY') {
-      const seatId = packet.seatId;
+      const seats = (gameSession.lobbyState && gameSession.lobbyState.seats) || [];
+      const st = seats.find(s => s.id === packet.seatId || (packet.clientToken && s.clientToken === packet.clientToken));
+      const seatId = st ? st.id : packet.seatId;
       if (seatId && seatHeartbeatMap[seatId]) {
-        seatHeartbeatMap[seatId].lastSeen = Math.min(seatHeartbeatMap[seatId].lastSeen, Date.now() - (DISCONNECT_WARN_MS - 3000));
+        seatHeartbeatMap[seatId].lastSeen = Math.min(seatHeartbeatMap[seatId].lastSeen, Date.now() - (DISCONNECT_WARN_MS - 4000));
       }
       return;
     }
@@ -1598,6 +1772,7 @@ function handleIncomingNetworkPacket(packet, transport, peerConn) {
       assignedSeat.clientToken = clientToken;
       assignedSeat.name = playerName || `深淵魔王 (${assignedSeat.id.toUpperCase()})`;
       touchSeatHeartbeat(assignedSeat.id, assignedSeat.name);
+      broadcastDisconnectStatusBanner();
 
       if (peerConn) {
         gameSession.peerConns[assignedSeat.id] = peerConn;
@@ -1691,17 +1866,21 @@ function handleIncomingNetworkPacket(packet, transport, peerConn) {
 
     if (packet.msgType === 'ROOM_CLOSED' || (packet.msgType === 'PLAYER_KICKED' && packet.targetToken === gameSession.clientToken)) {
       const msg = packet.reason || '房間已關閉';
-      clearClientRetainedJoinOnMqtt(gameSession.roomCode, gameSession.clientToken);
+      const closedCode = gameSession.roomCode;
+      markRoomAsExited(closedCode);
+      clearClientRetainedJoinOnMqtt(closedCode, gameSession.clientToken);
       clearActiveSessionSnapshot();
+      rotateClientTokenOnExit();
       if (typeof window !== 'undefined' && window.history && window.history.replaceState) {
         try { window.history.replaceState({}, '', window.location.pathname); } catch (e) {}
       }
       cleanupNetworkChannels();
       gameSession.mode = 'SOLO';
-      gameSession.roomCode = null;
+      gameSession.roomCode = '';
       gameSession.localSeatId = 'p1';
-      gameSession.lobbyState.roomCode = null;
+      gameSession.lobbyState.roomCode = '';
       gameSession.lobbyState.matchStarted = false;
+      gameSession.lobbyState.lastReturnReason = null;
       gameSession.lobbyState.seats = [];
       updateFloatingDisconnectBannerUI([], 0, false);
       showReturnToLobbyOnScreen(`🚪 ${msg}`);
@@ -2650,7 +2829,11 @@ window.runAIStep = runAIStep;
 // === V14.4: Auto-Restore Session on Page Refresh / Reopen ===
 function tryRestoreSavedSessionOnBoot(urlRoomCode) {
   const saved = loadSavedSessionSnapshot();
-  const cleanUrlRoom = urlRoomCode ? String(urlRoomCode).trim().toUpperCase() : null;
+  const rawUrlRoom = urlRoomCode ? String(urlRoomCode).trim().toUpperCase() : null;
+  const cleanUrlRoom = (rawUrlRoom && !isRoomMarkedExited(rawUrlRoom)) ? rawUrlRoom : null;
+  if (rawUrlRoom && isRoomMarkedExited(rawUrlRoom) && typeof window !== 'undefined' && window.history && window.history.replaceState) {
+    try { window.history.replaceState({}, '', window.location.pathname); } catch (e) {}
+  }
 
   // Case 1: Host refreshed the page (either with no ?room= or matching ?room=)
   if (saved && saved.mode === 'HOST' && saved.roomCode && (!cleanUrlRoom || cleanUrlRoom === saved.roomCode)) {
