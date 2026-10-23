@@ -16,7 +16,7 @@ function isRunningStandalonePWA() {
 
 function registerPwaServiceWorker() {
   if ("serviceWorker" in navigator && (location.protocol === "https:" || location.hostname === "localhost" || location.hostname === "127.0.0.1")) {
-    navigator.serviceWorker.register("./sw.js?v=14.8").then(reg => { try { reg.update(); } catch(e){} }).catch(() => {});
+    navigator.serviceWorker.register("./sw.js?v=14.8.1").then(reg => { try { reg.update(); } catch(e){} }).catch(() => {});
   }
   window.addEventListener("beforeinstallprompt", (e) => {
     e.preventDefault();
@@ -2157,24 +2157,34 @@ function renderAll() {
   const btnConfirmDiscard = document.getElementById('btnConfirmDiscard');
   const btnEndTurn = document.getElementById('btnEndTurn');
 
+  const isDiscardModeNow = uiSelection.mode === 'DISCARD_SELECT';
+  const discardSelectedCnt = uiSelection.discardSet.size;
   const canEnterDiscard = isHumanStep1 &&
     (state.turn.actionsUsed < state.turn.maxActions) &&
     (state.config.playDiscardMode === 'SHARED_QUOTA_4' || !state.turn.hasPlayedCard);
 
-  btnDiscardMode.disabled = !canEnterDiscard;
-  btnDiscardMode.classList.toggle('opacity-40', !canEnterDiscard);
-  btnDiscardMode.textContent = uiSelection.mode === 'DISCARD_SELECT' ? '↩ 返回出牌' : '🗑️ 棄牌濾牌';
+  // While in DISCARD_SELECT mode, Cancel Discard is ALWAYS enabled (1 click clears all selected cards & returns to play mode)
+  const allowToggleDiscardBtn = isDiscardModeNow || canEnterDiscard;
+  btnDiscardMode.disabled = !allowToggleDiscardBtn;
+  btnDiscardMode.classList.toggle('opacity-40', !allowToggleDiscardBtn);
+  btnDiscardMode.textContent = isDiscardModeNow ? '↩ 取消棄牌 (返回出牌)' : '🗑️ 棄牌濾牌';
 
-  if (uiSelection.mode === 'DISCARD_SELECT') {
+  if (isDiscardModeNow) {
     btnConfirmDiscard.classList.remove('hidden');
-    btnConfirmDiscard.textContent = `✔ 確認棄置 (${uiSelection.discardSet.size})`;
+    btnConfirmDiscard.disabled = discardSelectedCnt === 0;
+    btnConfirmDiscard.classList.toggle('opacity-45', discardSelectedCnt === 0);
+    btnConfirmDiscard.textContent = discardSelectedCnt > 0
+      ? `✔ 確認棄置 (${discardSelectedCnt}張)`
+      : '請點選要棄的手牌';
+    // Hide End Turn / Pay Salary button during Discard Mode so players NEVER accidentally press Pay Salary!
+    btnEndTurn.classList.add('hidden');
   } else {
     btnConfirmDiscard.classList.add('hidden');
+    btnEndTurn.classList.remove('hidden');
+    btnEndTurn.disabled = !isHumanStep1;
+    btnEndTurn.classList.toggle('opacity-50', !isHumanStep1);
+    btnEndTurn.textContent = isHumanStep1 ? '⏭️ 結束出牌 ➔ 發薪' : `⏳ ${getShortPlayerName(turnActor.name)} 行動中...`;
   }
-
-  btnEndTurn.disabled = !isHumanStep1;
-  btnEndTurn.classList.toggle('opacity-50', !isHumanStep1);
-  btnEndTurn.textContent = isHumanStep1 ? '⏭️ 結束出牌 ➔ 發薪' : `⏳ ${getShortPlayerName(turnActor.name)} 行動中...`;
   const handDock = document.getElementById('myHandDockSection');
   if (handDock) {
     const nextHandDockCls = `bg-slate-950/90 border-t-2 ${isHumanStep1 ? 'border-amber-400' : 'border-slate-800 opacity-85'} rounded-xl px-2 py-1.5 flex flex-col gap-1 shadow-2xl transition min-w-0 shrink-0`;
@@ -2716,22 +2726,24 @@ function renderLandscapeArena() {
       lsCtrlCol.innerHTML = `
       <div class="text-center">
         <div class="text-base sm:text-lg font-black text-amber-300 leading-none">${remainingActions}</div>
-        <div class="text-[8px] font-bold text-stone-400 mt-0.5">剩餘額度</div>
+        <div class="text-[8px] font-bold text-stone-400 mt-0.5">${isDiscardMode ? '棄牌階段' : '剩餘額度'}</div>
       </div>
 
-      ${isDiscardMode && discardCnt > 0 ? `
-        <button data-ls-ctrl="CONFIRM_DISCARD" class="w-full py-1 px-1 rounded-full bg-orange-600 border border-orange-300 text-[10px] font-black text-white shadow-lg">
-          確認棄(${discardCnt})
+      ${isDiscardMode ? `
+        <button data-ls-ctrl="TOGGLE_DISCARD" class="w-full py-1 px-1 rounded-full bg-slate-800 border-2 border-amber-400 text-amber-200 text-[10px] font-black shadow hover:bg-slate-700">
+          ↩ 取消棄牌
+        </button>
+        <button data-ls-ctrl="CONFIRM_DISCARD" ${discardCnt === 0 ? 'disabled' : ''} class="w-full py-1 px-1 rounded-full ${discardCnt > 0 ? 'bg-orange-600 border-2 border-white text-white shadow-lg' : 'bg-stone-900 border border-stone-700 text-stone-500 opacity-50 cursor-not-allowed'} text-[10px] font-black">
+          ${discardCnt > 0 ? `✔ 確認棄(${discardCnt})` : '點選棄牌'}
         </button>
       ` : `
-        <button data-ls-ctrl="TOGGLE_DISCARD" ${!canDiscard ? 'disabled' : ''} class="w-full py-1 px-1 rounded-full ${isDiscardMode ? 'bg-orange-900 border-2 border-orange-400 text-orange-200' : 'bg-stone-900 border border-stone-600 text-stone-200'} text-[11px] font-black ${!canDiscard ? 'opacity-40 cursor-not-allowed' : 'hover:border-amber-400'}">
-          ${isDiscardMode ? '取消棄牌' : '棄牌'}
+        <button data-ls-ctrl="TOGGLE_DISCARD" ${!canDiscard ? 'disabled' : ''} class="w-full py-1 px-1 rounded-full bg-stone-900 border border-stone-600 text-stone-200 text-[11px] font-black ${!canDiscard ? 'opacity-40 cursor-not-allowed' : 'hover:border-amber-400'}">
+          棄牌
+        </button>
+        <button data-ls-ctrl="END_TURN" ${!isHumanStep1 ? 'disabled' : ''} class="w-full py-1 px-1 rounded-full bg-gradient-to-b border border-amber-200 text-slate-950 text-[11px] font-black shadow-lg ${!isHumanStep1 ? 'opacity-40 cursor-not-allowed' : 'hover:brightness-110'}">
+          ${state.turn.hasPlayedCard || state.turn.hasDiscardedCard ? `發薪 ${myBurn}` : '結束'}
         </button>
       `}
-
-      <button data-ls-ctrl="END_TURN" ${!isHumanStep1 ? 'disabled' : ''} class="w-full py-1 px-1 rounded-full bg-gradient-to-b border border-amber-200 text-slate-950 text-[11px] font-black shadow-lg ${!isHumanStep1 ? 'opacity-40 cursor-not-allowed' : 'hover:brightness-110'}">
-        ${state.turn.hasPlayedCard || state.turn.hasDiscardedCard ? `發薪 ${myBurn}` : '結束'}
-      </button>
     `;
     }
   }
@@ -3771,6 +3783,7 @@ function attachDynamicBoardListeners() {
         resetSelectionState();
         dispatchPlayerAction({ type: 'DISCARD_CARDS', cardUids });
       } else if (ctrlAct === 'END_TURN') {
+        if (uiSelection.mode === 'DISCARD_SELECT') return;
         if (typeof playSfx === 'function') playSfx('click');
         endPlayPhaseAndSettleTurn();
       }
@@ -4819,6 +4832,7 @@ function initAppOnLoad() {
   });
 
   document.getElementById('btnEndTurn')?.addEventListener('click', () => {
+    if (uiSelection.mode === 'DISCARD_SELECT') return;
     if (gameState.phase === 'STEP1_PLAY_OR_DISCARD' && isLocalPlayerTurn(gameState)) {
       endPlayPhaseAndSettleTurn();
     }
@@ -5001,9 +5015,9 @@ function renderEmojiPingTrayUI() {
   grid.innerHTML = Object.values(EMOJI_PING_CATALOG).map(item => {
     const phrase = isDemon ? item.demonText : item.classicText;
     return `
-      <button type="button" data-send-emoji-ping="${item.id}" class="emoji-ping-btn shadow">
-        <span class="text-xl leading-none shrink-0">${item.emoji}</span>
-        <span class="text-xs font-black text-amber-100 truncate">${phrase}</span>
+      <button type="button" data-send-emoji-ping="${item.id}" class="emoji-ping-btn shadow" style="border-color: ${item.borderHex}66">
+        <span class="text-xl sm:text-2xl leading-none shrink-0">${item.emoji}</span>
+        <span class="text-xs sm:text-[13px] font-black text-amber-100 leading-snug">${phrase}</span>
       </button>
     `;
   }).join('');
