@@ -16,7 +16,7 @@ function isRunningStandalonePWA() {
 
 function registerPwaServiceWorker() {
   if ("serviceWorker" in navigator && (location.protocol === "https:" || location.hostname === "localhost" || location.hostname === "127.0.0.1")) {
-    navigator.serviceWorker.register("./sw.js?v=14.7").then(reg => { try { reg.update(); } catch(e){} }).catch(() => {});
+    navigator.serviceWorker.register("./sw.js?v=14.8").then(reg => { try { reg.update(); } catch(e){} }).catch(() => {});
   }
   window.addEventListener("beforeinstallprompt", (e) => {
     e.preventDefault();
@@ -634,9 +634,8 @@ function buildLsFlyingCardHTML(opts = {}) {
   if (opts.faceDown) {
     return `
       ${tagHTML}
-      <div class="w-full h-full rounded-lg bg-gradient-to-br border-2 border-amber-400 flex flex-col items-center justify-center shadow-2xl">
-        <span class="text-base">${terms.appIcon || '💼'}</span>
-        <span class="text-[7px] font-black text-amber-300 mt-0.5">CARD</span>
+      <div class="w-full h-full rounded-lg overflow-hidden border-2 border-amber-400 bg-slate-950 shadow-2xl">
+        ${getCardImgTag('CARD_BACK', '卡背', 'w-full h-full object-cover block')}
       </div>
     `;
   }
@@ -2101,6 +2100,13 @@ function renderAll() {
   const isHumanStep1 = state.phase === 'STEP1_PLAY_OR_DISCARD' && isMyTurnNow;
   document.getElementById('quotaCounterText').textContent = `額度: ${state.turn.actionsUsed}/${state.turn.maxActions}`;
   document.getElementById('actionDeckCountText').textContent = state.actionDeck.length;
+  const pDeckThumb = document.getElementById('portraitDeckBackThumb');
+  if (pDeckThumb) {
+    const backSrc = getCardArtSrc('CARD_BACK');
+    if (backSrc && pDeckThumb.getAttribute('src') !== backSrc) {
+      pDeckThumb.setAttribute('src', backSrc);
+    }
+  }
   document.getElementById('discardPileCountText').textContent = state.discardPile.length;
 
   const handContainer = document.getElementById('localHandContainer');
@@ -2562,9 +2568,9 @@ function renderLandscapeArena() {
               const isFlipped = !cer.active || cer.bankFlippedDepts.has(d);
               if (!isFlipped) {
                 return `
-                  <div data-draft-dept="${d}" class="ls-dept-card border-2 border-amber-400/80 bg-stone-900 flex flex-col items-center justify-center">
-                    <span class="text-sm">${terms.appIcon || '💼'}</span>
-                    <span class="text-[7px] font-black text-amber-300">${DEPT_META[d].short}</span>
+                  <div data-draft-dept="${d}" class="ls-dept-card border-2 border-amber-400/80 bg-slate-950 overflow-hidden relative">
+                    ${getCardImgTag('CARD_BACK', DEPT_META[d].short, 'w-full h-full object-cover block')}
+                    <span class="absolute bottom-0.5 left-1/2 -translate-x-1/2 px-1 py-0.2 rounded bg-slate-950/90 border border-amber-400/70 text-[7px] font-black text-amber-300 whitespace-nowrap">${DEPT_META[d].short}</span>
                   </div>
                 `;
               }
@@ -2584,9 +2590,9 @@ function renderLandscapeArena() {
       centerEl.innerHTML = `
         <div class="ls-oval-felt flex flex-col items-center justify-center px-6 py-1.5 gap-1">
           <div class="text-[10px] font-black text-amber-300">${cer.bannerText || '🎴 正在逐一輪流派發起始手牌...'}</div>
-          <div id="lsCenterDealDeck" class="ls-table-pile-card bg-gradient-to-br border-2 border-amber-400 flex flex-col items-center justify-center relative shadow-2xl">
-            <span class="text-base">${terms.appIcon || '💼'}</span>
-            <span class="absolute -bottom-1 -right-1 px-1.5 py-0.2 rounded-full bg-stone-950 border border-amber-400 text-[8px] font-black text-amber-300">待派${remainingToDeal}</span>
+          <div id="lsCenterDealDeck" class="ls-table-pile-card border-2 border-amber-400 bg-slate-950 overflow-hidden relative shadow-2xl">
+            ${getCardImgTag('CARD_BACK', '發牌牌庫', 'w-full h-full object-cover block')}
+            <span class="absolute bottom-0.5 right-0.5 px-1.5 py-0.2 rounded-full bg-stone-950/95 border border-amber-400 text-[8px] font-black text-amber-300 z-20 shadow">待派${remainingToDeal}</span>
           </div>
         </div>
       `;
@@ -2619,9 +2625,9 @@ function renderLandscapeArena() {
 
           <div id="lsDrawPileSlot" class="h-full flex flex-col items-center justify-center gap-0.5">
             <span class="text-[9px] font-bold text-stone-400 leading-none">抽牌</span>
-            <div class="ls-table-pile-card bg-gradient-to-br border-2 border-stone-600/80 flex flex-col items-center justify-center relative shadow-xl">
-              <span class="text-sm opacity-45">${terms.appIcon || '💼'}</span>
-              <span class="absolute -bottom-1 -right-1 px-1.5 py-0.2 rounded-full bg-stone-950 border border-amber-400/80 text-[8px] font-black text-amber-300 z-20 shadow">${state.actionDeck.length}</span>
+            <div class="ls-table-pile-card border-2 border-amber-400/80 bg-slate-950 overflow-hidden relative shadow-xl">
+              ${getCardImgTag('CARD_BACK', '抽牌牌庫', 'w-full h-full object-cover block')}
+              <span class="absolute bottom-0.5 right-0.5 px-1.5 py-0.2 rounded-full bg-stone-950/95 border border-amber-400/90 text-[8px] font-black text-amber-300 z-20 shadow">${state.actionDeck.length}</span>
             </div>
           </div>
         </div>
@@ -4198,6 +4204,16 @@ function renderGallery(filter = 'ALL') {
           <div class="relative rounded-xl bg-slate-950 border-2 border-slate-500 overflow-hidden shadow-xl w-full">
             ${getCardImgTag("OUTSOURCED", "深淵惡魔高利貸傭兵", "full-gpt-card-img")}
             <span class="absolute top-1 right-1 px-1.5 py-0.5 rounded bg-rose-600 text-white text-[10px] font-black shadow-lg">外包無限</span>
+          </div>
+        </div>
+      `);
+    }
+    if (getCardArtSrc('CARD_BACK')) {
+      items.push(`
+        <div class="flex flex-col items-center min-w-0">
+          <div class="relative rounded-xl bg-slate-950 border-2 border-amber-400 overflow-hidden shadow-xl w-full">
+            ${getCardImgTag("CARD_BACK", "專屬主題卡背", "full-gpt-card-img")}
+            <span class="absolute top-1 right-1 px-1.5 py-0.5 rounded bg-amber-500 text-slate-950 text-[10px] font-black shadow-lg">主題卡背</span>
           </div>
         </div>
       `);
