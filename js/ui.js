@@ -16,7 +16,7 @@ function isRunningStandalonePWA() {
 
 function registerPwaServiceWorker() {
   if ("serviceWorker" in navigator && (location.protocol === "https:" || location.hostname === "localhost" || location.hostname === "127.0.0.1")) {
-    navigator.serviceWorker.register("./sw.js?v=14.6.1").then(reg => { try { reg.update(); } catch(e){} }).catch(() => {});
+    navigator.serviceWorker.register("./sw.js?v=14.6.2").then(reg => { try { reg.update(); } catch(e){} }).catch(() => {});
   }
   window.addEventListener("beforeinstallprompt", (e) => {
     e.preventDefault();
@@ -3732,13 +3732,32 @@ function attachDynamicBoardListeners() {
 
     const lsCtrlBtn = e.target.closest('[data-ls-ctrl]');
     if (lsCtrlBtn) {
+      if (lsCtrlBtn.disabled) return;
       const ctrlAct = lsCtrlBtn.getAttribute('data-ls-ctrl');
+      const isHumanStep1 = state.phase === 'STEP1_PLAY_OR_DISCARD' && isMyTurnNow;
+      if (!isHumanStep1) return;
+
       if (ctrlAct === 'TOGGLE_DISCARD') {
-        document.getElementById('btnToggleDiscardMode')?.click();
+        const canEnterDiscard = (state.turn.actionsUsed < state.turn.maxActions) &&
+          (state.config.playDiscardMode === 'SHARED_QUOTA_4' || !state.turn.hasPlayedCard);
+        if (!canEnterDiscard && uiSelection.mode !== 'DISCARD_SELECT') return;
+        if (typeof playSfx === 'function') playSfx('click');
+        if (uiSelection.mode === 'DISCARD_SELECT') {
+          resetSelectionState();
+        } else {
+          resetSelectionState();
+          uiSelection.mode = 'DISCARD_SELECT';
+        }
+        renderAll();
       } else if (ctrlAct === 'CONFIRM_DISCARD') {
-        document.getElementById('btnConfirmDiscard')?.click();
+        if (uiSelection.discardSet.size === 0) return;
+        if (typeof playSfx === 'function') playSfx('card');
+        const cardUids = [...uiSelection.discardSet];
+        resetSelectionState();
+        dispatchPlayerAction({ type: 'DISCARD_CARDS', cardUids });
       } else if (ctrlAct === 'END_TURN') {
-        document.getElementById('btnEndTurn')?.click();
+        if (typeof playSfx === 'function') playSfx('click');
+        endPlayPhaseAndSettleTurn();
       }
       return;
     }

@@ -1009,13 +1009,28 @@ function ensurePeerJsLoaded(callback) {
   }, 200);
 }
 
-function clearNetworkTimers() {
-  clearInterval(hostKeepAliveTimer);
-  hostKeepAliveTimer = null;
+function stopClientJoinRetryTimers() {
   clearTimeout(clientConnectRetryTimer);
   clientConnectRetryTimer = null;
   clearInterval(clientHelloRetryTimer);
   clientHelloRetryTimer = null;
+}
+
+function sendImmediateClientHeartbeat() {
+  if (gameSession.mode !== 'CLIENT' || !gameSession.roomCode) return;
+  publishFastPacket({
+    msgType: 'CLIENT_HEARTBEAT',
+    roomCode: gameSession.roomCode,
+    seatId: gameSession.localSeatId,
+    clientToken: gameSession.clientToken,
+    playerName: gameSession.playerName
+  });
+}
+
+function clearNetworkTimers() {
+  clearInterval(hostKeepAliveTimer);
+  hostKeepAliveTimer = null;
+  stopClientJoinRetryTimers();
   clearInterval(hostLifecycleTimer);
   hostLifecycleTimer = null;
   clearInterval(clientHeartbeatTimer);
@@ -1259,8 +1274,6 @@ function createOnlineHostRoom(customCode = null) {
   Object.keys(seatHeartbeatMap).forEach(k => delete seatHeartbeatMap[k]);
   openBroadcastChannelForRoom(code);
   openCloudRelayForRoom(code);
-  startClientHeartbeatLoop();
-  saveActiveSessionSnapshot();
   mountHostPeerServer(code);
   startHostLifecycleMonitor();
   saveActiveSessionSnapshot();
@@ -1853,6 +1866,7 @@ function handleIncomingNetworkPacket(packet, transport, peerConn) {
   if (gameSession.mode === 'CLIENT') {
     if (packet.msgType === 'HOST_HEARTBEAT') {
       lastHostPacketTs = Date.now();
+      sendImmediateClientHeartbeat();
       return;
     }
 
@@ -1907,8 +1921,10 @@ function handleIncomingNetworkPacket(packet, transport, peerConn) {
       return;
     }
     if (packet.msgType === 'JOIN_ACCEPTED' && packet.targetToken === gameSession.clientToken) {
-      clearNetworkTimers();
+      stopClientJoinRetryTimers();
       gameSession.localSeatId = packet.assignedSeatId;
+      startClientHeartbeatLoop();
+      sendImmediateClientHeartbeat();
       viewedPlayerId = packet.assignedSeatId;
       gameSession.lobbyState = packet.lobbyState;
       if (packet.lobbyState && packet.lobbyState.themeId && typeof applyThemeToRegistry === 'function') {
@@ -1941,8 +1957,10 @@ function handleIncomingNetworkPacket(packet, transport, peerConn) {
       gameSession.lobbyState = packet.lobbyState;
       const mySeatInSync = (packet.lobbyState && packet.lobbyState.seats || []).find(s => s.clientToken === gameSession.clientToken);
       if (mySeatInSync) {
-        clearNetworkTimers();
+        stopClientJoinRetryTimers();
         gameSession.localSeatId = mySeatInSync.id;
+        startClientHeartbeatLoop();
+        sendImmediateClientHeartbeat();
         viewedPlayerId = mySeatInSync.id;
         gameSession.peerStatus = 'ONLINE';
         if (!wasSeated) {
@@ -1984,6 +2002,8 @@ function handleIncomingNetworkPacket(packet, transport, peerConn) {
 
 function applyClientReceivedState(newState) {
   if (!newState) return;
+  if (!clientHeartbeatTimer) startClientHeartbeatLoop();
+  sendImmediateClientHeartbeat();
   pendingClientActionPkt = null;
   clearInterval(clientActionRetryTimer);
   clientActionRetryTimer = null;
@@ -2425,7 +2445,8 @@ function authoritativeDiscardCards(state, cardUids) {
 }
 
 function authoritativeSettleAndAdvanceTurn(state) {
-  if (!state || state.phase === 'GAME_OVER') return;
+  if (!state || state.phase === 'GAME_OVER' || (state.turn && state.turn.isSettling)) return;
+  if (state.turn) state.turn.isSettling = true;
   clearTimeout(aiTimer);
   const player = state.players[state.turn.activePlayerIndex];
 
@@ -2499,6 +2520,7 @@ function authoritativeSettleAndAdvanceTurn(state) {
     activeState.turn.actionsUsed = 0;
     activeState.turn.hasPlayedCard = false;
     activeState.turn.hasDiscardedCard = false;
+    activeState.turn.isSettling = false;
 
     const nextPlayer = activeState.players[nextIdx];
     recordVfxEvent(activeState, {
