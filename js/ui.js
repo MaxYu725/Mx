@@ -16,7 +16,7 @@ function isRunningStandalonePWA() {
 
 function registerPwaServiceWorker() {
   if ("serviceWorker" in navigator && (location.protocol === "https:" || location.hostname === "localhost" || location.hostname === "127.0.0.1")) {
-    navigator.serviceWorker.register("./sw.js?v=14.6.2").then(reg => { try { reg.update(); } catch(e){} }).catch(() => {});
+    navigator.serviceWorker.register("./sw.js?v=14.7").then(reg => { try { reg.update(); } catch(e){} }).catch(() => {});
   }
   window.addEventListener("beforeinstallprompt", (e) => {
     e.preventDefault();
@@ -2067,6 +2067,7 @@ function renderAll() {
             <span class="px-1.5 py-0.5 rounded text-[10px] font-black whitespace-nowrap shrink-0 ${isMyTurnNow ? 'bg-amber-400 text-slate-950' : 'bg-slate-800 text-amber-300'}">👑 我方 (${myId.toUpperCase()})</span>
             <span class="text-xs font-black text-white truncate">${getShortPlayerName(localPlayer.name)}</span>
             <span class="px-1.5 py-0.5 rounded bg-purple-950 border border-purple-400 text-[9px] font-black text-purple-200 whitespace-nowrap shrink-0">${terms.vpIcon || '👑'}${terms.vpName || '皇室'}:${getTotalVPCount(localPlayer)}</span>
+            <button data-open-emoji-tray="1" class="px-1.5 py-0.5 rounded bg-amber-500/20 border border-amber-400 text-[9px] font-black text-amber-300 whitespace-nowrap shrink-0 shadow hover:bg-amber-400 hover:text-slate-950 transition">💬 表情</button>
           </div>
           <div class="flex items-center gap-1.5 shrink-0">
             <span class="px-2 py-0.5 rounded-lg bg-emerald-950/80 border border-emerald-500/40 text-xs font-black text-emerald-400 whitespace-nowrap">${terms.currencyIcon || '💎'}${localPlayer.crystals}</span>
@@ -2649,6 +2650,7 @@ function renderLandscapeArena() {
               <span class="text-[11px] font-black text-stone-100 truncate">你·${getShortPlayerName(localPlayer.name)}</span>
               <span class="text-xs sm:text-sm font-black text-amber-300 leading-none whitespace-nowrap">${localPlayer.crystals}</span>
               <span class="text-[9px] font-bold text-stone-400 whitespace-nowrap">手${myVisibleHandCnt}</span>
+              <button data-open-emoji-tray="1" class="px-1.5 py-0.2 rounded-full bg-amber-500/25 border border-amber-400 text-[8.5px] font-black text-amber-300 whitespace-nowrap shrink-0 shadow">💬表情</button>
             </div>
             <div class="flex items-center gap-1 shrink-0 text-[8px] font-black">
               <span class="px-1 py-0.2 rounded bg-purple-950/90 border border-purple-400/60 text-purple-200 whitespace-nowrap">${terms.vpIcon || '👑'}${getTotalVPCount(localPlayer)}</span>
@@ -3671,6 +3673,13 @@ function attachDynamicBoardListeners() {
     if (!state) return;
     const localPlayer = getLocalPlayer(state);
     const isMyTurnNow = isLocalPlayerTurn(state);
+
+    const emojiOpenBtn = e.target.closest('[data-open-emoji-tray]');
+    if (emojiOpenBtn) {
+      if (typeof playSfx === 'function') playSfx('click');
+      openEmojiPingModal();
+      return;
+    }
 
     const segBtn = e.target.closest('[data-seg-select]');
     if (segBtn) {
@@ -4830,7 +4839,10 @@ function initAppOnLoad() {
   document.getElementById('btnCloseRulesBottom')?.addEventListener('click', closeRulesFn);
 
   // Backdrop click-to-close for all reference/inspector modals
-  ['rulesModal', 'jobBankModal', 'inspectorModal', 'galleryModal', 'logModal', 'lobbyModal'].forEach(modalId => {
+  document.getElementById('btnCloseEmojiPingModal')?.addEventListener('click', () => {
+    document.getElementById('emojiPingModal')?.classList.add('hidden');
+  });
+  ['emojiPingModal', 'rulesModal', 'jobBankModal', 'inspectorModal', 'galleryModal', 'logModal', 'lobbyModal'].forEach(modalId => {
     const mEl = document.getElementById(modalId);
     if (mEl) {
       mEl.addEventListener('click', (e) => {
@@ -4962,3 +4974,125 @@ window.renderAll = renderAll;
 window.renderLobbyUI = renderLobbyUI;
 window.resetSelectionState = resetSelectionState;
 window.showGameOverModal = showGameOverModal;
+
+
+// === V14.7: Quick Emoji Ping Tray & Tabletop Speech Bubble VFX ===
+function renderEmojiPingTrayUI() {
+  const grid = document.getElementById('emojiPingButtonsGrid');
+  if (!grid || typeof EMOJI_PING_CATALOG === 'undefined') return;
+  const isDemon = (typeof getActiveTheme === 'function' && getActiveTheme().id === 'DEMON_CASTLE');
+
+  grid.innerHTML = Object.values(EMOJI_PING_CATALOG).map(item => {
+    const phrase = isDemon ? item.demonText : item.classicText;
+    return `
+      <button type="button" data-send-emoji-ping="${item.id}" class="emoji-ping-btn shadow">
+        <span class="text-xl leading-none shrink-0">${item.emoji}</span>
+        <span class="text-xs font-black text-amber-100 truncate">${phrase}</span>
+      </button>
+    `;
+  }).join('');
+
+  grid.querySelectorAll('[data-send-emoji-ping]').forEach(btn => {
+    btn.addEventListener('click', (e) => {
+      e.stopPropagation();
+      const key = btn.getAttribute('data-send-emoji-ping');
+      document.getElementById('emojiPingModal')?.classList.add('hidden');
+      if (typeof sendPlayerEmojiPing === 'function') {
+        sendPlayerEmojiPing(key);
+      }
+    });
+  });
+}
+
+function openEmojiPingModal() {
+  renderEmojiPingTrayUI();
+  document.getElementById('emojiPingModal')?.classList.remove('hidden');
+}
+
+function spawnEmojiPingBubbleVFX(seatId, playerName, pingKey) {
+  if (typeof EMOJI_PING_CATALOG === 'undefined') return;
+  const item = EMOJI_PING_CATALOG[pingKey];
+  if (!item) return;
+
+  if (typeof playSfx === 'function') playSfx('ping');
+
+  const isDemon = (typeof getActiveTheme === 'function' && getActiveTheme().id === 'DEMON_CASTLE');
+  const phrase = isDemon ? item.demonText : item.classicText;
+  const shortName = typeof getShortPlayerName === 'function' ? getShortPlayerName(playerName || seatId) : (playerName || seatId);
+  const anchorSel = getPlayerAnchorSelector(seatId || getLocalPlayerId());
+
+  if (isLandscapeModeActive()) {
+    const layer = getOrCreateLsFxLayer();
+    if (!layer) return;
+    layer.querySelectorAll(`[data-bubble-seat="${seatId}"]`).forEach(el => el.remove());
+
+    const appW = layer.clientWidth || parseFloat(document.documentElement.style.getPropertyValue('--app-w')) || 844;
+    const appH = layer.clientHeight || parseFloat(document.documentElement.style.getPropertyValue('--app-h')) || 390;
+    const box = getLsLocalBox(anchorSel);
+
+    const isTopHalf = box.y < appH * 0.45;
+    const clampedX = Math.max(115, Math.min(appW - 115, box.x));
+    const targetY = isTopHalf
+      ? Math.min(appH - 42, box.y + box.h * 0.38)
+      : Math.max(28, box.y - box.h * 0.42);
+
+    const bubble = document.createElement('div');
+    bubble.setAttribute('data-bubble-seat', seatId);
+    bubble.className = `vfx-emoji-ping-bubble ls-local-bubble ${isTopHalf ? 'bubble-tail-top' : ''}`;
+    bubble.style.left = `${clampedX}px`;
+    bubble.style.top = `${targetY}px`;
+    bubble.style.borderColor = item.borderHex || '#fbbf24';
+    bubble.innerHTML = `
+      <span class="vfx-emoji-ping-icon">${item.emoji}</span>
+      <div class="flex flex-col min-w-0 leading-tight">
+        <span class="text-[9px] font-black text-amber-300 truncate">【${shortName}】</span>
+        <span class="text-xs font-black text-white truncate">${phrase}</span>
+      </div>
+    `;
+    layer.appendChild(bubble);
+    setTimeout(() => bubble.remove(), 3150);
+    return;
+  }
+
+  // Portrait Mode
+  const root = document.getElementById('vfxOverlayRoot');
+  if (!root) return;
+  root.querySelectorAll(`[data-bubble-seat="${seatId}"]`).forEach(el => el.remove());
+
+  const targetEl = document.querySelector(anchorSel);
+  const vw = window.innerWidth || 390;
+  const vh = window.innerHeight || 844;
+  let x = vw / 2;
+  let y = vh * 0.65;
+  let isTopHalf = false;
+
+  if (targetEl) {
+    const r = targetEl.getBoundingClientRect();
+    if (r.width > 0) {
+      x = r.left + r.width / 2;
+      isTopHalf = r.top < vh * 0.35;
+      y = isTopHalf ? (r.bottom + 8) : (r.top - 44);
+    }
+  }
+
+  const clampedX = Math.max(115, Math.min(vw - 115, x));
+  const clampedY = Math.max(36, Math.min(vh - 70, y));
+
+  const bubble = document.createElement('div');
+  bubble.setAttribute('data-bubble-seat', seatId);
+  bubble.className = `vfx-emoji-ping-bubble ${isTopHalf ? 'bubble-tail-top' : ''}`;
+  bubble.style.left = `${clampedX}px`;
+  bubble.style.top = `${clampedY}px`;
+  bubble.style.borderColor = item.borderHex || '#fbbf24';
+  bubble.innerHTML = `
+    <span class="vfx-emoji-ping-icon">${item.emoji}</span>
+    <div class="flex flex-col min-w-0 leading-tight">
+      <span class="text-[9px] font-black text-amber-300 truncate">【${shortName}】</span>
+      <span class="text-xs font-black text-white truncate">${phrase}</span>
+    </div>
+  `;
+  root.appendChild(bubble);
+  setTimeout(() => bubble.remove(), 3150);
+}
+window.spawnEmojiPingBubbleVFX = spawnEmojiPingBubbleVFX;
+window.openEmojiPingModal = openEmojiPingModal;

@@ -8,17 +8,17 @@
   <meta name="apple-mobile-web-app-capable" content="yes" />
   <meta name="apple-mobile-web-app-status-bar-style" content="black-translucent" />
   <meta name="apple-mobile-web-app-title" content="深淵魔王城" />
-  <title>深淵魔王城：燒魔率爭霸戰 V14.6.2 (一頁式開房＆斷線重連優化版)</title>
+  <title>深淵魔王城：燒魔率爭霸戰 V14.7 (一頁式開房＆斷線重連優化版)</title>
   <link rel="manifest" href="manifest.json" />
   <link rel="icon" type="image/png" sizes="192x192" href="icons/icon-192.png" />
   <link rel="apple-touch-icon" href="icons/icon-192.png" />
-  <link rel="stylesheet" href="css/style.css?v=14.6.2" />
+  <link rel="stylesheet" href="css/style.css?v=14.7" />
   <!-- Cloud WSS (MQTT.js) + PeerJS WebRTC Multi-Engine Multiplayer -->
   <script src="https://unpkg.com/mqtt@5.10.3/dist/mqtt.min.js" onerror="this.onerror=null;this.src='https://cdn.jsdelivr.net/npm/mqtt@5.10.3/dist/mqtt.min.js'"></script>
   <script src="https://unpkg.com/peerjs@1.5.4/dist/peerjs.min.js" onerror="this.onerror=null;this.src='https://cdn.jsdelivr.net/npm/peerjs@1.5.4/dist/peerjs.min.js'"></script>
 </head>
 <body class="flex flex-col h-full w-full overflow-hidden safe-area-body">
-  <!-- FLOATING ONLINE DISCONNECT / RECONNECT COUNTDOWN BANNER (V14.6.2) -->
+  <!-- FLOATING ONLINE DISCONNECT / RECONNECT COUNTDOWN BANNER (V14.7) -->
   <div id="onlineDisconnectBanner" class="hidden online-disconnect-banner">
     <div class="flex items-center justify-between gap-2">
       <div id="onlineDisconnectBannerText" class="font-bold leading-snug flex-1 min-w-0">📡 偵測到玩家連線中斷，等待自動重連中...</div>
@@ -47,6 +47,9 @@
 
     <!-- Right: Fullscreen / PWA Quick Button + Unified Settings Button -->
     <div class="flex items-center gap-1.5 shrink-0">
+      <button id="btnHeaderEmojiPing" data-open-emoji-tray="1" class="px-2 py-1 rounded-lg bg-indigo-950/90 border border-amber-400/80 text-[11px] font-black text-amber-300 whitespace-nowrap shadow" title="發送牌桌表情與戰術短語">
+        💬 表情
+      </button>
       <button id="btnHeaderLandscape" class="px-2 py-1 rounded-lg bg-amber-950/90 border border-amber-400/70 text-[11px] font-black text-amber-300 whitespace-nowrap shadow" title="切換橫屏圓桌模式">
         🖥️ 橫屏
       </button>
@@ -197,6 +200,7 @@
       <div id="lsTopRightPanel" class="shrink-0 h-full rounded-xl bg-stone-950/75 border border-amber-500/25 px-2 py-1 flex flex-col justify-between items-end gap-0.5 shadow-lg">
         <div class="flex items-center justify-end gap-1 shrink-0 w-full">
           <span id="lsTalentPoolLabel" class="text-[10.5px] font-black text-amber-300 mr-auto truncate">🏢 人才池</span>
+          <button id="btnLsEmojiPing" data-open-emoji-tray="1" class="ls-pill-btn ls-pill-btn-gold">💬 表情</button>
           <button id="btnLsFullscreen" class="ls-pill-btn">全屏</button>
           <button id="btnLsRoomMenu" class="ls-pill-btn">房間</button>
           <button id="btnLsToPortrait" class="ls-pill-btn ls-pill-btn-gold">直向</button>
@@ -395,6 +399,23 @@
     </div>
   </div>
 
+  <!-- MODAL 0A: QUICK EMOJI PING & TACTICAL PHRASE TRAY (互動表情與戰術短語氣泡 V14.7) -->
+  <div id="emojiPingModal" class="hidden fixed inset-0 bg-black/60 backdrop-blur-sm flex items-center justify-center z-50 p-3">
+    <div class="emoji-ping-tray-card bg-slate-900 border-2 border-amber-400 rounded-2xl max-w-md w-full p-3 shadow-2xl space-y-2">
+      <div class="flex items-center justify-between border-b border-slate-700 pb-1.5">
+        <div class="flex items-center gap-1.5">
+          <span class="text-base">💬</span>
+          <h3 class="text-xs sm:text-sm font-black text-amber-300">牌桌快捷互動表情 ＆ 戰術短語</h3>
+        </div>
+        <button id="btnCloseEmojiPingModal" class="px-2 py-0.5 rounded-lg bg-slate-800 text-xs font-bold text-slate-200">✕ 關閉</button>
+      </div>
+      <div id="emojiPingButtonsGrid" class="grid grid-cols-2 gap-1.5">
+        <!-- Dynamically populated by renderEmojiPingTrayUI() -->
+      </div>
+      <div class="text-[10px] text-slate-400 text-center">💡 點擊任一短語將立即在你的席位上方彈出動態氣泡（全房連線同步）</div>
+    </div>
+  </div>
+
   <!-- MODAL 0: UNIFIED SETTINGS & TOOLS MENU (設定選單) -->
   <div id="settingsMenuModal" class="hidden fixed inset-0 bg-black/85 backdrop-blur-sm flex items-center justify-center z-50 p-3">
     <div class="bg-slate-900 border-2 border-amber-400 rounded-2xl max-w-sm w-full p-4 shadow-2xl space-y-3">
@@ -550,12 +571,12 @@
     <div class="lobby-modal-card bg-slate-900 border-2 border-amber-400 rounded-2xl max-w-lg w-full p-2.5 sm:p-3.5 shadow-2xl max-h-[94vh] overflow-y-auto touch-pan-y">
       <!-- Top Header -->
       <div class="flex items-center justify-between border-b border-slate-700 pb-1.5 mb-1.5 gap-2">
-        <h3 class="text-xs sm:text-base font-black text-amber-400 truncate">🌐 連線對戰大廳 ＆ 開房設定 (V14.6.2)</h3>
+        <h3 class="text-xs sm:text-base font-black text-amber-400 truncate">🌐 連線對戰大廳 ＆ 開房設定 (V14.7)</h3>
         <button id="btnCloseLobby" class="px-2.5 py-0.5 rounded-lg bg-slate-800 text-xs font-bold text-slate-200 shrink-0">✕ 關閉</button>
       </div>
 
       <div class="space-y-1.5 text-xs">
-        <!-- Return-to-Lobby / Disconnect Alert Banner (V14.6.2) -->
+        <!-- Return-to-Lobby / Disconnect Alert Banner (V14.7) -->
         <div id="lobbyNoticeBanner" class="hidden rounded-xl bg-amber-950/95 border border-amber-400 px-2.5 py-1.5 text-[11px] text-amber-200 font-bold flex items-center justify-between gap-2">
           <span id="lobbyNoticeBannerText" class="leading-snug flex-1"></span>
           <button id="btnDismissLobbyNotice" class="px-1.5 py-0.5 rounded bg-slate-900 text-slate-300 text-[10px] shrink-0">✕</button>
@@ -799,10 +820,10 @@
   <div id="vfxOverlayRoot" style="pointer-events: none !important;" class="fixed inset-0 pointer-events-none z-50 overflow-hidden"></div>
 
   <!-- MODULAR 4-LAYER ARCHITECTURE SCRIPTS -->
-  <script src="js/art.js?v=14.6.2"></script>
-  <script src="js/cards.js?v=14.6.2"></script>
-  <script src="js/engine.js?v=14.6.2"></script>
-  <script src="js/session.js?v=14.6.2"></script>
-  <script src="js/ui.js?v=14.6.2"></script>
+  <script src="js/art.js?v=14.7"></script>
+  <script src="js/cards.js?v=14.7"></script>
+  <script src="js/engine.js?v=14.7"></script>
+  <script src="js/session.js?v=14.7"></script>
+  <script src="js/ui.js?v=14.7"></script>
 </body>
 </html>

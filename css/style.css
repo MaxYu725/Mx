@@ -2602,3 +2602,99 @@ body.is-landscape-active .ls-lobby-split.has-two-panes > * + * {
 .online-dot-pulse {
   transform: translateZ(0);
 }
+
+
+/* === V14.7 EMOJI PING & TACTICAL PHRASE SPEECH BUBBLES === */
+@keyframes emojiBubblePop {
+  0%   { opacity: 0; transform: translate(-50%, 10px) scale(0.65); }
+  12%  { opacity: 1; transform: translate(-50%, -4px) scale(1.06); }
+  20%  { opacity: 1; transform: translate(-50%, 0px) scale(1); }
+  84%  { opacity: 1; transform: translate(-50%, -6px) scale(1); }
+  100% { opacity: 0; transform: translate(-50%, -18px) scale(0.92); }
+}
+
+@keyframes emojiIconBounce {
+  0%, 100% { transform: translateY(0) scale(1) rotate(0deg); }
+  30%      { transform: translateY(-4px) scale(1.18) rotate(-8deg); }
+  60%      { transform: translateY(-2px) scale(1.12) rotate(8deg); }
+}
+
+.vfx-emoji-ping-bubble {
+  position: fixed;
+  z-index: 9997;
+  pointer-events: none !important;
+  display: inline-flex;
+  align-items: center;
+  gap: 0.45rem;
+  padding: 0.4rem 0.75rem;
+  border-radius: 1rem;
+  background: linear-gradient(135deg, rgba(15, 23, 42, 0.98) 0%, rgba(30, 27, 75, 0.98) 100%);
+  border: 2px solid #fbbf24;
+  box-shadow: 0 12px 28px rgba(0, 0, 0, 0.92), 0 0 18px rgba(251, 191, 36, 0.55);
+  color: #ffffff;
+  white-space: nowrap;
+  max-width: min(88vw, 310px);
+  animation: emojiBubblePop 3.1s cubic-bezier(0.16, 1, 0.3, 1) forwards;
+  will-change: transform, opacity;
+}
+
+.vfx-emoji-ping-bubble.ls-local-bubble {
+  position: absolute;
+}
+
+.vfx-emoji-ping-bubble::after {
+  content: '';
+  position: absolute;
+  bottom: -7px;
+  left: 50%;
+  transform: translateX(-50%) rotate(45deg);
+  width: 11px;
+  height: 11px;
+  background: rgba(30, 27, 75, 0.98);
+  border-right: 2px solid #fbbf24;
+  border-bottom: 2px solid #fbbf24;
+}
+
+.vfx-emoji-ping-bubble.bubble-tail-top::after {
+  bottom: auto;
+  top: -7px;
+  border-right: none;
+  border-bottom: none;
+  border-left: 2px solid #fbbf24;
+  border-top: 2px solid #fbbf24;
+  background: rgba(15, 23, 42, 0.98);
+}
+
+.vfx-emoji-ping-icon {
+  font-size: 1.45rem;
+  line-height: 1;
+  display: inline-block;
+  animation: emojiIconBounce 0.85s ease-in-out infinite;
+  flex-shrink: 0;
+}
+
+.emoji-ping-btn {
+  display: flex;
+  align-items: center;
+  gap: 0.5rem;
+  padding: 0.5rem 0.65rem;
+  border-radius: 0.85rem;
+  background: rgba(15, 23, 42, 0.95);
+  border: 1.5px solid rgba(148, 163, 184, 0.35);
+  color: #f8fafc;
+  text-align: left;
+  transition: transform 0.12s ease, border-color 0.12s ease, background 0.12s ease;
+}
+.emoji-ping-btn:hover, .emoji-ping-btn:active {
+  transform: translateY(-1px) scale(1.01);
+  border-color: #fbbf24;
+  background: rgba(49, 46, 129, 0.65);
+}
+
+body.is-landscape-active .emoji-ping-tray-card {
+  max-width: min(calc(var(--app-w, 100vw) * 0.88), 560px) !important;
+  padding: 0.55rem 0.85rem !important;
+}
+body.is-landscape-active #emojiPingButtonsGrid {
+  grid-template-columns: repeat(4, minmax(0, 1fr)) !important;
+}

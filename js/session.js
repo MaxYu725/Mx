@@ -1717,6 +1717,21 @@ function handleIncomingNetworkPacket(packet, transport, peerConn) {
 
   // --- HOST HANDLERS ---
   if (gameSession.mode === 'HOST') {
+    if (packet.msgType === 'EMOJI_PING') {
+      touchSeatHeartbeat(packet.seatId || packet.clientToken, packet.playerName);
+      if (typeof window.spawnEmojiPingBubbleVFX === 'function') {
+        window.spawnEmojiPingBubbleVFX(packet.seatId, packet.playerName, packet.pingKey);
+      }
+      publishFastPacket({
+        msgType: 'EMOJI_PING_BROADCAST',
+        roomCode: gameSession.roomCode,
+        seatId: packet.seatId,
+        playerName: packet.playerName,
+        pingKey: packet.pingKey
+      }, true);
+      return;
+    }
+
     if (packet.msgType === 'CLIENT_HEARTBEAT') {
       touchSeatHeartbeat(packet.seatId || packet.clientToken, packet.playerName);
       return;
@@ -1864,6 +1879,13 @@ function handleIncomingNetworkPacket(packet, transport, peerConn) {
 
   // --- CLIENT HANDLERS ---
   if (gameSession.mode === 'CLIENT') {
+    if (packet.msgType === 'EMOJI_PING_BROADCAST') {
+      if (packet.seatId !== gameSession.localSeatId && typeof window.spawnEmojiPingBubbleVFX === 'function') {
+        window.spawnEmojiPingBubbleVFX(packet.seatId, packet.playerName, packet.pingKey);
+      }
+      return;
+    }
+
     if (packet.msgType === 'HOST_HEARTBEAT') {
       lastHostPacketTs = Date.now();
       sendImmediateClientHeartbeat();
@@ -2972,3 +2994,145 @@ function tryRestoreSavedSessionOnBoot(urlRoomCode) {
 
   return false;
 }
+
+
+// ============================================================================
+// V14.7: TABLETOP QUICK EMOJI PING & TACTICAL PHRASE BUBBLES (MULTIPLAYER + AI)
+// ============================================================================
+const EMOJI_PING_CATALOG = {
+  FIRE: {
+    id: 'FIRE',
+    emoji: '🔥',
+    classicText: '資金快燒乾啦！',
+    demonText: '魔晶快燒乾啦！',
+    borderHex: '#f43f5e'
+  },
+  POACH: {
+    id: 'POACH',
+    emoji: '😈',
+    classicText: '謝謝你的工程師！',
+    demonText: '謝謝你的苦工！',
+    borderHex: '#c084fc'
+  },
+  THINK: {
+    id: 'THINK',
+    emoji: '⏳',
+    classicText: '等我算一下帳...',
+    demonText: '等我吟唱一下...',
+    borderHex: '#38bdf8'
+  },
+  HURRY: {
+    id: 'HURRY',
+    emoji: '⚡',
+    classicText: '快出牌別猶豫！',
+    demonText: '快出牌別發呆！',
+    borderHex: '#fbbf24'
+  },
+  MERCY: {
+    id: 'MERCY',
+    emoji: '🙏',
+    classicText: '別塞爛點子給我！',
+    demonText: '別丟討伐令給我！',
+    borderHex: '#34d399'
+  },
+  RICH: {
+    id: 'RICH',
+    emoji: '😎',
+    classicText: '剛融資，錢多得很！',
+    demonText: '金庫滿滿，燒不死！',
+    borderHex: '#f59e0b'
+  },
+  CRY: {
+    id: 'CRY',
+    emoji: '😭',
+    classicText: '外包費要破產了...',
+    demonText: '高利貸要破產了...',
+    borderHex: '#60a5fa'
+  },
+  GG: {
+    id: 'GG',
+    emoji: '🎉',
+    classicText: '精彩對決，承讓！',
+    demonText: '精彩對決，承讓！',
+    borderHex: '#fde047'
+  }
+};
+window.EMOJI_PING_CATALOG = EMOJI_PING_CATALOG;
+
+let lastEmojiPingSentAt = 0;
+
+function sendPlayerEmojiPing(pingKey) {
+  const item = EMOJI_PING_CATALOG[pingKey];
+  if (!item) return;
+  const now = Date.now();
+  if (now - lastEmojiPingSentAt < 900) {
+    showToast('⏳ 表情發送冷卻中，請稍候一下！', 1200);
+    return;
+  }
+  lastEmojiPingSentAt = now;
+
+  const mySeatId = getLocalPlayerId();
+  const state = getActiveMasterState() || gameState;
+  const localPl = state && state.players ? state.players.find(p => p.id === mySeatId) : null;
+  const senderName = (localPl && localPl.name) || gameSession.playerName || '我方';
+
+  // 1. Immediately display bubble on local screen
+  if (typeof window.spawnEmojiPingBubbleVFX === 'function') {
+    window.spawnEmojiPingBubbleVFX(mySeatId, senderName, pingKey);
+  }
+
+  // 2. Broadcast over network if in HOST or CLIENT mode
+  if (gameSession.mode === 'CLIENT' && gameSession.roomCode) {
+    publishFastPacket({
+      msgType: 'EMOJI_PING',
+      roomCode: gameSession.roomCode,
+      seatId: mySeatId,
+      clientToken: gameSession.clientToken,
+      playerName: senderName,
+      pingKey
+    }, true);
+  } else if (gameSession.mode === 'HOST' && gameSession.roomCode) {
+    publishFastPacket({
+      msgType: 'EMOJI_PING_BROADCAST',
+      roomCode: gameSession.roomCode,
+      seatId: mySeatId,
+      playerName: senderName,
+      pingKey
+    }, true);
+  }
+
+  // 3. If there are alive AI opponents (in SOLO or mixed HOST room), 45% chance an AI playfully replies after 950ms!
+  if (gameSession.mode !== 'CLIENT' && state && state.players) {
+    const aliveAIs = state.players.filter(p => p.isAI && !p.isEliminated && p.id !== mySeatId);
+    if (aliveAIs.length > 0 && Math.random() < 0.45) {
+      const aiResponder = aliveAIs[Math.floor(Math.random() * aliveAIs.length)];
+      const replyMap = {
+        FIRE: ['RICH', 'POACH'],
+        POACH: ['MERCY', 'CRY'],
+        THINK: ['HURRY', 'THINK'],
+        HURRY: ['THINK', 'RICH'],
+        MERCY: ['POACH', 'RICH'],
+        RICH: ['POACH', 'FIRE'],
+        CRY: ['RICH', 'GG'],
+        GG: ['GG', 'RICH']
+      };
+      const candidates = replyMap[pingKey] || ['RICH', 'POACH'];
+      const aiPingKey = candidates[Math.floor(Math.random() * candidates.length)];
+      setTimeout(() => {
+        if (typeof window.spawnEmojiPingBubbleVFX === 'function') {
+          window.spawnEmojiPingBubbleVFX(aiResponder.id, aiResponder.name, aiPingKey);
+        }
+        if (gameSession.mode === 'HOST' && gameSession.roomCode) {
+          publishFastPacket({
+            msgType: 'EMOJI_PING_BROADCAST',
+            roomCode: gameSession.roomCode,
+            seatId: aiResponder.id,
+            playerName: aiResponder.name,
+            pingKey: aiPingKey
+          }, true);
+        }
+      }, 950);
+    }
+  }
+}
+window.sendPlayerEmojiPing = sendPlayerEmojiPing;
