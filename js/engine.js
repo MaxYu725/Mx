@@ -213,7 +213,7 @@ function formatLogItemToTickerHTML(rawMsg, isLatest = true) {
 
 function addLog(state, msg) {
   state.logs.unshift(msg);
-  if (state.logs.length > 60) state.logs.pop();
+  if (state.logs.length > 30) state.logs.length = 30;
 }
 
 function hasVPInDept(player, dept) {
@@ -321,7 +321,32 @@ function drawCardsForPlayer(state, player, targetHandSize = 6) {
   return drawn;
 }
 
+let __evalCacheKey = '';
+const __evalCacheMap = new Map();
+
+function invalidatePlayabilityCache() {
+  __evalCacheKey = '';
+  __evalCacheMap.clear();
+}
+window.invalidatePlayabilityCache = invalidatePlayabilityCache;
+
 function evaluateCardPlayability(state, player, handUid) {
+  if (!state || !player || !handUid) return { playable: false, shortReason: '無效卡牌', reason: '無效卡牌' };
+  const pSig = state.players.map(p => `${p.id}:${p.crystals}:${p.engineers.length}:${p.crises.length}:${p.outsourcedCount}:${p.departments.RED.length},${p.departments.YELLOW.length},${p.departments.BLUE.length},${p.departments.GREEN.length}`).join('|');
+  const bSig = `${state.jobBank.RED[0] || ''},${state.jobBank.YELLOW[0] || ''},${state.jobBank.BLUE[0] || ''},${state.jobBank.GREEN[0] || ''}`;
+  const stateKey = `${state.phase}:${state.turn.roundNumber}:${state.turn.activePlayerIndex}:${state.turn.actionsUsed}:${state.turn.hasPlayedCard ? 1 : 0}:${state.turn.hasDiscardedCard ? 1 : 0}:${player.id}:${player.hand.join(',')}:${bSig}:${pSig}`;
+  if (__evalCacheKey !== stateKey) {
+    __evalCacheKey = stateKey;
+    __evalCacheMap.clear();
+  }
+  const hit = __evalCacheMap.get(handUid);
+  if (hit) return hit;
+  const res = _evaluateCardPlayabilityImpl(state, player, handUid);
+  __evalCacheMap.set(handUid, res);
+  return res;
+}
+
+function _evaluateCardPlayabilityImpl(state, player, handUid) {
   const card = CARDS_BY_ID[handUid];
   if (!card || card.effect === 'HIDDEN') return { playable: false, shortReason: '無效卡牌', reason: '無效卡牌' };
 
@@ -558,7 +583,7 @@ function sanitizeStateForSeat(fullState, viewerSeatId) {
     discardPile: [...fullState.discardPile],
     lastPlayedCard: fullState.lastPlayedCard ? { ...fullState.lastPlayedCard } : null,
     players,
-    logs: [...fullState.logs],
+    logs: fullState.logs.slice(0, 20),
     vfxSeq: fullState.vfxSeq,
     lastVfxEvent: fullState.lastVfxEvent ? { ...fullState.lastVfxEvent } : null
   };

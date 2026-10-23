@@ -190,13 +190,28 @@ function touchSeatHeartbeat(seatIdOrToken, playerName) {
   }
 }
 
-function saveActiveSessionSnapshot() {
+let __saveSnapshotDebounceTimer = null;
+
+function saveActiveSessionSnapshot(immediate = false) {
   if (typeof window === 'undefined') return;
   if (gameSession.mode !== 'HOST' && gameSession.mode !== 'CLIENT') {
     return;
   }
   const code = String(gameSession.roomCode || '').trim().toUpperCase();
   if (!code || isRoomMarkedExited(code)) return;
+
+  if (!immediate) {
+    if (__saveSnapshotDebounceTimer) clearTimeout(__saveSnapshotDebounceTimer);
+    __saveSnapshotDebounceTimer = setTimeout(() => {
+      __saveSnapshotDebounceTimer = null;
+      saveActiveSessionSnapshot(true);
+    }, 350);
+    return;
+  }
+  if (__saveSnapshotDebounceTimer) {
+    clearTimeout(__saveSnapshotDebounceTimer);
+    __saveSnapshotDebounceTimer = null;
+  }
 
   const snapshot = {
     version: '14.5',
@@ -219,6 +234,10 @@ function saveActiveSessionSnapshot() {
 }
 
 function clearActiveSessionSnapshot() {
+  if (__saveSnapshotDebounceTimer) {
+    clearTimeout(__saveSnapshotDebounceTimer);
+    __saveSnapshotDebounceTimer = null;
+  }
   if (typeof window === 'undefined') return;
   try {
     window.sessionStorage.removeItem(SESSION_SNAPSHOT_KEY);
@@ -730,7 +749,7 @@ if (typeof window !== 'undefined' && !window.__dbrUnloadBound) {
   window.__dbrUnloadBound = true;
   const handlePageUnload = () => {
     if ((gameSession.mode === 'HOST' || gameSession.mode === 'CLIENT') && gameSession.roomCode && !isRoomMarkedExited(gameSession.roomCode)) {
-      saveActiveSessionSnapshot();
+      saveActiveSessionSnapshot(true);
       if (gameSession.mode === 'CLIENT') {
         publishFastPacket({
           msgType: 'CLIENT_TEMP_AWAY',

@@ -290,8 +290,8 @@
     .tilt-card-3d {
       transform-style: preserve-3d;
       transition: transform 0.16s cubic-bezier(0.2, 0.8, 0.2, 1), box-shadow 0.16s ease;
-      will-change: transform;
     }
+    .tilt-card-3d:hover { will-change: transform; }
     .tilt-card-3d:active {
       transform: scale(0.97);
     }
@@ -2570,4 +2570,35 @@ body.is-landscape-active .ls-lobby-split.has-two-panes {
 }
 body.is-landscape-active .ls-lobby-split.has-two-panes > * + * {
   margin-top: 0 !important;
+}
+
+
+/* === V14.6 PERFORMANCE & GPU COMPOSITE ISOLATION (ZERO VISUAL CHANGE) === */
+.ls-seat-panel,
+.ls-dept-card,
+.ls-hand-card,
+.ls-table-pile-card,
+.ls-oval-felt,
+#seatTabsBar > button,
+#myHeroStatusBar {
+  contain: layout style;
+  backface-visibility: hidden;
+  -webkit-backface-visibility: hidden;
+}
+
+.ls-flying-card,
+.vfx-flying-card,
+.vfx-floating-number,
+.vfx-shockwave-ring,
+.ls-impact-ring {
+  will-change: transform, opacity;
+  backface-visibility: hidden;
+  -webkit-backface-visibility: hidden;
+}
+
+.active-turn-seat,
+.targetable-seat-glow,
+.danger-pulse,
+.online-dot-pulse {
+  transform: translateZ(0);
 }

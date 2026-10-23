@@ -16,7 +16,7 @@ function isRunningStandalonePWA() {
 
 function registerPwaServiceWorker() {
   if ("serviceWorker" in navigator && (location.protocol === "https:" || location.hostname === "localhost" || location.hostname === "127.0.0.1")) {
-    navigator.serviceWorker.register("./sw.js?v=14.5").then(reg => { try { reg.update(); } catch(e){} }).catch(() => {});
+    navigator.serviceWorker.register("./sw.js?v=14.6").then(reg => { try { reg.update(); } catch(e){} }).catch(() => {});
   }
   window.addEventListener("beforeinstallprompt", (e) => {
     e.preventDefault();
@@ -96,7 +96,7 @@ function setLayoutOrientationPref(newPref) {
   try {
     window.localStorage.setItem("dbr_v13_orientation", newPref);
   } catch (e) {}
-  syncLayoutOrientationDOM();
+  syncLayoutOrientationDOM(true);
   if (typeof renderAll === "function" && typeof gameState !== "undefined" && gameState) {
     renderAll();
   }
@@ -112,10 +112,15 @@ function toggleLandscapePortraitMode() {
   }
 }
 
-function syncLayoutOrientationDOM() {
+let __lastOrientDomSig = '';
+
+function syncLayoutOrientationDOM(forceSync = false) {
   const lsActive = isLandscapeModeActive();
   const vw = window.innerWidth || 390;
   const vh = window.innerHeight || 844;
+  const orientSig = `${lsActive ? 1 : 0}:${vw}:${vh}`;
+  if (!forceSync && __lastOrientDomSig === orientSig) return;
+  __lastOrientDomSig = orientSig;
   const isRotatedPortrait = Boolean(lsActive && vh > vw);
   const appW = isRotatedPortrait ? vh : vw;
   const appH = isRotatedPortrait ? vw : vh;
@@ -1446,10 +1451,12 @@ function playSynchronizedVfxEvent(ev) {
   }
 }
 
-function attach3DTiltListeners() {
-  const canHover = window.matchMedia && window.matchMedia('(hover: hover) and (pointer: fine)').matches;
-  if (!canHover) return;
-  document.querySelectorAll('.tilt-card-3d').forEach(cardEl => {
+const __canDesktopHover = Boolean(typeof window !== 'undefined' && window.matchMedia && window.matchMedia('(hover: hover) and (pointer: fine)').matches);
+
+function attach3DTiltListeners(scopeEl) {
+  if (!__canDesktopHover) return;
+  const root = scopeEl || document;
+  root.querySelectorAll('.tilt-card-3d').forEach(cardEl => {
     if (cardEl.__tiltBound) return;
     cardEl.__tiltBound = true;
     const handleMove = (clientX, clientY) => {
@@ -1752,7 +1759,22 @@ function renderAll() {
   const modeTagEl = document.getElementById('modeIndicatorTag');
   if (modeTagEl && modeTagEl.textContent !== netTag) modeTagEl.textContent = netTag;
 
-  updateSettingsMenuUI();
+  const settingsModalEl = document.getElementById('settingsMenuModal');
+  const homeModalEl = document.getElementById('homeScreenModal');
+  if ((settingsModalEl && !settingsModalEl.classList.contains('hidden')) || (homeModalEl && !homeModalEl.classList.contains('hidden'))) {
+    updateSettingsMenuUI();
+  }
+
+  // Sync Orientation first; if in Landscape Mode, skip hidden Portrait DOM rendering completely!
+  syncLayoutOrientationDOM();
+  if (isLandscapeModeActive()) {
+    recalcPlayerStats(localPlayer);
+    window.lastFlippedDeptKey = null;
+    renderLandscapeArena();
+    renderModeDDrawer();
+    attachDynamicBoardListeners();
+    return;
+  }
 
   // Only show Hot-Seat Switcher Bar if Host explicitly added a simulated local human seat
   const perspectiveBar = document.getElementById('hotSeatSwitcherBar');
@@ -2010,6 +2032,7 @@ function renderAll() {
           <span class="absolute bottom-1 left-1/2 -translate-x-1/2 px-1.5 py-0.5 rounded-full text-[9px] font-black shadow-lg whitespace-nowrap z-20 bg-slate-950/90 border border-amber-400 text-amber-300">${badgeStr}</span>
         </div>
       `;
+      attach3DTiltListeners(slotEl);
       const insertedCard = slotEl.firstElementChild;
       if (insertedCard && isNewlyFlipped) {
         insertedCard.addEventListener('animationend', () => {
@@ -2065,11 +2088,7 @@ function renderAll() {
     }
   }
 
-  // 5B. Sync Orientation & Render Landscape Tabletop Arena when active
-  syncLayoutOrientationDOM();
-  if (isLandscapeModeActive()) {
-    renderLandscapeArena();
-  }
+  // (Landscape Arena is rendered via fast-path above when isLandscapeModeActive() is true)
 
   // 6. Render Mode D Tactical Targeting Drawer
   renderModeDDrawer();
@@ -2435,13 +2454,17 @@ function renderLandscapeArena() {
   const lsLogLinesEl = document.getElementById('lsLiveLogLines');
   if (lsLogLinesEl) {
     const top3 = state.logs.slice(0, 3);
-    lsLogLinesEl.innerHTML = top3.map((line, idx) => {
-      const cleanLine = line.replace(/^\[R\d+\]\s*/, '');
-      if (idx === 0) {
-        return `<div class="text-[11px] sm:text-xs font-black text-amber-300 truncate leading-tight">${cleanLine}</div>`;
-      }
-      return `<div class="text-[9.5px] sm:text-[10px] font-semibold text-stone-400 truncate leading-tight">${cleanLine}</div>`;
-    }).join('');
+    const lsLogSig = top3.join('||');
+    if (lsLogLinesEl.getAttribute('data-render-sig') !== lsLogSig) {
+      lsLogLinesEl.setAttribute('data-render-sig', lsLogSig);
+      lsLogLinesEl.innerHTML = top3.map((line, idx) => {
+        const cleanLine = line.replace(/^\[R\d+\]\s*/, '');
+        if (idx === 0) {
+          return `<div class="text-[11px] sm:text-xs font-black text-amber-300 truncate leading-tight">${cleanLine}</div>`;
+        }
+        return `<div class="text-[9.5px] sm:text-[10px] font-semibold text-stone-400 truncate leading-tight">${cleanLine}</div>`;
+      }).join('');
+    }
   }
 
   // 2. Top-Right: Talent Pool 1x4 (Completely hidden until Stage 3 of Opening Ceremony lands in Top-Right!)
@@ -2475,22 +2498,43 @@ function renderLandscapeArena() {
     rightOpp = opponents[2];
   }
 
-  const seatTopEl = document.getElementById('lsSeatTop');
-  const seatLeftEl = document.getElementById('lsSeatLeft');
-  const seatRightEl = document.getElementById('lsSeatRight');
-  if (seatTopEl) seatTopEl.innerHTML = topOpp ? renderLsOpponentSeatHTML(topOpp) : '';
-  if (seatLeftEl) {
-    seatLeftEl.innerHTML = leftOpp ? renderLsOpponentSeatHTML(leftOpp) : '';
-    seatLeftEl.classList.toggle('invisible', !leftOpp);
-  }
-  if (seatRightEl) {
-    seatRightEl.innerHTML = rightOpp ? renderLsOpponentSeatHTML(rightOpp) : '';
-    seatRightEl.classList.toggle('invisible', !rightOpp);
-  }
+  const pendingEmpsStr = window.__lsPendingLandings ? [...window.__lsPendingLandings.empUids].join(',') : '';
+  const pendingHandStr = window.__lsPendingLandings ? [...window.__lsPendingLandings.handUids].join(',') : '';
+  const pendingCrisisStr = window.__lsPendingLandings ? [...window.__lsPendingLandings.crisisUids].join(',') : '';
+
+  const buildOppSeatSig = (opp) => {
+    if (!opp) return 'NONE';
+    const isTurn = activePlayer && activePlayer.id === opp.id && state.phase !== 'GAME_OVER';
+    const visSeat = (!cer.active || cer.visibleSeats.has(opp.id)) ? 1 : 0;
+    const deptsSig = LS_DEPT_ORDER.map(d => (opp.departments[d] || []).join(',')).join('|');
+    const modeDSig = uiSelection.mode === 'MODE_D_SELECT' ? (uiSelection.sourceCardUid || '') : '';
+    return `${activeTheme.id}:${opp.id}:${opp.name}:${opp.isAI ? 1 : 0}:${opp.isEliminated ? 1 : 0}:${opp.crystals}:${opp.doubleBurnFlag ? 1 : 0}:${opp.outsourcedCount}:${opp.engineers.length}:${(opp.crises || []).join(',')}:${(opp.hand || []).length}:${isTurn ? 1 : 0}:${visSeat}:${deptsSig}:${modeDSig}:${pendingEmpsStr}:${pendingHandStr}:${pendingCrisisStr}`;
+  };
+
+  const updateLsOppSlot = (el, opp, toggleInvisible) => {
+    if (!el) return;
+    if (toggleInvisible) el.classList.toggle('invisible', !opp);
+    const sig = buildOppSeatSig(opp);
+    if (el.getAttribute('data-render-sig') === sig) return;
+    el.setAttribute('data-render-sig', sig);
+    el.innerHTML = opp ? renderLsOpponentSeatHTML(opp) : '';
+  };
+
+  updateLsOppSlot(document.getElementById('lsSeatTop'), topOpp, false);
+  updateLsOppSlot(document.getElementById('lsSeatLeft'), leftOpp, true);
+  updateLsOppSlot(document.getElementById('lsSeatRight'), rightOpp, true);
 
   // 4. Center Oval Table (5-Stage Ceremony OR Initial Draft OR Discard / Just Played / Draw Deck)
   const centerEl = document.getElementById('lsCenterOvalTable');
   if (centerEl) {
+    const flippedStr = (cer.active && cer.bankFlippedDepts) ? [...cer.bankFlippedDepts].join(',') : '';
+    const holdD = (window.__lsPendingLandings && window.__lsPendingLandings.holdDiscardUid) || '';
+    const holdJ = (window.__lsPendingLandings && window.__lsPendingLandings.holdJustPlayedUid) || '';
+    const pendHCnt = (window.__lsPendingLandings && window.__lsPendingLandings.handUids) ? window.__lsPendingLandings.handUids.size : 0;
+    const lastPObj = state.lastPlayedCard;
+    const centerSig = `${activeTheme.id}:${state.phase}:${cer.active ? cer.stage : 'DONE'}:${cer.bannerText || ''}:${flippedStr}:${isMyTurnNow ? 1 : 0}:${state.draft ? `${state.draft.totalPicked}_${state.draft.pickerIndex}` : ''}:${LS_DEPT_ORDER.map(d => `${state.jobBank[d][0] || ''}_${state.jobBank[d].length}`).join('|')}:${state.discardPile[0] || ''}:${state.discardPile.length}:${lastPObj ? `${lastPObj.uid}_${lastPObj.actorName}` : ''}:${state.actionDeck.length}:${holdD}:${holdJ}:${pendHCnt}`;
+    if (centerEl.getAttribute('data-render-sig') !== centerSig) {
+      centerEl.setAttribute('data-render-sig', centerSig);
     if (cer.active && cer.stage === 'SEATING') {
       centerEl.innerHTML = `
         <div class="ls-oval-felt flex flex-col items-center justify-center px-6 py-1.5 gap-1">
@@ -2579,13 +2623,11 @@ function renderLandscapeArena() {
         </div>
       `;
     }
+    }
   }
 
   // 5. Bottom-Left: My Company Panel (1x4 Departments + Status Pills)
   const myPanelEl = document.getElementById('lsMyCompanyPanel');
-  const pendingEmpsStr = window.__lsPendingLandings ? [...window.__lsPendingLandings.empUids].join(',') : '';
-  const pendingHandStr = window.__lsPendingLandings ? [...window.__lsPendingLandings.handUids].join(',') : '';
-  const pendingCrisisStr = window.__lsPendingLandings ? [...window.__lsPendingLandings.crisisUids].join(',') : '';
   const myVisibleHandCnt = (localPlayer.hand || []).filter(uid => !(window.__lsPendingLandings && window.__lsPendingLandings.handUids.has(uid))).length;
   const myVisibleCrises = (localPlayer.crises || []).filter(uid => !(window.__lsPendingLandings && window.__lsPendingLandings.crisisUids.has(uid)));
   const myCrisisCnt = myVisibleCrises.length;
@@ -2629,8 +2671,11 @@ function renderLandscapeArena() {
 
   if (lsHandEl) {
     if (localPlayer.hand.length === 0) {
-      lsHandEl.removeAttribute('data-render-sig');
-      lsHandEl.innerHTML = `<div class="text-[11px] font-bold text-stone-400 m-auto text-center">${state.phase === 'INITIAL_DRAFT' ? '🎲 請先在中央牌桌完成「首輪選秀」（挑選 4 名人員），結束後輪流派發 6 張手牌！' : '目前無手牌'}</div>`;
+      const emptyLsSig = `EMPTY:${state.phase}`;
+      if (lsHandEl.getAttribute('data-render-sig') !== emptyLsSig) {
+        lsHandEl.setAttribute('data-render-sig', emptyLsSig);
+        lsHandEl.innerHTML = `<div class="text-[11px] font-bold text-stone-400 m-auto text-center">${state.phase === 'INITIAL_DRAFT' ? '🎲 請先在中央牌桌完成「首輪選秀」（挑選 4 名人員），結束後輪流派發 6 張手牌！' : '目前無手牌'}</div>`;
+      }
     } else {
       const statuses = localPlayer.hand.map(uid => ({
         uid,
@@ -2654,8 +2699,10 @@ function renderLandscapeArena() {
     const canDiscard = isHumanStep1 && (state.config.playDiscardMode === 'SHARED_QUOTA_4' || !state.turn.hasPlayedCard) && remainingActions > 0;
     const isDiscardMode = uiSelection.mode === 'DISCARD_SELECT';
     const discardCnt = uiSelection.discardSet.size;
-
-    lsCtrlCol.innerHTML = `
+    const ctrlSig = `${remainingActions}:${canDiscard ? 1 : 0}:${isDiscardMode ? 1 : 0}:${discardCnt}:${isHumanStep1 ? 1 : 0}:${state.turn.hasPlayedCard ? 1 : 0}:${state.turn.hasDiscardedCard ? 1 : 0}:${myBurn}`;
+    if (lsCtrlCol.getAttribute('data-render-sig') !== ctrlSig) {
+      lsCtrlCol.setAttribute('data-render-sig', ctrlSig);
+      lsCtrlCol.innerHTML = `
       <div class="text-center">
         <div class="text-base sm:text-lg font-black text-amber-300 leading-none">${remainingActions}</div>
         <div class="text-[8px] font-bold text-stone-400 mt-0.5">剩餘額度</div>
@@ -2675,6 +2722,7 @@ function renderLandscapeArena() {
         ${state.turn.hasPlayedCard || state.turn.hasDiscardedCard ? `發薪 ${myBurn}` : '結束'}
       </button>
     `;
+    }
   }
 }
 
@@ -2752,11 +2800,12 @@ function renderModeDDrawer() {
   const pillEl = document.getElementById('modeDPillTag');
 
   if (uiSelection.mode !== 'MODE_D_SELECT' || !uiSelection.sourceCardUid) {
-    drawer.classList.add('hidden');
+    if (drawer && !drawer.classList.contains('hidden')) {
+      drawer.classList.add('hidden');
+      drawer.removeAttribute('data-render-sig');
+    }
     return;
   }
-
-  clearDuelBannersVFX();
 
   const state = gameState;
   const localPlayer = getLocalPlayer(state);
@@ -2767,7 +2816,17 @@ function renderModeDDrawer() {
     return;
   }
 
+  const lsActive = isLandscapeModeActive();
+  const themeId = (typeof getActiveTheme === 'function') ? getActiveTheme().id : 'CLASSIC_BURN_RATE';
+  const modeDSig = `${themeId}:${lsActive ? 1 : 0}:${card.uid}:${uiSelection.step2OpponentId || ''}:${uiSelection.poachFilterOppId || 'ALL'}:${state.turn.actionsUsed}:${state.vfxSeq || 0}:${localPlayer.crystals}`;
+  if (!drawer.classList.contains('hidden') && drawer.getAttribute('data-render-sig') === modeDSig) {
+    container.__modeDContext = { card, status };
+    return;
+  }
+  drawer.setAttribute('data-render-sig', modeDSig);
   drawer.classList.remove('hidden');
+  clearDuelBannersVFX();
+
   const aliveOpponents = getClockwiseOpponents(state).filter(p => !p.isEliminated);
 
   const getPortraitHTML = (empCard) => {
@@ -2780,6 +2839,7 @@ function renderModeDDrawer() {
       : `<div class="portrait-target-avatar bg-slate-950 flex items-center justify-center text-base">${empCard.svg}</div>`;
   };
 
+  if (!lsActive) {
   if (card.effect === 'GAIN_FUNDS') {
     if (pillEl) {
       pillEl.textContent = '💎 徵收魔晶';
@@ -3118,8 +3178,10 @@ function renderModeDDrawer() {
     }).join('');
   }
 
+  } // End of Portrait-only Mode D HTML builder
+
   // In Landscape Tabletop Mode, render custom high-density, card-hugging 2-column target pickers for ALL 9 card effect types
-  if (isLandscapeModeActive()) {
+  if (lsActive) {
     const terms = typeof getThemeTerms === 'function' ? getThemeTerms() : {};
     let rightPanelHTML = '';
 
@@ -3520,26 +3582,31 @@ function renderModeDDrawer() {
     `;
   }
 
-  container.querySelectorAll('[data-d-action]').forEach(btn => {
-    btn.addEventListener('click', (e) => {
+  container.__modeDContext = { card, status };
+  if (!container.__modeDDelegatedBound) {
+    container.__modeDDelegatedBound = true;
+    container.addEventListener('click', (e) => {
+      const btn = e.target.closest('[data-d-action]');
+      if (!btn || !container.__modeDContext) return;
       e.stopPropagation();
+      const { card: curCard, status: curStatus } = container.__modeDContext;
       const actType = btn.getAttribute('data-d-action');
       if (actType === 'CONFIRM_FUNDS') {
-        executePlayCard({ cardUid: card.uid });
+        executePlayCard({ cardUid: curCard.uid });
       } else if (actType === 'CONFIRM_RELEASE') {
-        executePlayCard({ cardUid: card.uid, targetCrisisUid: btn.getAttribute('data-crisis-uid') });
+        executePlayCard({ cardUid: curCard.uid, targetCrisisUid: btn.getAttribute('data-crisis-uid') });
       } else if (actType === 'CONFIRM_HIRE') {
-        executePlayCard({ cardUid: card.uid, targetDept: btn.getAttribute('data-dept') });
+        executePlayCard({ cardUid: curCard.uid, targetDept: btn.getAttribute('data-dept') });
       } else if (actType === 'CONFIRM_FIRE') {
         const empUid = btn.getAttribute('data-emp-uid');
         const emp = CARDS_BY_ID[empUid];
         executePlayCard({
-          cardUid: card.uid,
+          cardUid: curCard.uid,
           targetEmpUid: empUid,
-          secondaryCardUid: emp.isVP ? status.companionFireUids[0] : null
+          secondaryCardUid: emp.isVP ? curStatus.companionFireUids[0] : null
         });
       } else if (actType === 'CONFIRM_BAD_IDEA') {
-        executePlayCard({ cardUid: card.uid, targetPlayerId: btn.getAttribute('data-opp-id') });
+        executePlayCard({ cardUid: curCard.uid, targetPlayerId: btn.getAttribute('data-opp-id') });
       } else if (actType === 'FILTER_POACH_OPP') {
         if (typeof playSfx === 'function') playSfx('click');
         uiSelection.poachFilterOppId = btn.getAttribute('data-opp-id') || 'ALL';
@@ -3552,7 +3619,7 @@ function renderModeDDrawer() {
         renderAll();
       } else if (actType === 'CONFIRM_FORCE_HIRE') {
         executePlayCard({
-          cardUid: card.uid,
+          cardUid: curCard.uid,
           targetPlayerId: btn.getAttribute('data-opp-id'),
           targetDept: btn.getAttribute('data-dept')
         });
@@ -3560,29 +3627,27 @@ function renderModeDDrawer() {
         const oppId = btn.getAttribute('data-opp-id');
         const empUid = btn.getAttribute('data-emp-uid');
         const emp = CARDS_BY_ID[empUid];
-        const companions = status.companionsByOpponent[oppId] || [];
+        const companions = curStatus.companionsByOpponent[oppId] || [];
         executePlayCard({
-          cardUid: card.uid,
+          cardUid: curCard.uid,
           targetPlayerId: oppId,
           targetEmpUid: empUid,
           secondaryCardUid: emp.isVP ? companions[0] : null
         });
       } else if (actType === 'CONFIRM_VP_KICK') {
         executePlayCard({
-          cardUid: card.uid,
+          cardUid: curCard.uid,
           targetPlayerId: btn.getAttribute('data-opp-id'),
           targetEmpUid: btn.getAttribute('data-emp-uid')
         });
       } else if (actType === 'CONFIRM_DOUBLE_PAY') {
-        executePlayCard({ cardUid: card.uid, targetPlayerId: btn.getAttribute('data-opp-id') });
+        executePlayCard({ cardUid: curCard.uid, targetPlayerId: btn.getAttribute('data-opp-id') });
       }
     });
-  });
+  }
 }
 
 function attachDynamicBoardListeners() {
-  // Bind desktop-only 3D tilt on any newly inserted card elements
-  attach3DTiltListeners();
 
   // Bind one-time global event delegation for all dynamic board elements (zero per-render listener allocation!)
   if (window.__delegatedBoardListenersBound) return;
