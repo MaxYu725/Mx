@@ -348,7 +348,7 @@ function evaluateCardPlayability(state, player, handUid) {
 
 function _evaluateCardPlayabilityImpl(state, player, handUid) {
   const card = CARDS_BY_ID[handUid];
-  if (!card || card.effect === 'HIDDEN') return { playable: false, shortReason: '無效卡牌', reason: '無效卡牌' };
+  if (!card || card.effect === 'HIDDEN' || !player.hand || !player.hand.includes(handUid)) return { playable: false, shortReason: '無效卡牌', reason: '無效卡牌' };
 
   const turn = state.turn;
   const remainingQuota = turn.maxActions - turn.actionsUsed;
@@ -532,8 +532,11 @@ function _evaluateCardPlayabilityImpl(state, player, handUid) {
 }
 
 function consumeHandCard(state, player, handUid, moveToDiscard = true) {
-  player.hand = player.hand.filter(id => id !== handUid);
+  const idx = player.hand.indexOf(handUid);
+  if (idx === -1) return false;
+  player.hand.splice(idx, 1);
   if (moveToDiscard) state.discardPile.unshift(handUid);
+  return true;
 }
 
 // === Fog-of-War Sanitizer for Network State Broadcast ===

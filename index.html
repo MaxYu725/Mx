@@ -8,17 +8,17 @@
   <meta name="apple-mobile-web-app-capable" content="yes" />
   <meta name="apple-mobile-web-app-status-bar-style" content="black-translucent" />
   <meta name="apple-mobile-web-app-title" content="深淵魔王城" />
-  <title>深淵魔王城：燒魔率爭霸戰 V14.5 (一頁式開房＆斷線重連優化版)</title>
+  <title>深淵魔王城：燒魔率爭霸戰 V14.6.1 (一頁式開房＆斷線重連優化版)</title>
   <link rel="manifest" href="manifest.json" />
   <link rel="icon" type="image/png" sizes="192x192" href="icons/icon-192.png" />
   <link rel="apple-touch-icon" href="icons/icon-192.png" />
-  <link rel="stylesheet" href="css/style.css?v=14.6" />
+  <link rel="stylesheet" href="css/style.css?v=14.6.1" />
   <!-- Cloud WSS (MQTT.js) + PeerJS WebRTC Multi-Engine Multiplayer -->
   <script src="https://unpkg.com/mqtt@5.10.3/dist/mqtt.min.js" onerror="this.onerror=null;this.src='https://cdn.jsdelivr.net/npm/mqtt@5.10.3/dist/mqtt.min.js'"></script>
   <script src="https://unpkg.com/peerjs@1.5.4/dist/peerjs.min.js" onerror="this.onerror=null;this.src='https://cdn.jsdelivr.net/npm/peerjs@1.5.4/dist/peerjs.min.js'"></script>
 </head>
 <body class="flex flex-col h-full w-full overflow-hidden safe-area-body">
-  <!-- FLOATING ONLINE DISCONNECT / RECONNECT COUNTDOWN BANNER (V14.6) -->
+  <!-- FLOATING ONLINE DISCONNECT / RECONNECT COUNTDOWN BANNER (V14.6.1) -->
   <div id="onlineDisconnectBanner" class="hidden online-disconnect-banner">
     <div class="flex items-center justify-between gap-2">
       <div id="onlineDisconnectBannerText" class="font-bold leading-snug flex-1 min-w-0">📡 偵測到玩家連線中斷，等待自動重連中...</div>
@@ -30,6 +30,181 @@
       </div>
     </div>
   </div>
+
+
+  <!-- ===================================================================
+       1. COMPACT SINGLE-LINE HEADER BAR (Fullscreen / PWA + Unified Settings)
+       =================================================================== -->
+  <header id="portraitHeaderBar" class="w-full bg-slate-950/95 border-b border-amber-500/40 px-2.5 py-1.5 flex items-center justify-between gap-1.5 z-30 shrink-0">
+    <!-- Left: Game Title + Round Pill + Turn/Mode Pill -->
+    <div class="flex items-center gap-1.5 min-w-0 flex-1 overflow-hidden">
+      <span id="headerAppIcon" class="text-sm shrink-0">💼</span>
+      <h1 id="headerAppTitle" class="text-xs sm:text-sm font-black text-amber-400 whitespace-nowrap shrink-0">Burn Rate 燒錢戰</h1>
+      <span id="phaseBadge" class="px-1.5 py-0.5 rounded-full bg-purple-950 border border-purple-500/50 text-[10px] font-extrabold text-amber-300 whitespace-nowrap shrink-0">R1</span>
+      <span id="activePlayerBadge" class="px-1.5 py-0.5 rounded bg-emerald-950/90 border border-emerald-500/40 text-[10px] font-black text-emerald-300 truncate">👑我方回合</span>
+      <span id="modeIndicatorTag" class="hidden sm:inline-flex px-1.5 py-0.5 rounded bg-slate-900 border border-slate-700 text-[10px] font-bold text-indigo-300 whitespace-nowrap shrink-0">單機·二選一</span>
+    </div>
+
+    <!-- Right: Fullscreen / PWA Quick Button + Unified Settings Button -->
+    <div class="flex items-center gap-1.5 shrink-0">
+      <button id="btnHeaderLandscape" class="px-2 py-1 rounded-lg bg-amber-950/90 border border-amber-400/70 text-[11px] font-black text-amber-300 whitespace-nowrap shadow" title="切換橫屏圓桌模式">
+        🖥️ 橫屏
+      </button>
+      <button id="btnHeaderFullscreen" class="px-2 py-1 rounded-lg bg-slate-800 border border-sky-500/50 text-[11px] font-black text-sky-300 whitespace-nowrap shadow" title="切換全螢幕隱藏網址列">
+        ⛶ 全螢幕
+      </button>
+      <button id="btnOpenSettingsMenu" class="px-2.5 py-1 rounded-lg bg-amber-500 text-[11px] font-black text-slate-950 whitespace-nowrap shadow">
+        ⚙️ 設定
+      </button>
+    </div>
+  </header>
+
+  <!-- ===================================================================
+       MAIN 5-ZONE RESPONSIVE ARENA CONTAINER
+       =================================================================== -->
+  <main id="portraitMainArena" class="flex-1 min-h-0 w-full max-w-[1480px] mx-auto px-2 py-1.5 flex flex-col justify-between gap-1.5 min-w-0 overflow-hidden">
+
+    <!-- ===============================================================
+         UPPER ARENA: ENLARGED ZONE 1 (OPPONENTS) + ZONE 2 (JOB BANK PURE CARDS)
+         =============================================================== -->
+    <section id="upperArenaSection" class="flex-1 min-h-0 w-full flex flex-col justify-between gap-1.5 min-w-0">
+
+      <!-- Optional Multi-Human Perspective Switcher Bar -->
+      <div id="hotSeatSwitcherBar" class="hidden w-full rounded-lg bg-indigo-950/90 border border-amber-400/60 px-2 py-1 min-w-0 shrink-0"></div>
+
+      <!-- Zone 1: Enlarged Opponents Row -->
+      <div id="seatTabsBar" class="w-full grid grid-cols-2 gap-1.5 min-w-0 shrink-0">
+        <!-- Populated dynamically with ONLY opponents -->
+      </div>
+
+      <!-- Zone 2: Public 4-Column Job Bank Pure 2:3 Card Thumbnails -->
+      <div id="talentMarketSection" class="flex-1 min-h-0 w-full flex flex-col gap-1 min-w-0">
+        <div class="flex items-center justify-between px-1 min-w-0 shrink-0">
+          <span id="jobBankSectionTitle" class="text-[11px] font-extrabold text-amber-300 truncate">🏢 公共人力銀行（點擊頂牌檢視應徵者）</span>
+          <button id="btnExpandJobBankModal" class="px-2 py-0.5 rounded-md bg-slate-900 border border-sky-500/40 text-[10px] font-black text-sky-300 whitespace-nowrap shrink-0">
+            🔍 全展開 ▸
+          </button>
+        </div>
+        <div id="condensedJobBankPills" class="flex-1 min-h-0 grid grid-cols-4 gap-1.5 w-full min-w-0 items-center">
+          <!-- All 4 department top cards rendered directly as pure 2:3 card thumbnails -->
+        </div>
+      </div>
+
+    </section>
+
+    <!-- ===============================================================
+         ZONE 3 (CENTER): MY CASTLE STAGE (V13.2 Comfortable Card Size)
+         =============================================================== -->
+    <section id="draftStageSection" class="hidden stage-25d-container border border-amber-400 rounded-xl p-2 flex flex-col gap-1.5 min-w-0 shrink-0">
+      <div class="flex items-center justify-between border-b border-slate-800 pb-1 gap-2 min-w-0 shrink-0">
+        <div class="min-w-0 flex-1">
+          <h2 class="text-xs sm:text-base font-black text-amber-300 truncate">🎲 首輪召喚：點選下方頂牌招募 (左右滑動看4部門)</h2>
+          <p id="draftProgressSub" class="text-[10px] text-slate-300 truncate">每位魔王輪流挑選 1 張，直到每人召滿 4 名部下。</p>
+        </div>
+      </div>
+      <div id="draftBankCardsGrid" class="stage-track-scroll no-scrollbar min-w-0">
+      </div>
+    </section>
+
+    <section id="companyStageSection" class="relative stage-25d-container self-castle-stage rounded-2xl p-1.5 sm:p-2 flex flex-col min-w-0 transition overflow-hidden shrink-0">
+
+      <!-- 4-Department 2:3 Cards Track -->
+      <div id="companyDepartmentsGrid" class="stage-track-scroll no-scrollbar min-w-0">
+      </div>
+
+
+
+    </section>
+
+    <!-- ===============================================================
+         ZONE 4 (LOWER-MIDDLE): MY PERMANENT HERO STATUS BAR + LIVE TICKER
+         =============================================================== -->
+    <div class="w-full flex flex-col gap-1 min-w-0 shrink-0">
+      <section id="myHeroStatusBar" class="w-full rounded-xl bg-slate-950/95 border-2 border-amber-500/60 px-2.5 py-1.5 flex flex-col gap-1 shadow-lg transition min-w-0">
+      </section>
+
+      <!-- COMPACT 2-LINE HIGH-CONTRAST LIVE BATTLE MESSAGE PANEL -->
+      <div id="liveTickerBanner" class="w-full bg-slate-900/95 border border-indigo-500/50 rounded-xl px-2.5 py-1 flex items-center justify-between gap-2 min-w-0 cursor-pointer shadow">
+        <div id="latestLogTicker" class="flex-1 min-w-0 flex flex-col gap-0.5">
+        </div>
+        <span class="px-2 py-0.5 rounded-lg bg-indigo-950/90 border border-sky-400 text-[10px] text-sky-300 font-black whitespace-nowrap shrink-0">📜日誌 ▸</span>
+      </div>
+    </div>
+
+    <!-- ===============================================================
+         ZONE 5 (BOTTOM): COMPACT MY HAND DOCK
+         =============================================================== -->
+    <section id="myHandDockSection" class="bg-slate-950/90 border-t border-amber-500/40 rounded-xl px-2 py-1.5 flex flex-col gap-1 shadow-2xl transition min-w-0 shrink-0">
+
+      <!-- Hand Header Bar -->
+      <div class="flex items-center justify-between gap-1 px-0.5 min-w-0">
+        <div class="flex items-center gap-1.5 min-w-0">
+          <span id="handSectionTitle" class="text-xs font-black text-amber-300 truncate">📁 商業行動手牌</span>
+          <span id="playableCountBadge" class="px-1.5 py-0.5 rounded bg-emerald-950/80 border border-emerald-500/40 text-[10px] font-black text-emerald-300 whitespace-nowrap shrink-0">可出 0 張</span>
+        </div>
+        <div class="flex items-center gap-1.5 text-[10px] font-extrabold shrink-0">
+          <span id="quotaCounterText" class="px-2 py-0.5 rounded-full bg-indigo-950/90 text-sky-300 border border-sky-500/50 whitespace-nowrap">額度: 0/4</span>
+          <span class="text-slate-400 whitespace-nowrap">牌庫 <b id="actionDeckCountText" class="text-amber-300">86</b>｜棄 <b id="discardPileCountText" class="text-slate-300">0</b></span>
+        </div>
+      </div>
+
+      <!-- Horizontal Scrollable Compact Hand Cards -->
+      <div id="localHandContainer" class="w-full flex items-center gap-1.5 overflow-x-auto no-scrollbar snap-x pb-0.5 pt-0.5 min-w-0">
+      </div>
+
+      <!-- Compact Single-Row Bottom Action Bar -->
+      <div class="grid grid-cols-2 gap-1.5 min-w-0">
+        <button id="btnToggleDiscardMode" class="py-1.5 px-2 rounded-xl bg-slate-800 border border-slate-600 text-xs font-bold text-slate-200 truncate">
+          🗑️ 棄牌濾牌
+        </button>
+        <button id="btnConfirmDiscard" class="hidden py-1.5 px-2 rounded-xl bg-orange-600 text-xs font-black text-white shadow truncate">
+          ✔ 確認棄置 (0)
+        </button>
+        <button id="btnEndTurn" class="py-1.5 px-2 rounded-xl bg-amber-500 text-slate-950 font-black text-xs shadow truncate">
+          ⏭️ 結束出牌 ➔ 發薪
+        </button>
+      </div>
+
+    </section>
+
+  </main>
+
+  <!-- ===================================================================
+       LANDSCAPE TABLETOP ARENA ROOT (橫屏圓桌模式 V13.9)
+       =================================================================== -->
+  <div id="landscapeArenaRoot" class="hidden flex-1 min-h-0 w-full h-full flex flex-col justify-between px-2.5 py-1.5 gap-1.5 overflow-hidden select-none ls-tabletop-bg relative">
+    <!-- V14.0 Physical Flying Cards & Tabletop Trajectory Layer -->
+    <div id="lsFxLayer" class="ls-fx-layer"></div>
+
+    <!-- ROW 1 (TOP): [Left: Framed Live Log] + [Center: 12 o'clock Opponent] + [Right: Top Controls & 1x4 Talent Pool] -->
+    <div class="ls-row-top w-full min-h-0 flex items-stretch justify-between gap-2">
+      <!-- Top-Left: Live 3-Line Log & Turn Status -->
+      <div id="lsLogPanel" class="flex-1 min-w-0 rounded-xl bg-stone-950/75 border border-amber-500/25 px-2 py-1 flex flex-col justify-between cursor-pointer group shadow-lg" title="點擊展開完整歷史戰況日誌">
+        <div class="flex items-center gap-1.5 min-w-0 shrink-0">
+          <span id="lsPhaseBadge" class="px-1.5 py-0.5 rounded-full bg-amber-500/20 border border-amber-400/50 text-[10px] font-black text-amber-300 whitespace-nowrap">R1</span>
+          <span id="lsActiveTurnBadge" class="px-1.5 py-0.5 rounded bg-emerald-950/90 border border-emerald-500/40 text-[10px] font-black text-emerald-300 truncate">👑 我方回合</span>
+          <span class="text-[10px] text-amber-400/90 font-bold whitespace-nowrap ml-auto group-hover:underline">📜日誌 ▸</span>
+        </div>
+        <div id="lsLiveLogLines" class="flex-1 min-h-0 flex flex-col justify-center gap-0.5 overflow-hidden mt-0.5">
+        </div>
+      </div>
+
+      <!-- Top-Center: 12 o'clock Opponent Seat (Tight Fit Around 4 Cards) -->
+      <div id="lsSeatTop" class="shrink-0 h-full flex items-stretch justify-center">
+      </div>
+
+      <!-- Top-Right: Pill Controls + 1x4 Talent Pool (Tight Fit Around 4 Cards) -->
+      <div id="lsTopRightPanel" class="shrink-0 h-full rounded-xl bg-stone-950/75 border border-amber-500/25 px-2 py-1 flex flex-col justify-between items-end gap-0.5 shadow-lg">
+        <div class="flex items-center justify-end gap-1 shrink-0 w-full">
+          <span id="lsTalentPoolLabel" class="text-[10.5px] font-black text-amber-300 mr-auto truncate">🏢 人才池</span>
+          <button id="btnLsFullscreen" class="ls-pill-btn">全屏</button>
+          <button id="btnLsRoomMenu" class="ls-pill-btn">房間</button>
+          <button id="btnLsToPortrait" class="ls-pill-btn ls-pill-btn-gold">直向</button>
+        </div>
+        <div id="lsJobBankGrid" class="ls-dept-row">
+        </div>
+      </div>
+    </div>
 
     <!-- ROW 2 (MIDDLE): [Left: 9 o'clock Opponent] + [Center: Compact Oval Board-Game Table] + [Right: 3 o'clock Opponent] -->
     <div class="ls-row-mid w-full min-h-0 flex items-center justify-between gap-2">
@@ -375,12 +550,12 @@
     <div class="lobby-modal-card bg-slate-900 border-2 border-amber-400 rounded-2xl max-w-lg w-full p-2.5 sm:p-3.5 shadow-2xl max-h-[94vh] overflow-y-auto touch-pan-y">
       <!-- Top Header -->
       <div class="flex items-center justify-between border-b border-slate-700 pb-1.5 mb-1.5 gap-2">
-        <h3 class="text-xs sm:text-base font-black text-amber-400 truncate">🌐 連線對戰大廳 ＆ 開房設定 (V14.6)</h3>
+        <h3 class="text-xs sm:text-base font-black text-amber-400 truncate">🌐 連線對戰大廳 ＆ 開房設定 (V14.6.1)</h3>
         <button id="btnCloseLobby" class="px-2.5 py-0.5 rounded-lg bg-slate-800 text-xs font-bold text-slate-200 shrink-0">✕ 關閉</button>
       </div>
 
       <div class="space-y-1.5 text-xs">
-        <!-- Return-to-Lobby / Disconnect Alert Banner (V14.6) -->
+        <!-- Return-to-Lobby / Disconnect Alert Banner (V14.6.1) -->
         <div id="lobbyNoticeBanner" class="hidden rounded-xl bg-amber-950/95 border border-amber-400 px-2.5 py-1.5 text-[11px] text-amber-200 font-bold flex items-center justify-between gap-2">
           <span id="lobbyNoticeBannerText" class="leading-snug flex-1"></span>
           <button id="btnDismissLobbyNotice" class="px-1.5 py-0.5 rounded bg-slate-900 text-slate-300 text-[10px] shrink-0">✕</button>
@@ -624,10 +799,10 @@
   <div id="vfxOverlayRoot" style="pointer-events: none !important;" class="fixed inset-0 pointer-events-none z-50 overflow-hidden"></div>
 
   <!-- MODULAR 4-LAYER ARCHITECTURE SCRIPTS -->
-  <script src="js/art.js?v=14.6"></script>
-  <script src="js/cards.js?v=14.6"></script>
-  <script src="js/engine.js?v=14.6"></script>
-  <script src="js/session.js?v=14.6"></script>
-  <script src="js/ui.js?v=14.6"></script>
+  <script src="js/art.js?v=14.6.1"></script>
+  <script src="js/cards.js?v=14.6.1"></script>
+  <script src="js/engine.js?v=14.6.1"></script>
+  <script src="js/session.js?v=14.6.1"></script>
+  <script src="js/ui.js?v=14.6.1"></script>
 </body>
 </html>

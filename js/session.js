@@ -1843,6 +1843,7 @@ function handleIncomingNetworkPacket(packet, transport, peerConn) {
 
     if (packet.msgType === 'CLIENT_ACTION') {
       const { seatId, action } = packet;
+      if (action && typeof action === 'object') delete action.fromAI;
       handleHostReceiveAction(seatId, action);
       return;
     }

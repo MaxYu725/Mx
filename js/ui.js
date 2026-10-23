@@ -16,7 +16,7 @@ function isRunningStandalonePWA() {
 
 function registerPwaServiceWorker() {
   if ("serviceWorker" in navigator && (location.protocol === "https:" || location.hostname === "localhost" || location.hostname === "127.0.0.1")) {
-    navigator.serviceWorker.register("./sw.js?v=14.6").then(reg => { try { reg.update(); } catch(e){} }).catch(() => {});
+    navigator.serviceWorker.register("./sw.js?v=14.6.1").then(reg => { try { reg.update(); } catch(e){} }).catch(() => {});
   }
   window.addEventListener("beforeinstallprompt", (e) => {
     e.preventDefault();
@@ -97,6 +97,9 @@ function setLayoutOrientationPref(newPref) {
     window.localStorage.setItem("dbr_v13_orientation", newPref);
   } catch (e) {}
   syncLayoutOrientationDOM(true);
+  ['seatTabsBar', 'myHeroStatusBar', 'localHandContainer', 'lsSeatTop', 'lsSeatLeft', 'lsSeatRight', 'lsCenterOvalTable', 'lsMyCompanyPanel', 'lsHandContainer', 'lsActionControlsCol', 'modeDTargetDrawer'].forEach(id => {
+    document.getElementById(id)?.removeAttribute('data-render-sig');
+  });
   if (typeof renderAll === "function" && typeof gameState !== "undefined" && gameState) {
     renderAll();
   }
@@ -3855,7 +3858,7 @@ function openJobBankModal() {
       </div>
     `;
   }).join('');
-  document.getElementById('jobBankModal').classList.remove('hidden');
+  document.getElementById('jobBankModal')?.classList.remove('hidden');
 }
 
 // === Opponent Castle Popup Modal: Enlarged Opponent Overview + Pure 2:3 Character Cards Only! ===
@@ -3976,7 +3979,7 @@ function openOpponentCastleModal(oppId) {
     });
   });
 
-  document.getElementById('jobBankModal').classList.remove('hidden');
+  document.getElementById('jobBankModal')?.classList.remove('hidden');
 }
 
 function openOutsourcedInspectorModal(playerId) {
@@ -3985,7 +3988,7 @@ function openOutsourcedInspectorModal(playerId) {
   const isSelf = player.id === getLocalPlayerId();
   document.getElementById('inspectorModalTitle').textContent = `${isSelf ? '👑【我方主城】' : `🎯【敵方：${player.name}】`}— 高價外援：深淵惡魔高利貸傭兵 (${player.outsourcedCount}人)`;
   document.getElementById('inspectorModalSubtitle').textContent = '當場上「討伐危機」所需苦工總數大於在職哥布林苦工時，差額將自動雇傭深淵惡魔高利貸傭兵（每名每回合索取 3 魔晶，不可被遣散，僅能透過招募苦工或鎮壓危機退回）。';
-  document.getElementById('inspectorModalFooter').classList.add('hidden');
+  document.getElementById('inspectorModalFooter')?.classList.add('hidden');
   const count = Math.max(1, player.outsourcedCount);
   const theme = typeof getActiveTheme === 'function' ? getActiveTheme() : { useFullCardArt: true };
   const terms = typeof getThemeTerms === 'function' ? getThemeTerms() : { currencyIcon: '💵', outFull: '高價外包顧問', outIcon: '💸' };
@@ -4018,7 +4021,7 @@ function openOutsourcedInspectorModal(playerId) {
       </div>
     `;
   }).join('');
-  document.getElementById('inspectorModal').classList.remove('hidden');
+  document.getElementById('inspectorModal')?.classList.remove('hidden');
 }
 
 function openDepartmentInspectorModal(playerId, dept) {
@@ -4033,11 +4036,11 @@ function openDepartmentInspectorModal(playerId, dept) {
     arr.length === 0
       ? '此部門目前缺工（空城），有效技能等級視為 0。'
       : `置頂第 1 張為現任主管（有效技能 ${getEffectiveSkill(player, dept)} 級），其餘為下屬。`;
-  document.getElementById('inspectorModalFooter').classList.add('hidden');
+  document.getElementById('inspectorModalFooter')?.classList.add('hidden');
 
   const grid = document.getElementById('inspectorCardsGrid');
   grid.innerHTML = arr.map((uid, idx) => `<div class="ls-inspector-card-item">${renderEmployeeCardHTML(uid, 'w-full h-full', idx === 0 ? '👑主管' : `下屬#${idx}`)}</div>`).join('');
-  document.getElementById('inspectorModal').classList.remove('hidden');
+  document.getElementById('inspectorModal')?.classList.remove('hidden');
 }
 
 function openCrisesInspectorModal(playerId) {
@@ -4045,12 +4048,12 @@ function openCrisesInspectorModal(playerId) {
   if (!player) return;
   document.getElementById('inspectorModalTitle').textContent = `⚠️ 【${player.name}】— 場上討伐危機 (${player.crises.length}張，共需苦工 ${getCrisisTotalEngineerReq(player)} 人)`;
   document.getElementById('inspectorModalSubtitle').textContent = '每張討伐危機自身維護費為 0，但若在職哥布林苦工不足，差額將自動補入每回合消耗 3 魔晶的「深淵傭兵（外包）」。可打出紅部門「鎮壓危機（解放）」將其移除。';
-  document.getElementById('inspectorModalFooter').classList.add('hidden');
+  document.getElementById('inspectorModalFooter')?.classList.add('hidden');
   document.getElementById('inspectorCardsGrid').innerHTML =
     player.crises.length === 0
       ? `<div class="text-xs text-slate-400 py-4">目前場上沒有任何討伐危機！</div>`
       : player.crises.map(uid => `<div class="ls-inspector-card-item">${renderActionCardHTML(uid, 'w-full h-full')}</div>`).join('');
-  document.getElementById('inspectorModal').classList.remove('hidden');
+  document.getElementById('inspectorModal')?.classList.remove('hidden');
 }
 
 function openEngineersInspectorModal(playerId) {
@@ -4058,12 +4061,12 @@ function openEngineersInspectorModal(playerId) {
   if (!player) return;
   document.getElementById('inspectorModalTitle').textContent = `⚒ 【${player.name}】— 在職哥布林苦工 (${player.engineers.length}人)`;
   document.getElementById('inspectorModalSubtitle').textContent = '每位苦工每回消耗 1 魔晶，可抵銷 1 點「討伐危機」人力需求。';
-  document.getElementById('inspectorModalFooter').classList.add('hidden');
+  document.getElementById('inspectorModalFooter')?.classList.add('hidden');
   document.getElementById('inspectorCardsGrid').innerHTML =
     player.engineers.length === 0
       ? `<div class="text-xs text-slate-400 py-4">目前無在職苦工</div>`
       : player.engineers.map((uid, i) => `<div class="ls-inspector-card-item">${renderEmployeeCardHTML(uid, 'w-full h-full', `苦工#${i+1}`)}</div>`).join('');
-  document.getElementById('inspectorModal').classList.remove('hidden');
+  document.getElementById('inspectorModal')?.classList.remove('hidden');
 }
 
 function openMassLayoffModal(cardUid) {
@@ -4079,7 +4082,7 @@ function openMassLayoffModal(cardUid) {
 
   document.getElementById('inspectorModalTitle').textContent = `🩸 ${cardTitle}（裁員）：請勾選要遣散的成員`;
   document.getElementById('inspectorModalSubtitle').textContent = `須保留至少 2 名在職${vpName}（目前你有 ${totalVPs} 名${vpName}，可左右滑動檢視全部成員）。`;
-  document.getElementById('inspectorModalFooter').classList.remove('hidden');
+  document.getElementById('inspectorModalFooter')?.classList.remove('hidden');
   const confirmBtn = document.getElementById('btnConfirmMassLayoff');
   if (confirmBtn) confirmBtn.textContent = `⚡ 確認執行${cardTitle}`;
 
@@ -4133,17 +4136,17 @@ function openMassLayoffModal(cardUid) {
   renderLayoffGrid();
   document.getElementById('btnConfirmMassLayoff').onclick = () => {
     if (uiSelection.layoffSet.size === 0) return;
-    document.getElementById('inspectorModal').classList.add('hidden');
+    document.getElementById('inspectorModal')?.classList.add('hidden');
     executePlayCard({ cardUid, layoffUids: [...uiSelection.layoffSet] });
   };
-  document.getElementById('inspectorModal').classList.remove('hidden');
+  document.getElementById('inspectorModal')?.classList.remove('hidden');
 }
 
 function showGameOverModal(winner) {
   const isMe = winner.id === getLocalPlayerId();
   document.getElementById('gameOverTitle').textContent = isMe ? '🏆 恭喜！你的深淵魔王城稱霸魔界！' : `💀 【${winner.name}】獲得最終勝利！`;
   document.getElementById('gameOverDesc').textContent = `在經歷 ${gameState.turn.roundNumber} 回合的激烈燒魔競爭後，【${winner.name}】以剩餘 ${winner.crystals} 顆魔晶石成為最後屹立不搖的魔王城！`;
-  document.getElementById('gameOverModal').classList.remove('hidden');
+  document.getElementById('gameOverModal')?.classList.remove('hidden');
 }
 
 function renderGallery(filter = 'ALL') {
@@ -4690,7 +4693,7 @@ function initAppOnLoad() {
     document.getElementById('homeScreenModal')?.classList.remove('hidden');
   });
 
-  document.getElementById('btnCancelModeD').addEventListener('click', () => {
+  document.getElementById('btnCancelModeD')?.addEventListener('click', () => {
     resetSelectionState();
     renderAll();
   });
@@ -4728,17 +4731,17 @@ function initAppOnLoad() {
     if (e.key === 'Escape') {
       resetSelectionState();
       document.getElementById('settingsMenuModal')?.classList.add('hidden');
-      document.getElementById('jobBankModal').classList.add('hidden');
-      document.getElementById('inspectorModal').classList.add('hidden');
-      document.getElementById('galleryModal').classList.add('hidden');
-      document.getElementById('logModal').classList.add('hidden');
+      document.getElementById('jobBankModal')?.classList.add('hidden');
+      document.getElementById('inspectorModal')?.classList.add('hidden');
+      document.getElementById('galleryModal')?.classList.add('hidden');
+      document.getElementById('logModal')?.classList.add('hidden');
       renderAll();
     }
   });
 
-  document.getElementById('btnExpandJobBankModal').addEventListener('click', () => openJobBankModal());
-  document.getElementById('btnCloseJobBankModal').addEventListener('click', () => {
-    document.getElementById('jobBankModal').classList.add('hidden');
+  document.getElementById('btnExpandJobBankModal')?.addEventListener('click', () => openJobBankModal());
+  document.getElementById('btnCloseJobBankModal')?.addEventListener('click', () => {
+    document.getElementById('jobBankModal')?.classList.add('hidden');
   });
 
   const openLogFn = () => {
@@ -4746,15 +4749,15 @@ function initAppOnLoad() {
     document.getElementById('battleLogModalList').innerHTML = gameState.logs
       .map((l, i) => `<div class="${i === 0 ? 'text-amber-300 font-bold' : 'text-slate-300'} border-b border-slate-800 pb-1">${l}</div>`)
       .join('');
-    document.getElementById('logModal').classList.remove('hidden');
+    document.getElementById('logModal')?.classList.remove('hidden');
   };
-  document.getElementById('btnOpenLogModal').addEventListener('click', openLogFn);
-  document.getElementById('liveTickerBanner').addEventListener('click', openLogFn);
-  document.getElementById('btnCloseLogModal').addEventListener('click', () => {
-    document.getElementById('logModal').classList.add('hidden');
+  document.getElementById('btnOpenLogModal')?.addEventListener('click', openLogFn);
+  document.getElementById('liveTickerBanner')?.addEventListener('click', openLogFn);
+  document.getElementById('btnCloseLogModal')?.addEventListener('click', () => {
+    document.getElementById('logModal')?.classList.add('hidden');
   });
 
-  document.getElementById('btnToggleDiscardMode').addEventListener('click', () => {
+  document.getElementById('btnToggleDiscardMode')?.addEventListener('click', () => {
     if (uiSelection.mode === 'DISCARD_SELECT') {
       resetSelectionState();
     } else {
@@ -4764,26 +4767,26 @@ function initAppOnLoad() {
     renderAll();
   });
 
-  document.getElementById('btnConfirmDiscard').addEventListener('click', () => {
+  document.getElementById('btnConfirmDiscard')?.addEventListener('click', () => {
     if (uiSelection.discardSet.size === 0) return;
     const cardUids = [...uiSelection.discardSet];
     resetSelectionState();
     dispatchPlayerAction({ type: 'DISCARD_CARDS', cardUids });
   });
 
-  document.getElementById('btnEndTurn').addEventListener('click', () => {
+  document.getElementById('btnEndTurn')?.addEventListener('click', () => {
     if (gameState.phase === 'STEP1_PLAY_OR_DISCARD' && isLocalPlayerTurn(gameState)) {
       endPlayPhaseAndSettleTurn();
     }
   });
 
-  document.getElementById('btnOpenGallery').addEventListener('click', () => {
+  document.getElementById('btnOpenGallery')?.addEventListener('click', () => {
     document.getElementById('settingsMenuModal')?.classList.add('hidden');
     renderGallery('ALL');
-    document.getElementById('galleryModal').classList.remove('hidden');
+    document.getElementById('galleryModal')?.classList.remove('hidden');
   });
-  document.getElementById('btnCloseGallery').addEventListener('click', () => {
-    document.getElementById('galleryModal').classList.add('hidden');
+  document.getElementById('btnCloseGallery')?.addEventListener('click', () => {
+    document.getElementById('galleryModal')?.classList.add('hidden');
   });
   document.querySelectorAll('.gallery-tab').forEach(btn => {
     btn.addEventListener('click', () => {
@@ -4797,9 +4800,9 @@ function initAppOnLoad() {
     });
   });
 
-  document.getElementById('btnOpenRules').addEventListener('click', () => {
+  document.getElementById('btnOpenRules')?.addEventListener('click', () => {
     document.getElementById('settingsMenuModal')?.classList.add('hidden');
-    document.getElementById('rulesModal').classList.remove('hidden');
+    document.getElementById('rulesModal')?.classList.remove('hidden');
   });
   const closeRulesFn = () => {
     document.getElementById('rulesModal')?.classList.add('hidden');
@@ -4817,18 +4820,18 @@ function initAppOnLoad() {
     }
   });
 
-  document.getElementById('btnToggleMute').addEventListener('click', () => {
+  document.getElementById('btnToggleMute')?.addEventListener('click', () => {
     isMuted = !isMuted;
     updateSettingsMenuUI();
   });
 
-  document.getElementById('btnOpenLobby').addEventListener('click', () => {
+  document.getElementById('btnOpenLobby')?.addEventListener('click', () => {
     document.getElementById('settingsMenuModal')?.classList.add('hidden');
     renderLobbyUI();
-    document.getElementById('lobbyModal').classList.remove('hidden');
+    document.getElementById('lobbyModal')?.classList.remove('hidden');
   });
-  document.getElementById('btnCloseLobby').addEventListener('click', () => {
-    document.getElementById('lobbyModal').classList.add('hidden');
+  document.getElementById('btnCloseLobby')?.addEventListener('click', () => {
+    document.getElementById('lobbyModal')?.classList.add('hidden');
   });
 
   document.querySelectorAll('[data-lobby-tab]').forEach(btn => {
@@ -4910,21 +4913,21 @@ function initAppOnLoad() {
     joinOnlineRoomAsClient(code, nick);
   });
 
-  document.getElementById('btnStartWithDraft').addEventListener('click', () => startMatchFromLobby(false));
-  document.getElementById('btnStartQuickMatch').addEventListener('click', () => startMatchFromLobby(true));
-  document.getElementById('btnPlayAgain').addEventListener('click', () => {
-    document.getElementById('gameOverModal').classList.add('hidden');
+  document.getElementById('btnStartWithDraft')?.addEventListener('click', () => startMatchFromLobby(false));
+  document.getElementById('btnStartQuickMatch')?.addEventListener('click', () => startMatchFromLobby(true));
+  document.getElementById('btnPlayAgain')?.addEventListener('click', () => {
+    document.getElementById('gameOverModal')?.classList.add('hidden');
     if (gameSession.mode === 'HOST') {
       gameSession.lobbyState.matchStarted = false;
       gameSession.hostMasterState = null;
       broadcastLobbyState();
     }
     renderLobbyUI();
-    document.getElementById('lobbyModal').classList.remove('hidden');
+    document.getElementById('lobbyModal')?.classList.remove('hidden');
   });
 
-  document.getElementById('btnCloseInspector').addEventListener('click', () => {
-    document.getElementById('inspectorModal').classList.add('hidden');
+  document.getElementById('btnCloseInspector')?.addEventListener('click', () => {
+    document.getElementById('inspectorModal')?.classList.add('hidden');
   });
 }
 
