@@ -16,7 +16,7 @@ function isRunningStandalonePWA() {
 
 function registerPwaServiceWorker() {
   if ("serviceWorker" in navigator && (location.protocol === "https:" || location.hostname === "localhost" || location.hostname === "127.0.0.1")) {
-    navigator.serviceWorker.register("./sw.js?v=15.0").then(reg => { try { reg.update(); } catch(e){} }).catch(() => {});
+    navigator.serviceWorker.register("./sw.js?v=15.1").then(reg => { try { reg.update(); } catch(e){} }).catch(() => {});
   }
   window.addEventListener("beforeinstallprompt", (e) => {
     e.preventDefault();
@@ -1510,17 +1510,17 @@ function getBankDeptTargetState(d) {
   }
   if (card.effect === 'FORCE_HIRE') {
     const targetOppId = uiSelection.step2OpponentId || (status.validOpponents && status.validOpponents.length === 1 ? status.validOpponents[0] : null);
-    let valid = false;
-    if (targetOppId) {
-      valid = Boolean(status.validBankByOpponent && status.validBankByOpponent[targetOppId] && status.validBankByOpponent[targetOppId].includes(d));
-    } else if (status.validOpponents) {
-      valid = status.validOpponents.some(oid => status.validBankByOpponent && status.validBankByOpponent[oid] && status.validBankByOpponent[oid].includes(d));
+    if (!targetOppId) {
+      // Step 1: Wait for player to pick the target opponent first so target relationship is 100% clear!
+      return { valid: false, cls: 'opacity-35 pointer-events-none' };
     }
-    if (!valid) return { valid: false, cls: 'opacity-30 pointer-events-none' };
-    const isChosenDept = uiSelection.step2BankDept === d;
+    const valid = Boolean(status.validBankByOpponent && status.validBankByOpponent[targetOppId] && status.validBankByOpponent[targetOppId].includes(d));
+    if (!valid) return { valid: false, cls: 'opacity-25 grayscale pointer-events-none' };
+    const opp = gameState.players.find(p => p.id === targetOppId);
+    const shortOpp = opp ? getShortPlayerName(opp.name) : '';
     return {
       valid: true,
-      tag: isChosenDept ? '✔已選此部' : '🪤點此強塞',
+      tag: `🪤塞給${shortOpp}`,
       cls: 'ls-bank-target-glow'
     };
   }
@@ -1651,18 +1651,13 @@ function getActiveTabletopPrompt(state, localPlayer) {
   } else if (card.effect === 'HIRE_BANK') {
     line1 = `👉 請直接點選右上「人才池」亮起框線的部門招募入隊！`;
   } else if (card.effect === 'FORCE_HIRE') {
-    if (uiSelection.step2OpponentId) {
-      const opp = state.players.find(p => p.id === uiSelection.step2OpponentId);
-      line1 = `👉 目標【${opp ? getShortPlayerName(opp.name) : ''}】➔ 請點選右上「人才池」亮起的部門強塞！`;
-    } else if (uiSelection.step2BankDept) {
-      const topUid = state.jobBank[uiSelection.step2BankDept] && state.jobBank[uiSelection.step2BankDept][0];
-      const emp = topUid ? CARDS_BY_ID[topUid] : null;
-      line1 = `👉 已選【${emp ? emp.title : DEPT_META[uiSelection.step2BankDept].short}】➔ 請點選亮起紅框的「對手」強塞！`;
-    } else if (status.validOpponents && status.validOpponents.length === 1) {
-      const opp = state.players.find(p => p.id === status.validOpponents[0]);
-      line1 = `👉 請直接點選右上「人才池」亮起的部門，強塞給【${opp ? getShortPlayerName(opp.name) : ''}】！`;
+    const autoOppId = uiSelection.step2OpponentId || (status.validOpponents && status.validOpponents.length === 1 ? status.validOpponents[0] : null);
+    if (autoOppId) {
+      const opp = state.players.find(p => p.id === autoOppId);
+      const shortOpp = opp ? getShortPlayerName(opp.name) : '';
+      line1 = `👉 已鎖定目標【${shortOpp}】➔ 第2步：請點選右上「人才池」亮起的卡牌強塞給【${shortOpp}】！`;
     } else {
-      line1 = `👉 請點選右上「人才池」亮起的部門（或先點選目標對手）強塞！`;
+      line1 = `👉 第1步：請先點選牌桌上亮起紅框的「目標對手」（選定後再從右上人才池挑人強塞）！`;
     }
   } else if (card.effect === 'BAD_IDEA') {
     line1 = `👉 請直接點選牌桌上亮起紅框的「目標對手」施放【${card.title} (×${card.val})】！`;
@@ -2402,7 +2397,7 @@ const LS_EMPTY_DEPT_STYLE = {
   GREEN:  { bg: 'bg-emerald-950/60', border: 'border-emerald-500/45', text: 'text-emerald-200', headerBg: 'bg-emerald-700' }
 };
 
-// Helper to render an expanded selectable employee card directly inside a player's seat row (for POACH_ENEMY, FIRE_OWN, VP_KICK_ENEMY, VP_MASS_LAYOFF)
+// 圖三: High-contrast Spotlight Target Employee Card with top tag & bottom pulsing CTA button
 function renderLsInlineTargetEmpCardHTML(empUid, actionType, oppId, badgeText, isLayoffRed = false, isMyCard = false) {
   const emp = CARDS_BY_ID[empUid];
   if (!emp) return '';
@@ -2415,11 +2410,12 @@ function renderLsInlineTargetEmpCardHTML(empUid, actionType, oppId, badgeText, i
     <div data-inline-target-act="${actionType}" ${oppAttr} data-emp-uid="${empUid}" class="${baseCls} ${stateCls} bg-slate-950 select-none shrink-0">
       ${getCardImgTag(artKey, emp.title, 'w-full h-full object-cover block')}
       ${isLayoffRed ? `
-        <div class="absolute inset-0 bg-rose-600/45 flex items-center justify-center pointer-events-none z-20">
-          <span class="px-1.5 py-0.5 rounded bg-rose-600 border border-white text-white text-[8px] font-black shadow-lg">🩸待遣散</span>
+        <div class="absolute inset-0 bg-rose-600/50 flex flex-col items-center justify-center pointer-events-none z-20">
+          <span class="px-1.5 py-0.5 rounded bg-rose-600 border-2 border-white text-white text-[8.5px] font-black shadow-xl">🩸待遣散</span>
         </div>
       ` : `
-        <span class="absolute bottom-0.5 left-1/2 -translate-x-1/2 px-1 py-0.2 rounded bg-slate-950/95 border border-amber-400 text-[7px] font-black text-amber-300 whitespace-nowrap z-20 shadow">${badgeText}</span>
+        <span class="absolute top-0.5 left-1/2 -translate-x-1/2 px-1 py-0.2 rounded bg-amber-400 text-slate-950 text-[6.5px] font-black whitespace-nowrap z-20 shadow">🎯可選目標</span>
+        <span class="absolute bottom-0.5 left-1/2 -translate-x-1/2 px-1.5 py-0.2 rounded-full bg-emerald-400 border border-slate-950 text-[7.5px] font-black text-slate-950 whitespace-nowrap z-20 shadow-lg">${badgeText}</span>
       `}
     </div>
   `;
@@ -2469,29 +2465,31 @@ function renderLsDeptSlotHTML(player, d, opts = {}) {
     `;
   }
 
-  // Multiple Employees in Same Department:
-  // Top Card (VP or highest-skill employee) is on top (置頂), Subordinates stack underneath (疊在下方，只露出薪金和技能數字)!
-  const shownSubs = subUids.slice(0, 3);
+  // 圖二: Physical Layered Card-Bottom Strips — Top Card on top + crisp physical card edges underneath with Salary (left) & Skill Orb (right) aligned!
+  const shownSubs = subUids.slice(0, 2);
   const extraSubCount = Math.max(0, subUids.length - shownSubs.length);
+  const totalDeptSalary = stackUids.reduce((sum, uid) => sum + ((CARDS_BY_ID[uid] && CARDS_BY_ID[uid].salary) || 0), 0);
   const subStripsHTML = shownSubs.map((sUid, idx) => {
     const sCard = CARDS_BY_ID[sUid];
     if (!sCard) return '';
-    const sklLabel = sCard.role === 'ENGINEER' ? '⚒1' : `★${sCard.skill}`;
     const isLastShown = idx === shownSubs.length - 1 && extraSubCount > 0;
     return `
       <div class="ls-sub-peek-strip">
-        <span class="ls-sub-peek-sal">💲${sCard.salary}</span>
-        ${isLastShown ? `<span class="text-[6px] font-black text-amber-300 leading-none">+${extraSubCount}</span>` : ''}
-        <span class="ls-sub-peek-skl">${sklLabel}</span>
+        <span class="ls-sub-peek-sal">${sCard.salary}薪</span>
+        ${isLastShown
+          ? `<span class="px-1 rounded bg-amber-500 text-slate-950 text-[6.5px] font-black leading-none">+${extraSubCount}人</span>`
+          : `<span class="text-[6.5px] font-bold text-slate-500 truncate max-w-[28px] leading-none">${sCard.title}</span>`
+        }
+        <span class="ls-sub-peek-skl-orb">${sCard.skill}</span>
       </div>
     `;
   }).join('');
 
   return `
-    <div ${slotDataAttr} ${clickAttrs} class="${baseCardCls} ls-dept-card-stacked ${glowCls} bg-slate-950 select-none">
+    <div ${slotDataAttr} ${clickAttrs} class="${baseCardCls} ls-dept-card-stacked ${glowCls} bg-slate-950 select-none" title="點擊展開檢視本部門全部 ${stackUids.length} 名員工（總薪資 -${totalDeptSalary}）">
       <div class="ls-stack-head-wrap">
         ${getCardImgTag(artKey, hCard.title, 'w-full h-full object-cover block')}
-        ${isHighlighted ? `<span class="absolute top-0.5 left-0.5 px-1 py-0.2 rounded bg-amber-400 text-slate-950 text-[8px] font-black leading-none z-20 shadow">${effSkill}級</span>` : ''}
+        <span class="absolute top-0.5 right-0.5 px-1 py-0.2 rounded bg-slate-950/92 border border-amber-400 text-[6.5px] font-black text-amber-300 leading-none z-20 shadow">👥${stackUids.length}人</span>
       </div>
       <div class="ls-stack-subs-tray">
         ${subStripsHTML}
@@ -2557,55 +2555,65 @@ function renderLsOpponentSeatHTML(opp) {
 
     if (selCard && status.playable) {
       if (selCard.effect === 'BAD_IDEA' || selCard.effect === 'VP_DOUBLE_PAY') {
-        if (selCard.effect === 'BAD_IDEA') highlightDept = 'YELLOW';
         const isValid = status.validOpponents && status.validOpponents.includes(opp.id);
         if (isValid) {
           modeDSeatAttr = 'data-mode-d-seat="VALID_TARGET"';
-          targetRingCls = 'targetable-seat-glow border-2 border-rose-400';
-          actionBadgeHTML = `<span class="px-1.5 py-0.2 rounded bg-rose-600 text-white text-[8px] font-black shadow">🎯點此施放</span>`;
+          targetRingCls = 'targetable-seat-glow';
+          actionBadgeHTML = `<span class="px-1.5 py-0.2 rounded bg-rose-600 border border-white text-white text-[8.5px] font-black shadow animate-pulse">🎯點此攻擊</span>`;
         } else {
-          targetRingCls = 'opacity-40';
+          targetRingCls = 'ls-zone-spotlight-dim';
           actionBadgeHTML = `<span class="px-1 py-0.2 rounded bg-stone-800 text-sky-300 text-[8px] font-bold">🛡️免疫</span>`;
         }
       } else if (selCard.effect === 'FORCE_HIRE') {
-        highlightDept = 'BLUE';
-        const deptFilter = uiSelection.step2BankDept;
-        const isValid = status.validOpponents && status.validOpponents.includes(opp.id) &&
-          (!deptFilter || (status.validBankByOpponent[opp.id] && status.validBankByOpponent[opp.id].includes(deptFilter)));
-        if (isValid) {
-          modeDSeatAttr = 'data-mode-d-seat="VALID_TARGET"';
-          const isChosenOpp = uiSelection.step2OpponentId === opp.id;
-          targetRingCls = isChosenOpp ? 'border-2 border-amber-300 ring-2 ring-amber-400' : 'targetable-seat-glow border-2 border-orange-400';
-          actionBadgeHTML = `<span class="px-1.5 py-0.2 rounded ${isChosenOpp ? 'bg-amber-400 text-slate-950' : 'bg-orange-600 text-white'} text-[8px] font-black shadow">${isChosenOpp ? '✔目標鎖定' : '🪤點此強塞'}</span>`;
-        } else {
-          targetRingCls = 'opacity-40';
+        const isValid = status.validOpponents && status.validOpponents.includes(opp.id);
+        const lockedOppId = uiSelection.step2OpponentId || (status.validOpponents && status.validOpponents.length === 1 ? status.validOpponents[0] : null);
+        if (!isValid) {
+          targetRingCls = 'ls-zone-spotlight-dim';
           actionBadgeHTML = `<span class="px-1 py-0.2 rounded bg-stone-800 text-sky-300 text-[8px] font-bold">🛡️免疫</span>`;
+        } else if (lockedOppId) {
+          // 圖一: Once a target opponent is locked, ONLY the locked opponent glows brightly; unselected opponents dim!
+          modeDSeatAttr = 'data-mode-d-seat="VALID_TARGET"';
+          if (lockedOppId === opp.id) {
+            targetRingCls = 'ls-locked-opp-seat';
+            actionBadgeHTML = `<span class="px-1.5 py-0.2 rounded bg-amber-400 border border-white text-slate-950 text-[8.5px] font-black shadow">🎯目標鎖定➔點右上人才池</span>`;
+          } else {
+            targetRingCls = 'ls-zone-spotlight-dim';
+            actionBadgeHTML = `<span class="px-1 py-0.2 rounded bg-stone-800 text-stone-300 text-[7.5px] font-bold">點此改選</span>`;
+          }
+        } else {
+          // Step 1 of FORCE_HIRE: All valid opponents glow so player picks who to target first!
+          modeDSeatAttr = 'data-mode-d-seat="VALID_TARGET"';
+          targetRingCls = 'targetable-seat-glow';
+          actionBadgeHTML = `<span class="px-1.5 py-0.2 rounded bg-orange-600 border border-white text-white text-[8.5px] font-black shadow animate-pulse">🎯第1步:點此選對手</span>`;
         }
       } else if (selCard.effect === 'POACH_ENEMY') {
         const poachList = (status.targetableByOpponent && status.targetableByOpponent[opp.id]) || [];
         if (poachList.length > 0) {
-          targetRingCls = 'border-2 border-sky-400 shadow-xl';
-          actionBadgeHTML = `<span class="px-1.5 py-0.2 rounded bg-sky-500 text-slate-950 text-[8px] font-black shadow">🕸️點選部下挖角(${poachList.length})</span>`;
+          targetRingCls = 'ls-locked-opp-seat';
+          actionBadgeHTML = `<span class="px-1.5 py-0.2 rounded bg-emerald-400 text-slate-950 text-[8.5px] font-black shadow">🎯點選下方亮起卡牌挖角(${poachList.length})</span>`;
           inlineCardsHTML = poachList.map(eUid => {
             const emp = CARDS_BY_ID[eUid];
-            const tag = emp && emp.role === 'ENGINEER' ? `🕸️挖${terms.engName || '工程師'}` : '🕸️點此挖角';
+            const tag = emp && emp.role === 'ENGINEER' ? `👆挖${terms.engName || '工程師'}` : '👆點此挖角';
             return renderLsInlineTargetEmpCardHTML(eUid, 'CONFIRM_POACH', opp.id, tag, false, false);
           }).join('');
         } else {
-          targetRingCls = 'opacity-40';
+          targetRingCls = 'ls-zone-spotlight-dim';
           actionBadgeHTML = `<span class="px-1 py-0.2 rounded bg-stone-800 text-sky-300 text-[8px] font-bold">🛡️免疫</span>`;
         }
       } else if (selCard.effect === 'VP_KICK_ENEMY') {
         const oppVPs = (status.targetVPs || []).filter(t => t.opponentId === opp.id);
         if (oppVPs.length > 0) {
-          targetRingCls = 'border-2 border-purple-400 shadow-xl';
-          actionBadgeHTML = `<span class="px-1.5 py-0.2 rounded bg-purple-600 text-white text-[8px] font-black shadow">⚡點選${terms.vpName || '副總'}放逐</span>`;
+          targetRingCls = 'ls-locked-opp-seat';
+          actionBadgeHTML = `<span class="px-1.5 py-0.2 rounded bg-purple-500 border border-white text-white text-[8.5px] font-black shadow">⚡點選下方${terms.vpName || '副總'}放逐</span>`;
           inlineCardsHTML = oppVPs.map(item =>
-            renderLsInlineTargetEmpCardHTML(item.empUid, 'CONFIRM_VP_KICK', opp.id, '⚡點此放逐', false, false)
+            renderLsInlineTargetEmpCardHTML(item.empUid, 'CONFIRM_VP_KICK', opp.id, '👆點此放逐', false, false)
           ).join('');
         } else {
-          targetRingCls = 'opacity-40';
+          targetRingCls = 'ls-zone-spotlight-dim';
         }
+      } else {
+        // Self-targeted or Talent-Pool-only cards (HIRE_BANK, FIRE_OWN, VP_MASS_LAYOFF, GAIN_FUNDS, RELEASE_CRISIS): dim opponent seats!
+        targetRingCls = 'ls-zone-spotlight-dim';
       }
     }
   }
@@ -2803,8 +2811,20 @@ function renderLandscapeArena() {
     }
   }
 
-  // 2. Top-Right: Talent Pool 1x4 (Completely hidden until Stage 3 of Opening Ceremony lands in Top-Right!)
+  // 2. Top-Right: Talent Pool 1x4 (Spotlight active only when HIRE_BANK or Step 2 of FORCE_HIRE is active!)
   const showBankTopRight = (!cer.active || cer.bankInTopRight) && state.phase !== 'INITIAL_DRAFT';
+  const lsTopRightPanelEl = document.getElementById('lsTopRightPanel');
+  if (lsTopRightPanelEl) {
+    let dimBankZone = false;
+    if (uiSelection.mode === 'MODE_D_SELECT' && uiSelection.sourceCardUid) {
+      const selCard = CARDS_BY_ID[uiSelection.sourceCardUid];
+      const status = selCard ? evaluateCardPlayability(state, localPlayer, selCard.uid) : null;
+      const forceLockedOpp = selCard && selCard.effect === 'FORCE_HIRE' && (uiSelection.step2OpponentId || (status && status.validOpponents && status.validOpponents.length === 1));
+      const isBankTargetCard = selCard && (selCard.effect === 'HIRE_BANK' || forceLockedOpp);
+      dimBankZone = !isBankTargetCard;
+    }
+    lsTopRightPanelEl.classList.toggle('ls-zone-spotlight-dim', dimBankZone);
+  }
   const lsPoolLabel = document.getElementById('lsTalentPoolLabel');
   if (lsPoolLabel) {
     lsPoolLabel.style.opacity = showBankTopRight ? '1' : '0';
@@ -2864,6 +2884,7 @@ function renderLandscapeArena() {
   // 4. Center Oval Table (5-Stage Ceremony OR Initial Draft OR Discard / Just Played / Draw Deck)
   const centerEl = document.getElementById('lsCenterOvalTable');
   if (centerEl) {
+    centerEl.classList.toggle('ls-zone-spotlight-dim', uiSelection.mode === 'MODE_D_SELECT' && Boolean(uiSelection.sourceCardUid));
     const flippedStr = (cer.active && cer.bankFlippedDepts) ? [...cer.bankFlippedDepts].join(',') : '';
     const holdD = (window.__lsPendingLandings && window.__lsPendingLandings.holdDiscardUid) || '';
     const holdJ = (window.__lsPendingLandings && window.__lsPendingLandings.holdJustPlayedUid) || '';
@@ -3020,8 +3041,10 @@ function renderLandscapeArena() {
         }
       }
 
+      const isMyBoardTarget = myInlineCardsHTML !== null;
+      const dimMyBoard = uiSelection.mode === 'MODE_D_SELECT' && Boolean(uiSelection.sourceCardUid) && !isMyBoardTarget;
       myPanelEl.innerHTML = `
-        <div class="ls-seat-panel ls-my-seat-panel ${mySeatHiddenCls} ${isMyTurnNow ? 'ls-seat-active' : ''} ${myInlineCardsHTML !== null ? 'border-2 border-amber-400' : ''} h-full flex flex-col justify-between gap-1 overflow-hidden">
+        <div class="ls-seat-panel ls-my-seat-panel ${mySeatHiddenCls} ${isMyTurnNow ? 'ls-seat-active' : ''} ${isMyBoardTarget ? 'ls-locked-opp-seat' : ''} ${dimMyBoard ? 'ls-zone-spotlight-dim' : ''} h-full flex flex-col justify-between gap-1 overflow-hidden">
           <div class="flex items-center justify-between gap-1 px-0.5 shrink-0">
             <div class="flex items-center gap-1 min-w-0">
               <span class="text-[11px] font-black text-stone-100 truncate">你·${getShortPlayerName(localPlayer.name)}</span>
