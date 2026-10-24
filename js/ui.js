@@ -16,7 +16,7 @@ function isRunningStandalonePWA() {
 
 function registerPwaServiceWorker() {
   if ("serviceWorker" in navigator && (location.protocol === "https:" || location.hostname === "localhost" || location.hostname === "127.0.0.1")) {
-    navigator.serviceWorker.register("./sw.js?v=15.2").then(reg => { try { reg.update(); } catch(e){} }).catch(() => {});
+    navigator.serviceWorker.register("./sw.js?v=15.2.1").then(reg => { try { reg.update(); } catch(e){} }).catch(() => {});
   }
   window.addEventListener("beforeinstallprompt", (e) => {
     e.preventDefault();
@@ -5177,6 +5177,7 @@ function syncSegmentedPillButtonsUI() {
 }
 
 function renderHomeScreenUI() {
+  dismissBootSplash();
   const theme = typeof getActiveTheme === 'function' ? getActiveTheme() : { id: 'CLASSIC_BURN_RATE', useFullCardArt: false };
   const terms = typeof getThemeTerms === 'function' ? getThemeTerms() : {};
 
@@ -5241,7 +5242,17 @@ function syncHomeSetupToLobbyControls() {
   syncHostLobbySettingsFromInputs();
 }
 
+function dismissBootSplash() {
+  const splashEl = document.getElementById("bootSplashOverlay");
+  if (splashEl) {
+    splashEl.style.opacity = "0";
+    splashEl.style.display = "none";
+    try { splashEl.remove(); } catch (e) {}
+  }
+}
+
 function initAppOnLoad() {
+  dismissBootSplash();
   if (window.__dbrV13Initialized) return;
   window.__dbrV13Initialized = true;
 
