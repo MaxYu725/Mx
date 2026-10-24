@@ -16,7 +16,7 @@ function isRunningStandalonePWA() {
 
 function registerPwaServiceWorker() {
   if ("serviceWorker" in navigator && (location.protocol === "https:" || location.hostname === "localhost" || location.hostname === "127.0.0.1")) {
-    navigator.serviceWorker.register("./sw.js?v=15.1").then(reg => { try { reg.update(); } catch(e){} }).catch(() => {});
+    navigator.serviceWorker.register("./sw.js?v=15.2").then(reg => { try { reg.update(); } catch(e){} }).catch(() => {});
   }
   window.addEventListener("beforeinstallprompt", (e) => {
     e.preventDefault();
@@ -1120,10 +1120,50 @@ function playSynchronizedVfxEvent(ev) {
     return;
   }
 
+  // 2B. BANKRUPT COLLAPSE: Dramatic collapse banner + all forfeited employees fly back to Talent Pool!
+  if (ev.vfxType === 'BANKRUPT_COLLAPSE') {
+    playSfx('burn');
+    setTimeout(() => { if (typeof playSfx === 'function') playSfx('attack'); }, 180);
+    const actorAnchor = getPlayerAnchorSelector(ev.actorId);
+    triggerHitShakeOnPlayer(ev.actorId);
+    spawnFloatingNumberVFX(actorAnchor, `💥 破產倒閉! (${ev.deficitCrystals})`, 'bg-rose-600 text-white border-2 border-amber-300');
+    if (lsActive) {
+      showLsCenterRibbon(`💥 破產崩潰！【${shortAtk}】資金跌至 ${ev.deficitCrystals} 倒閉，員工全數遣散回人才池！`, 'border-rose-500', 1650);
+      if (Array.isArray(ev.empBreakdown)) {
+        ev.empBreakdown.forEach((item, idx) => {
+          const fromAnchor = item.isEng ? `[data-ls-eng-badge="${ev.actorId}"], ${actorSeatSel}` : `[data-ls-dept-slot="${ev.actorId}_${item.dept}"], ${actorSeatSel}`;
+          flyLsPhysicalCard({
+            fromSel: fromAnchor,
+            toSel: `#lsJobBankGrid [data-open-bank-dept="${item.dept}"], #lsJobBankGrid`,
+            empUid: item.empUid,
+            tagText: '💥倒閉遣散',
+            accentColor: '#f43f5e',
+            showArc: idx === 0,
+            delayMs: idx * 95,
+            durationMs: 460
+          });
+        });
+      }
+    } else {
+      showVsDuelBanner(ev.actorName, '💥', '資金斷裂・破產倒閉', null, `赤字 ${ev.deficitCrystals} 退出競爭`, false, ev.actorId, null);
+    }
+    return;
+  }
+
   // 3. SETTLE BURN & STEP 3 DRAW CARDS: Drawn cards slide one by one from #lsDrawPileSlot to Active Player's Hand!
   if (ev.vfxType === 'SETTLE_BURN') {
     playSfx('burn');
     const actorAnchor = getPlayerAnchorSelector(ev.actorId);
+    if (ev.impendingBankrupt) {
+      triggerHitShakeOnPlayer(ev.actorId);
+      spawnFloatingNumberVFX(actorAnchor, `⚠️發薪 -${ev.burnAmount} (赤字 ${ev.remainingCrystals}!)`, 'bg-rose-600 text-amber-200 border-2 border-white');
+      if (lsActive) {
+        showLsCenterRibbon(`⚠️ 【${shortAtk}】發薪 -${ev.burnAmount} ➔ 資金跌至 ${ev.remainingCrystals}，資金鏈斷裂即將破產！`, 'border-rose-500', 1350);
+      } else {
+        showVsDuelBanner(ev.actorName, '⚠️', `發薪 -${ev.burnAmount} 赤字警報`, null, `剩餘 ${ev.remainingCrystals} 即將破產`, false, ev.actorId, null);
+      }
+      return;
+    }
     spawnFloatingNumberVFX(actorAnchor, `🔥-${ev.burnAmount}`, 'bg-rose-700 text-white border border-amber-300');
     if (lsActive) {
       showLsCenterRibbon(`🔥 【${shortAtk}】發薪 -${ev.burnAmount}（剩 ${ev.remainingCrystals}）➔ 抽牌補齊`, 'border-rose-400', 1150);
@@ -2454,46 +2494,20 @@ function renderLsDeptSlotHTML(player, d, opts = {}) {
   const hCard = CARDS_BY_ID[headUid];
   const artKey = hCard.artKey || hCard.tplId;
 
-  // Single Employee in Department
-  if (subUids.length === 0 || isComp) {
-    return `
-      <div ${slotDataAttr} ${clickAttrs} class="${baseCardCls} ${glowCls} bg-slate-950 select-none">
-        ${getCardImgTag(artKey, hCard.title, 'w-full h-full object-cover block')}
-        ${isHighlighted ? `<span class="absolute top-0.5 left-0.5 px-1 py-0.2 rounded bg-amber-400 text-slate-950 text-[8px] font-black leading-none z-20 shadow">${effSkill}級</span>` : ''}
-        ${isComp && subUids.length > 0 ? `<span class="absolute bottom-0.5 right-0.5 px-1 py-0.2 rounded bg-slate-950/90 border border-amber-400/80 text-[7px] font-black text-amber-300 leading-none z-20">+${subUids.length}</span>` : ''}
-      </div>
-    `;
-  }
-
-  // 圖二: Physical Layered Card-Bottom Strips — Top Card on top + crisp physical card edges underneath with Salary (left) & Skill Orb (right) aligned!
-  const shownSubs = subUids.slice(0, 2);
-  const extraSubCount = Math.max(0, subUids.length - shownSubs.length);
+  // 方案 B: Maintain 100% pure un-squashed 2:3 Top Manager Card height, with a crisp multi-card stack shadow + high-contrast "👥X人 · 💸Y" pill when subUids.length > 0!
   const totalDeptSalary = stackUids.reduce((sum, uid) => sum + ((CARDS_BY_ID[uid] && CARDS_BY_ID[uid].salary) || 0), 0);
-  const subStripsHTML = shownSubs.map((sUid, idx) => {
-    const sCard = CARDS_BY_ID[sUid];
-    if (!sCard) return '';
-    const isLastShown = idx === shownSubs.length - 1 && extraSubCount > 0;
-    return `
-      <div class="ls-sub-peek-strip">
-        <span class="ls-sub-peek-sal">${sCard.salary}薪</span>
-        ${isLastShown
-          ? `<span class="px-1 rounded bg-amber-500 text-slate-950 text-[6.5px] font-black leading-none">+${extraSubCount}人</span>`
-          : `<span class="text-[6.5px] font-bold text-slate-500 truncate max-w-[28px] leading-none">${sCard.title}</span>`
-        }
-        <span class="ls-sub-peek-skl-orb">${sCard.skill}</span>
-      </div>
-    `;
-  }).join('');
+  const hasSubs = subUids.length > 0;
+  const multiStackCls = (hasSubs && !isComp) ? 'ls-dept-card-multi-b' : '';
 
   return `
-    <div ${slotDataAttr} ${clickAttrs} class="${baseCardCls} ls-dept-card-stacked ${glowCls} bg-slate-950 select-none" title="點擊展開檢視本部門全部 ${stackUids.length} 名員工（總薪資 -${totalDeptSalary}）">
-      <div class="ls-stack-head-wrap">
-        ${getCardImgTag(artKey, hCard.title, 'w-full h-full object-cover block')}
-        <span class="absolute top-0.5 right-0.5 px-1 py-0.2 rounded bg-slate-950/92 border border-amber-400 text-[6.5px] font-black text-amber-300 leading-none z-20 shadow">👥${stackUids.length}人</span>
-      </div>
-      <div class="ls-stack-subs-tray">
-        ${subStripsHTML}
-      </div>
+    <div ${slotDataAttr} ${clickAttrs} class="${baseCardCls} ${multiStackCls} ${glowCls} bg-slate-950 select-none" title="${hasSubs ? `點擊展開檢視本部門全部 ${stackUids.length} 名員工（總薪資 -${totalDeptSalary}）` : hCard.title}">
+      ${getCardImgTag(artKey, hCard.title, 'w-full h-full object-cover block')}
+      ${isHighlighted ? `<span class="absolute top-0.5 left-0.5 px-1 py-0.2 rounded bg-amber-400 text-slate-950 text-[8px] font-black leading-none z-20 shadow">${effSkill}級</span>` : ''}
+      ${hasSubs ? `
+        <span class="absolute bottom-0.5 left-1/2 -translate-x-1/2 px-1.5 py-0.2 rounded-full bg-slate-950/95 border border-amber-400 text-[7px] font-black text-amber-300 leading-none whitespace-nowrap z-20 shadow-lg">
+          👥${stackUids.length}人·💸${totalDeptSalary}
+        </span>
+      ` : ''}
     </div>
   `;
 }
@@ -2618,8 +2632,14 @@ function renderLsOpponentSeatHTML(opp) {
     }
   }
 
+  const isImpendingBankrupt = !opp.isEliminated && opp.crystals < 0;
   return `
-    <div data-ls-seat="${opp.id}" data-seat-tab="${opp.id}" ${modeDSeatAttr} class="ls-seat-panel ${seatHiddenCls} ${isTurn ? 'ls-seat-active' : ''} ${targetRingCls} ${opp.isEliminated ? 'opacity-45 grayscale' : ''} w-full h-full flex flex-col justify-between gap-0.5 cursor-pointer min-w-0 overflow-hidden">
+    <div data-ls-seat="${opp.id}" data-seat-tab="${opp.id}" ${modeDSeatAttr} class="ls-seat-panel ${seatHiddenCls} ${isTurn ? 'ls-seat-active' : ''} ${targetRingCls} ${isImpendingBankrupt ? 'danger-pulse border-2 border-rose-500' : ''} ${opp.isEliminated ? 'opacity-50 grayscale' : ''} w-full h-full flex flex-col justify-between gap-0.5 cursor-pointer min-w-0 overflow-hidden relative">
+      ${opp.isEliminated ? `
+        <div class="absolute inset-0 bg-black/55 flex items-center justify-center pointer-events-none z-30">
+          <span class="px-3 py-1 rounded-xl bg-rose-950/95 border-2 border-rose-500 text-rose-200 text-xs font-black tracking-wider shadow-2xl -rotate-6">💀 破產倒閉</span>
+        </div>
+      ` : ''}
       <div class="flex items-center justify-between gap-1 min-w-0 shrink-0 px-0.5">
         <div class="flex items-center gap-1 min-w-0">
           <span class="text-[10px] font-black text-stone-200 truncate">${shortName}·${roleTag}</span>
@@ -4764,9 +4784,54 @@ function openMassLayoffModal(cardUid) {
 }
 
 function showGameOverModal(winner) {
+  if (!gameState || !winner) return;
   const isMe = winner.id === getLocalPlayerId();
-  document.getElementById('gameOverTitle').textContent = isMe ? '🏆 恭喜！你的深淵魔王城稱霸魔界！' : `💀 【${winner.name}】獲得最終勝利！`;
-  document.getElementById('gameOverDesc').textContent = `在經歷 ${gameState.turn.roundNumber} 回合的激烈燒魔競爭後，【${winner.name}】以剩餘 ${winner.crystals} 顆魔晶石成為最後屹立不搖的魔王城！`;
+  const isDemon = (typeof getActiveTheme === 'function' && getActiveTheme().id === 'DEMON_CASTLE');
+  const terms = typeof getThemeTerms === 'function' ? getThemeTerms() : {};
+  const currIcon = terms.currencyIcon || (isDemon ? '💎' : '💵');
+  const vpIcon = terms.vpIcon || '👑';
+  const vpName = terms.vpName || (isDemon ? '皇室' : '副總');
+
+  if (typeof playSfx === 'function') playSfx('coin');
+
+  const titleEl = document.getElementById('gameOverTitle');
+  if (titleEl) {
+    titleEl.textContent = isMe
+      ? (isDemon ? '🏆 恭喜！你的深淵魔王城稱霸魔界！' : '🏆 恭喜！你的企業帝國贏得最終商戰！')
+      : `🏆 【${getShortPlayerName(winner.name)}】贏得最終勝利！`;
+  }
+  const descEl = document.getElementById('gameOverDesc');
+  if (descEl) {
+    descEl.textContent = `歷經 ${gameState.turn.roundNumber} 回合激烈燒錢對決，其他競爭對手全數資金斷裂破產，【${getShortPlayerName(winner.name)}】以剩餘 ${currIcon}${winner.crystals} 成為唯一屹立不搖的最終贏家！`;
+  }
+
+  const boardEl = document.getElementById('gameOverLeaderboard');
+  if (boardEl && Array.isArray(gameState.players)) {
+    const sortedPlayers = [...gameState.players].sort((a, b) => {
+      if (a.isEliminated !== b.isEliminated) return a.isEliminated ? 1 : -1;
+      return b.crystals - a.crystals;
+    });
+    boardEl.innerHTML = sortedPlayers.map((p, idx) => {
+      const isWin = p.id === winner.id && !p.isEliminated;
+      const rankBadge = isWin ? '🥇 冠軍霸主' : `💀 第 ${idx + 1} 名 (破產)`;
+      const rowCls = isWin
+        ? 'bg-amber-950/80 border-2 border-amber-400 text-amber-200 shadow-lg'
+        : 'bg-slate-950/85 border border-slate-800 text-slate-400';
+      return `
+        <div class="rounded-xl px-3 py-2 flex items-center justify-between gap-2 ${rowCls}">
+          <div class="flex items-center gap-2 min-w-0">
+            <span class="px-2 py-0.5 rounded-lg ${isWin ? 'bg-amber-400 text-slate-950' : 'bg-rose-950 text-rose-300 border border-rose-500/40'} text-[10px] font-black shrink-0">${rankBadge}</span>
+            <span class="text-xs sm:text-sm font-black ${isWin ? 'text-white' : 'text-slate-300'} truncate">${p.name}</span>
+          </div>
+          <div class="flex items-center gap-2 shrink-0 text-xs font-black">
+            <span class="${isWin ? 'text-emerald-300' : 'text-rose-400'}">${currIcon}${p.crystals}</span>
+            <span class="text-[10px] text-purple-300">${vpIcon}${vpName}:${getTotalVPCount(p)}</span>
+          </div>
+        </div>
+      `;
+    }).join('');
+  }
+
   document.getElementById('gameOverModal')?.classList.remove('hidden');
 }
 
@@ -5085,6 +5150,11 @@ function switchGameTheme(newThemeId) {
   }
 
   renderHomeScreenUI();
+  const splashEl = document.getElementById('bootSplashOverlay');
+  if (splashEl) {
+    splashEl.style.opacity = '0';
+    setTimeout(() => splashEl.remove(), 220);
+  }
   renderLobbyUI();
   renderAll();
 }
@@ -5318,6 +5388,9 @@ function initAppOnLoad() {
     document.getElementById('settingsMenuModal')?.classList.add('hidden');
     renderHomeScreenUI();
     document.getElementById('homeScreenModal')?.classList.remove('hidden');
+  });
+  document.getElementById('btnInspectFinalBoard')?.addEventListener('click', () => {
+    document.getElementById('gameOverModal')?.classList.add('hidden');
   });
   document.getElementById('btnGameOverHome')?.addEventListener('click', () => {
     document.getElementById('gameOverModal')?.classList.add('hidden');

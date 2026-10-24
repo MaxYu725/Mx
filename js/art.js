@@ -26,29 +26,63 @@ function dataUriToBlobUrl(dataUri) {
   }
 }
 
+function ensureFullBlobUrl(themeId, key) {
+  if (!key) return "";
+  const store = __CARD_BLOB_URLS[themeId];
+  if (store && store[key]) return store[key];
+  const srcMap = themeId === "DEMON_CASTLE" ? GPT_FULLCARD_ART : CLASSIC_FULLCARD_ART;
+  const raw = srcMap[key];
+  if (!raw) return "";
+  const url = dataUriToBlobUrl(raw);
+  if (store) store[key] = url;
+  return url;
+}
+
+function ensureMiniBlobUrl(themeId, key) {
+  if (!key) return "";
+  const store = __MINI_BLOB_URLS[themeId];
+  if (store && store[key]) return store[key];
+  const srcMap = themeId === "DEMON_CASTLE" ? GPT_MINI_AVATAR : CLASSIC_MINI_AVATAR;
+  const raw = srcMap[key];
+  if (!raw) return "";
+  const url = dataUriToBlobUrl(raw);
+  if (store) store[key] = url;
+  return url;
+}
+
 function initArtBlobCache() {
   if (window.__artBlobCacheReady) return;
   window.__artBlobCacheReady = true;
 
-  Object.keys(CLASSIC_FULLCARD_ART).forEach((k) => {
-    const url = dataUriToBlobUrl(CLASSIC_FULLCARD_ART[k]);
-    __CARD_BLOB_URLS.CLASSIC_BURN_RATE[k] = url;
+  // 1. Synchronously convert ONLY the 4 Home Screen / Card Back images (< 2ms total!)
+  ["CARD_BACK", "E_R_VP3_0", "E_G_VP3_0", "E_B_VP3_0"].forEach(k => ensureFullBlobUrl("CLASSIC_BURN_RATE", k));
+  ["CARD_BACK", "E_R_VP3", "E_G_VP3", "E_B_VP3"].forEach(k => ensureFullBlobUrl("DEMON_CASTLE", k));
 
-  });
-  Object.keys(CLASSIC_MINI_AVATAR).forEach((k) => {
-    const url = dataUriToBlobUrl(CLASSIC_MINI_AVATAR[k]);
-    __MINI_BLOB_URLS.CLASSIC_BURN_RATE[k] = url;
-  });
+  // 2. Pre-warm remaining images in tiny non-blocking chunks during idle frames
+  const queue = [];
+  Object.keys(CLASSIC_FULLCARD_ART).forEach(k => queue.push(() => ensureFullBlobUrl("CLASSIC_BURN_RATE", k)));
+  Object.keys(GPT_FULLCARD_ART).forEach(k => queue.push(() => ensureFullBlobUrl("DEMON_CASTLE", k)));
+  Object.keys(CLASSIC_MINI_AVATAR).forEach(k => queue.push(() => ensureMiniBlobUrl("CLASSIC_BURN_RATE", k)));
+  Object.keys(GPT_MINI_AVATAR).forEach(k => queue.push(() => ensureMiniBlobUrl("DEMON_CASTLE", k)));
 
-  Object.keys(GPT_FULLCARD_ART).forEach((k) => {
-    const url = dataUriToBlobUrl(GPT_FULLCARD_ART[k]);
-    __CARD_BLOB_URLS.DEMON_CASTLE[k] = url;
-
-  });
-  Object.keys(GPT_MINI_AVATAR).forEach((k) => {
-    const url = dataUriToBlobUrl(GPT_MINI_AVATAR[k]);
-    __MINI_BLOB_URLS.DEMON_CASTLE[k] = url;
-  });
+  let qIdx = 0;
+  function warmChunk() {
+    const end = Math.min(queue.length, qIdx + 3);
+    while (qIdx < end) {
+      try { queue[qIdx](); } catch (e) {}
+      qIdx++;
+    }
+    if (qIdx < queue.length && typeof window !== "undefined") {
+      if (typeof window.requestIdleCallback === "function") {
+        window.requestIdleCallback(warmChunk, { timeout: 120 });
+      } else {
+        setTimeout(warmChunk, 24);
+      }
+    }
+  }
+  if (typeof window !== "undefined") {
+    setTimeout(warmChunk, 60);
+  }
 }
 
 initArtBlobCache();
@@ -78,15 +112,15 @@ function getCardArtSrc(keyOrCard) {
   const baseTpl = getBaseTplId(key);
   const themeId = getActiveThemeIdSafe();
   if (themeId === "DEMON_CASTLE") {
-    return __CARD_BLOB_URLS.DEMON_CASTLE[baseTpl] || GPT_FULLCARD_ART[baseTpl] || "";
+    return ensureFullBlobUrl("DEMON_CASTLE", baseTpl) || GPT_FULLCARD_ART[baseTpl] || "";
   }
   const zeroKey = baseTpl + "_0";
   return (
-    __CARD_BLOB_URLS.CLASSIC_BURN_RATE[key] ||
+    ensureFullBlobUrl("CLASSIC_BURN_RATE", key) ||
+    ensureFullBlobUrl("CLASSIC_BURN_RATE", zeroKey) ||
+    ensureFullBlobUrl("CLASSIC_BURN_RATE", baseTpl) ||
     CLASSIC_FULLCARD_ART[key] ||
-    __CARD_BLOB_URLS.CLASSIC_BURN_RATE[zeroKey] ||
     CLASSIC_FULLCARD_ART[zeroKey] ||
-    __CARD_BLOB_URLS.CLASSIC_BURN_RATE[baseTpl] ||
     CLASSIC_FULLCARD_ART[baseTpl] ||
     ""
   );
@@ -97,15 +131,15 @@ function getMiniAvatarSrc(keyOrCard) {
   const baseTpl = getBaseTplId(key);
   const themeId = getActiveThemeIdSafe();
   if (themeId === "DEMON_CASTLE") {
-    return __MINI_BLOB_URLS.DEMON_CASTLE[baseTpl] || GPT_MINI_AVATAR[baseTpl] || getCardArtSrc(baseTpl);
+    return ensureMiniBlobUrl("DEMON_CASTLE", baseTpl) || GPT_MINI_AVATAR[baseTpl] || getCardArtSrc(baseTpl);
   }
   const zeroKey = baseTpl + "_0";
   return (
-    __MINI_BLOB_URLS.CLASSIC_BURN_RATE[key] ||
+    ensureMiniBlobUrl("CLASSIC_BURN_RATE", key) ||
+    ensureMiniBlobUrl("CLASSIC_BURN_RATE", zeroKey) ||
+    ensureMiniBlobUrl("CLASSIC_BURN_RATE", baseTpl) ||
     CLASSIC_MINI_AVATAR[key] ||
-    __MINI_BLOB_URLS.CLASSIC_BURN_RATE[zeroKey] ||
     CLASSIC_MINI_AVATAR[zeroKey] ||
-    __MINI_BLOB_URLS.CLASSIC_BURN_RATE[baseTpl] ||
     CLASSIC_MINI_AVATAR[baseTpl] ||
     getCardArtSrc(key)
   );

@@ -2978,3 +2978,13 @@ body.theme-demon .ls-sub-peek-skl-orb {
   border-color: #fbbf24 !important;
   color: #fef08a !important;
 }
+
+
+/* === V15.2 OPTION B MULTI-CARD STACK SHADOW & BANKRUPTCY / STARTUP UX === */
+.ls-dept-card.ls-dept-card-multi-b {
+  box-shadow:
+    2px 2px 0 rgba(251, 191, 36, 0.85),
+    4px 4px 0 rgba(15, 23, 42, 0.98),
+    5px 5px 0 rgba(251, 191, 36, 0.55),
+    0 8px 18px rgba(0, 0, 0, 0.88) !important;
+}

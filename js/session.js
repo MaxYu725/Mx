@@ -2466,6 +2466,39 @@ function authoritativeDiscardCards(state, cardUids) {
   }
 }
 
+function advanceToNextAlivePlayerTurn(activeState, postHandoffWait) {
+  if (!activeState || activeState.phase === 'GAME_OVER') return;
+
+  let nextIdx = (activeState.turn.activePlayerIndex + 1) % activeState.players.length;
+  while (activeState.players[nextIdx].isEliminated) {
+    nextIdx = (nextIdx + 1) % activeState.players.length;
+  }
+  if (nextIdx <= activeState.turn.activePlayerIndex) {
+    activeState.turn.roundNumber += 1;
+  }
+
+  activeState.turn.activePlayerIndex = nextIdx;
+  activeState.turn.actionsUsed = 0;
+  activeState.turn.hasPlayedCard = false;
+  activeState.turn.hasDiscardedCard = false;
+  activeState.turn.isSettling = false;
+
+  const nextPlayer = activeState.players[nextIdx];
+  recordVfxEvent(activeState, {
+    vfxType: 'TURN_HANDOVER',
+    nextPlayerId: nextPlayer.id,
+    nextPlayerName: nextPlayer.name,
+    roundNumber: activeState.turn.roundNumber
+  });
+
+  if (typeof resetSelectionState === 'function') resetSelectionState();
+  syncMasterStateToClientsAndRender();
+
+  if (nextPlayer.isAI) {
+    scheduleNextAITick(postHandoffWait);
+  }
+}
+
 function authoritativeSettleAndAdvanceTurn(state) {
   if (!state || state.phase === 'GAME_OVER' || (state.turn && state.turn.isSettling)) return;
   if (state.turn) state.turn.isSettling = true;
@@ -2478,25 +2511,37 @@ function authoritativeSettleAndAdvanceTurn(state) {
   player.crystals -= burnAmount;
   player.doubleBurnFlag = false;
 
-  addLog(state, `🔥 步驟二＆三結算：【${player.name}】支付魔力供品 ${burnAmount} 魔晶${wasDouble ? ' (含雙倍暴動×2!)' : ''}，剩餘 ${player.crystals} 魔晶。`);
+  const speedMult = (typeof animSpeedMultiplier !== 'undefined') ? animSpeedMultiplier : 1;
+  const handoffDelay = speedMult === 2 ? 900 : 1650;
+  const postHandoffWait = speedMult === 2 ? 1250 : 2300;
 
-  let drawnUids = [];
-  if (player.crystals < 0) {
-    player.isEliminated = true;
-    getAllPlayerEmployeeUids(player).forEach(eUid => {
-      removeEmployeeFromPlayer(player, eUid);
-      returnEmployeeToJobBankBottom(state, eUid);
+  // Normal survival case (crystals >= 0): pay salary, draw up to 6 cards, and advance turn
+  if (player.crystals >= 0) {
+    addLog(state, `🔥 步驟二＆三結算：【${player.name}】支付薪資支出 ${burnAmount}${wasDouble ? ' (含雙倍×2!)' : ''}，剩餘資金 ${player.crystals}。`);
+    const drawnUids = drawCardsForPlayer(state, player, 6) || [];
+    recordVfxEvent(state, {
+      vfxType: 'SETTLE_BURN',
+      actorId: player.id,
+      actorName: player.name,
+      burnAmount,
+      wasDouble,
+      remainingCrystals: player.crystals,
+      eliminated: false,
+      impendingBankrupt: false,
+      drawnUids
     });
-    player.crises.forEach(cUid => state.discardPile.unshift(cUid));
-    player.crises = [];
-    player.hand.forEach(hUid => state.discardPile.unshift(hUid));
-    player.hand = [];
-    player.outsourcedCount = 0;
-    addLog(state, `💥 破產崩潰！【${player.name}】魔晶跌破零點，魔王城倒閉退出競爭！`);
-  } else {
-    drawnUids = drawCardsForPlayer(state, player, 6) || [];
+    if (typeof resetSelectionState === 'function') resetSelectionState();
+    syncMasterStateToClientsAndRender();
+
+    aiTimer = setTimeout(() => {
+      advanceToNextAlivePlayerTurn(getActiveMasterState(), postHandoffWait);
+    }, handoffDelay);
+    return;
   }
 
+  // === V15.2: 3-STAGE CINEMATIC BANKRUPTCY & GAME OVER SEQUENCE ===
+  // Stage 1 (0ms): Show salary deduction & negative deficit on the player's board BEFORE eliminating them!
+  addLog(state, `⚠️ 資金赤字警報！【${player.name}】支付 ${burnAmount}${wasDouble ? ' (雙倍×2!)' : ''} 後跌至 ${player.crystals}，即將破產倒閉！`);
   recordVfxEvent(state, {
     vfxType: 'SETTLE_BURN',
     actorId: player.id,
@@ -2504,61 +2549,77 @@ function authoritativeSettleAndAdvanceTurn(state) {
     burnAmount,
     wasDouble,
     remainingCrystals: player.crystals,
-    eliminated: player.isEliminated,
-    drawnUids
+    eliminated: false,
+    impendingBankrupt: true,
+    drawnUids: []
   });
-
-  const survivors = state.players.filter(p => !p.isEliminated);
-  if (survivors.length <= 1) {
-    state.phase = 'GAME_OVER';
-    const winner = survivors[0] || player;
-    addLog(state, `🏆 遊戲結束！【${winner.name}】成為唯一存活的深淵霸主！`);
-    if (typeof resetSelectionState === 'function') resetSelectionState();
-    syncMasterStateToClientsAndRender();
-    if (typeof showGameOverModal === 'function') showGameOverModal(winner);
-    return;
-  }
-
   if (typeof resetSelectionState === 'function') resetSelectionState();
   syncMasterStateToClientsAndRender();
 
-  const speedMult = (typeof animSpeedMultiplier !== 'undefined') ? animSpeedMultiplier : 1;
-  const handoffDelay = speedMult === 2 ? 900 : 1650;
-  const postHandoffWait = speedMult === 2 ? 1250 : 2300;
+  const collapseDelay = speedMult === 2 ? 950 : 1400;
+  const gameOverRevealDelay = speedMult === 2 ? 1250 : 1850;
 
+  // Stage 2 (+1.4s): Execute Bankruptcy Collapse, fly employees back to Talent Pool, and stamp 💀破產!
   aiTimer = setTimeout(() => {
     const activeState = getActiveMasterState();
     if (!activeState || activeState.phase === 'GAME_OVER') return;
 
-    let nextIdx = (activeState.turn.activePlayerIndex + 1) % activeState.players.length;
-    while (activeState.players[nextIdx].isEliminated) {
-      nextIdx = (nextIdx + 1) % activeState.players.length;
-    }
-    if (nextIdx <= activeState.turn.activePlayerIndex) {
-      activeState.turn.roundNumber += 1;
-    }
-
-    activeState.turn.activePlayerIndex = nextIdx;
-    activeState.turn.actionsUsed = 0;
-    activeState.turn.hasPlayedCard = false;
-    activeState.turn.hasDiscardedCard = false;
-    activeState.turn.isSettling = false;
-
-    const nextPlayer = activeState.players[nextIdx];
-    recordVfxEvent(activeState, {
-      vfxType: 'TURN_HANDOVER',
-      nextPlayerId: nextPlayer.id,
-      nextPlayerName: nextPlayer.name,
-      roundNumber: activeState.turn.roundNumber
+    const forfeitedEmps = getAllPlayerEmployeeUids(player);
+    const empBreakdown = forfeitedEmps.map(eUid => {
+      const emp = CARDS_BY_ID[eUid];
+      return { empUid: eUid, dept: emp ? emp.dept : 'RED', isEng: Boolean(emp && emp.role === 'ENGINEER') };
     });
 
-    if (typeof resetSelectionState === 'function') resetSelectionState();
+    player.isEliminated = true;
+    forfeitedEmps.forEach(eUid => {
+      removeEmployeeFromPlayer(player, eUid);
+      returnEmployeeToJobBankBottom(activeState, eUid);
+    });
+    player.crises.forEach(cUid => activeState.discardPile.unshift(cUid));
+    player.crises = [];
+    player.hand.forEach(hUid => activeState.discardPile.unshift(hUid));
+    player.hand = [];
+    player.outsourcedCount = 0;
+
+    const survivors = activeState.players.filter(p => !p.isEliminated);
+    const isFinalElimination = survivors.length <= 1;
+
+    addLog(activeState, `💥 破產崩潰！【${player.name}】資金跌破零點 (${player.crystals}) 正式倒閉，旗下 ${forfeitedEmps.length} 名人員遣散回人才池！`);
+    recordVfxEvent(activeState, {
+      vfxType: 'BANKRUPT_COLLAPSE',
+      actorId: player.id,
+      actorName: player.name,
+      deficitCrystals: player.crystals,
+      empBreakdown,
+      isFinalElimination
+    });
     syncMasterStateToClientsAndRender();
 
-    if (nextPlayer.isAI) {
-      scheduleNextAITick(postHandoffWait);
+    // Stage 3 (+1.85s after collapse): Either crown the Champion in GAME_OVER or advance to the next survivor!
+    if (isFinalElimination) {
+      aiTimer = setTimeout(() => {
+        const finalState = getActiveMasterState();
+        if (!finalState) return;
+        finalState.phase = 'GAME_OVER';
+        finalState.turn.isSettling = false;
+        const winner = survivors[0] || player;
+        addLog(finalState, `🏆 遊戲結束！【${winner.name}】以剩餘資金 ${winner.crystals} 成為唯一屹立不搖的最終霸主！`);
+        recordVfxEvent(finalState, {
+          vfxType: 'CHAMPION_CROWNED',
+          winnerId: winner.id,
+          winnerName: winner.name,
+          winnerCrystals: winner.crystals
+        });
+        if (typeof resetSelectionState === 'function') resetSelectionState();
+        syncMasterStateToClientsAndRender();
+        if (typeof showGameOverModal === 'function') showGameOverModal(winner);
+      }, gameOverRevealDelay);
+    } else {
+      aiTimer = setTimeout(() => {
+        advanceToNextAlivePlayerTurn(getActiveMasterState(), postHandoffWait);
+      }, handoffDelay);
     }
-  }, handoffDelay);
+  }, collapseDelay);
 }
 
 // === Backwards-Compatible Entry Points for UI & AI ===
